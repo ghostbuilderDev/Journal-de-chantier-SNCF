@@ -1,0 +1,26 @@
+{
+  "name": "Journal de chantier SNCF",
+  "short_name": "Journal Chantier",
+  "description": "Journal de chantier type fil d’actualité, photos, annotations et archivage.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#EAF3F5",
+  "theme_color": "#82005F",
+  "lang": "fr-FR",
+  "icons": [
+    {
+      "src": "./icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
