@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 192 192">
+<rect width="192" height="192" rx="42" fill="#82005F"/>
+<rect x="25" y="25" width="142" height="142" rx="28" fill="#fff"/>
+<rect x="25" y="118" width="142" height="49" rx="18" fill="#A1006B"/>
+<text x="96" y="91" text-anchor="middle" font-family="Arial" font-size="48" font-weight="700" fill="#82005F">JC</text>
+<text x="96" y="148" text-anchor="middle" font-family="Arial" font-size="16" font-weight="700" fill="#fff">CHANTIER</text>
+</svg>
