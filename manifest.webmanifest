@@ -1,0 +1,18 @@
+{
+  "name": "Journal Chantier Connecté",
+  "short_name": "Journal chantier",
+  "description": "Messagerie, plans et journal de chantier partagé.",
+  "lang": "fr",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f4f6f8",
+  "theme_color": "#82005a",
+  "icons": [
+    {
+      "src": "journal-chantier.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
