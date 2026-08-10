@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#82005a">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="journal-chantier.svg" type="image/svg+xml">
+  <title>Journal Chantier Connecté</title>
+  <!-- Bibliothèque Supabase embarquée : elle ne dépend plus d’un CDN bloqué sur le réseau terrain. -->
+  <script src="supabase.js?v=12.2" defer></script>
+  <!-- config.js est le seul fichier de configuration public, partagé par tous les appareils. -->
+  <script src="config.js?v=12.2" defer></script>
+  <link rel="stylesheet" href="styles-v12.2.css?v=12.2">
+  <script src="app-v12.2.js?v=12.2" defer></script>
+</head>
+<body>
+  <div class="app-shell" id="appShell">
+    <aside class="sidebar" aria-label="Chantiers">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">JC</div>
+        <div>
+          <strong>Journal chantier</strong>
+          <small>Connecté</small>
+        </div>
+        <button class="icon-button sidebar-close" id="closeSidebarBtn" aria-label="Fermer les chantiers">×</button>
+      </div>
+
+      <button class="primary-button new-site-button" id="newChantierBtn">＋ Nouveau chantier</button>
+
+      <div class="sidebar-search">
+        <span aria-hidden="true">⌕</span>
+        <input id="chantierSearch" type="search" placeholder="Rechercher un chantier">
+      </div>
+
+      <div class="section-label"><span>MES CHANTIERS</span><span id="chantierCount">0</span></div>
+      <nav class="chantier-list" id="chantierList" aria-label="Liste des chantiers"></nav>
+
+      <div class="sidebar-bottom">
+        <button class="profile-card" id="profileBtn">
+          <span class="profile-avatar" id="profileAvatar">?</span>
+          <span class="profile-copy"><b id="profileName">Votre identité</b><small id="profileCompany">À renseigner</small></span>
+          <span aria-hidden="true">›</span>
+        </button>
+        <div class="connection-line" id="connectionLine"><span class="status-dot offline"></span><span id="connectionText">Connexion au journal</span></div>
+      </div>
+    </aside>
+
+    <main class="workspace">
+      <header class="topbar">
+        <button class="icon-button hamburger" id="openSidebarBtn" aria-label="Ouvrir les chantiers">☰</button>
+        <button class="site-heading" id="siteInfoBtn">
+          <span class="site-avatar" id="siteAvatar">JC</span>
+          <span class="site-heading-copy"><b id="siteName">Choisissez un chantier</b><small id="siteMeta">Journal partagé sécurisé</small></span>
+        </button>
+        <div class="topbar-tools">
+          <button class="tool-button hide-small" id="adminDashboardBtn" title="Administrer les comptes" hidden>⚙ <span>Administration</span></button>
+          <button class="tool-button hide-small" id="inviteBtn" title="Inviter un interlocuteur">♙ <span>Inviter</span></button>
+          <button class="tool-button hide-small" id="notificationBtn" title="Activer les notifications">♧ <span>Alertes</span></button>
+          <button class="tool-button quick-add-tool" id="quickAddBtn" title="Ajouter une information terrain">＋ <span>Terrain</span></button>
+          <button class="tool-button primary-tool" id="exportBtn" title="Imprimer ou enregistrer le journal PDF">▣ <span>Exporter</span></button>
+          <button class="icon-button more-button" id="siteMenuBtn" aria-label="Options du chantier">⋮</button>
+        </div>
+      </header>
+
+      <section class="connection-banner" id="connectionBanner" hidden>
+        <div><b>Connexion sécurisée</b><span>Connecte-toi pour accéder au journal partagé.</span></div>
+        <button class="secondary-button" id="openSetupBtn">Réessayer</button>
+      </section>
+
+      <nav class="tabs" aria-label="Espaces du chantier">
+        <button class="tab active" data-tab="chat"><span>▰</span> Discussion <small id="messageCount">0</small></button>
+        <button class="tab" data-tab="plans"><span>▱</span> Plans & documents <small id="planCount">0</small></button>
+        <button class="tab" data-tab="actions"><span>✓</span> Actions <small id="actionCount">0</small></button>
+      </nav>
+
+      <section class="content-area">
+        <section class="chat-view view active" data-view="chat">
+          <div class="filter-bar">
+            <div class="filter-search"><span aria-hidden="true">⌕</span><input id="messageSearch" type="search" placeholder="Rechercher dans la discussion, un PK, un auteur…"></div>
+            <select id="typeFilter" aria-label="Filtrer les messages par type">
+              <option value="">Tous les événements</option>
+              <option value="Info">Info</option>
+              <option value="Sécurité">Sécurité</option>
+              <option value="Avancement">Avancement</option>
+              <option value="Aléa">Aléa</option>
+              <option value="Coactivité">Coactivité</option>
+              <option value="Décision">Décision</option>
+              <option value="Document">Document</option>
+              <option value="Plan">Plan</option>
+              <option value="Action">Action</option>
+            </select>
+            <button class="filter-button" id="importantFilterBtn" aria-pressed="false">★ Importants</button>
+          </div>
+          <section class="pinned-messages" id="pinnedMessages" hidden aria-label="Informations épinglées"></section>
+          <div class="print-cover" id="printCover" aria-hidden="true"></div>
+          <div class="message-feed" id="messageFeed" aria-live="polite"></div>
+          <button class="jump-bottom" id="jumpBottomBtn" hidden>↓ Nouveaux messages</button>
+          <section class="composer-shell" id="composerShell">
+            <div class="reply-preview" id="replyPreview" hidden></div>
+            <div class="attachment-preview" id="attachmentPreview" hidden></div>
+            <div class="composer-meta" id="composerMeta" hidden>
+              <label>Type d’événement
+                <select id="messageType">
+                  <option value="Info">Info</option>
+                  <option value="Sécurité">Sécurité</option>
+                  <option value="Avancement">Avancement</option>
+                  <option value="Aléa">Aléa</option>
+                  <option value="Coactivité">Coactivité</option>
+                  <option value="Décision">Décision</option>
+                  <option value="Document">Document</option>
+                  <option value="Action">Action</option>
+                </select>
+              </label>
+              <label>Zone / PK <input id="messageZone" type="text" placeholder="Ex. V2M – PK 80,190"></label>
+              <label class="important-check"><input id="messageImportant" type="checkbox"> Épingler comme important</label>
+              <button class="composer-helper" type="button" id="polishBtn" title="Améliorer la formulation sans envoyer de données externes">✦ Améliorer le texte</button>
+            </div>
+            <div class="composer-tool-tray" id="composerToolTray" hidden aria-label="Outils de message">
+              <button class="composer-tool-action" id="mentionBtn" type="button"><span>@</span> Mentionner</button>
+              <button class="composer-tool-action" id="dictationBtn" type="button"><span>♬</span> Dicter</button>
+              <button class="composer-tool-action" id="attachBtn" type="button"><span>⌁</span> Fichier</button>
+              <button class="composer-tool-action" id="cameraBtn" type="button"><span>▣</span> Photo</button>
+            </div>
+            <div class="composer-row">
+              <button class="icon-button attach-toggle" id="composerMetaBtn" title="Détails du message">☷</button>
+              <button class="icon-button attach-toggle" id="emojiBtn" title="Ajouter un émoji">☺</button>
+              <button class="icon-button attach-toggle" id="composerToolsBtn" title="Photo, fichier, dictée et mention" aria-expanded="false">＋</button>
+              <input id="fileInput" type="file" multiple hidden accept="image/*,application/pdf,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.dwg,.dxf">
+              <input id="cameraInput" type="file" hidden accept="image/*" capture="environment">
+              <textarea id="messageInput" rows="1" placeholder="Écrire un message…"></textarea>
+              <button class="send-button" id="sendBtn" title="Envoyer">➤</button>
+            </div>
+          </section>
+        </section>
+
+        <section class="plans-view view" data-view="plans">
+          <div class="library-header">
+            <div><h2>Plans & documents</h2><p>Une source unique pour les plans diffusés, schémas et études du chantier.</p></div>
+            <button class="primary-button" id="addPlanBtn">＋ Ajouter un plan</button>
+          </div>
+          <div class="plan-filters" id="planFilters">
+            <button class="filter-pill active" data-plan-filter="">Tous</button>
+            <button class="filter-pill" data-plan-filter="Plan validé">Plans validés</button>
+            <button class="filter-pill" data-plan-filter="À diffuser">À diffuser</button>
+            <button class="filter-pill" data-plan-filter="Étude">Études</button>
+            <button class="filter-pill" data-plan-filter="Schéma">Schémas</button>
+          </div>
+          <div class="plan-grid" id="planGrid"></div>
+        </section>
+
+        <section class="actions-view view" data-view="actions">
+          <div class="library-header">
+            <div><h2>Actions du chantier</h2><p>Transforme les décisions et aléas du fil en suivi concret.</p></div>
+            <button class="primary-button" id="addActionBtn">＋ Nouvelle action</button>
+          </div>
+          <div class="action-summary" id="actionSummary"></div>
+          <div class="action-board" id="actionBoard"></div>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast-stack" id="toastStack" aria-live="polite"></div>
+
+  <div class="modal-backdrop is-hidden" id="modalBackdrop" hidden>
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <header class="modal-head"><div><h2 id="modalTitle">Journal chantier</h2><p id="modalSubtitle"></p></div><button class="icon-button" id="modalCloseBtn" aria-label="Fermer">×</button></header>
+      <div class="modal-body" id="modalBody"></div>
+      <footer class="modal-foot" id="modalFoot"></footer>
+    </section>
+  </div>
+
+  <template id="emptyStateTemplate">
+    <div class="empty-state"><div class="empty-icon">▱</div><h3>Aucun élément pour le moment</h3><p>Commence par ajouter une information, une photo, un plan ou une action.</p></div>
+  </template>
+</body>
+</html>
