@@ -9,33 +9,7 @@
   const DOCUMENTS_BUCKET = "chantier-documents";
   const COVER_IMAGES_BUCKET = "chantier-cover-images";
   const MAX_COVER_IMAGE_BYTES = 8 * 1024 * 1024;
-  const BRIEFING_OPERATION_CATALOG = [
-    "F_62037_RCT_(750 000)",
-    "F_63594_RELEVEMENT_VITESSE",
-    "F_63598_SST_CEPOY_750000",
-    "F_63598_SST_SOUPPE_750000",
-    "F_63598_SST_THOMERY_830000",
-    "F_63599_PMP_AMILLY_750000",
-    "F_63599_PMP_CHALETTE_750000",
-    "F_63599_PMP_FONTENAY_750000",
-    "F_63599_PMP_GARENNE_750000",
-    "F_63599_PMP_LE-BETZ-DORDIVE_750000",
-    "F_63599_PMP_NEMOURS_750000",
-    "F_64710_SST_SAMOIS_830000",
-    "F_64711_SST_MONTEREAU_830000",
-    "F_64711_SST_SAMOREAU_746000",
-    "F_64711_SST_ST_MAMMES_830000",
-    "F_64712_PMP_AVON_830000",
-    "F_64713_PMP_CHAMPAGNE_746000",
-    "F_64714_SST_BOIS_LE_ROI_830000",
-    "F_64717_SST_VARENNES_746000",
-    "F_66817_PANCARTES",
-    "F_66846_RCT_P1",
-    "F_66859_RCT_P2",
-    "F_ALQ_FONTAINE_LE_PORT_746000",
-    "VS_MONTEREAU"
-  ];
-  const BRIEFING_COMPANY_CATALOG = ["SNCF", "ATIF", "SYSTRA", "ETF", "LSDR", "ETF SERVICE", "TSO", "HP ELEC", "TSO Signalisation", "Bouygues", "TSO (LTV)"];
+  const COMPANY_CATALOG = ["SNCF", "ATIF", "SYSTRA", "ETF", "LSDR", "ETF SERVICE", "TSO", "HP ELEC", "TSO Signalisation", "Bouygues", "TSO (LTV)"];
   const PORTAL_SUGGESTIONS = [
     { id: "suggestion-briefing", name: "Briefing au pied de l’opération", description: "Configure son lien une seule fois pour retrouver le briefing depuis le terrain.", icon_key: "briefing", suggestion: true },
     { id: "suggestion-report", name: "Rapport journalier", description: "Ajoute le lien de l’application de rapport journalier ou d’un autre outil terrain.", icon_key: "report", suggestion: true }
@@ -174,7 +148,7 @@
     if (/invalid api key|invalid jwt|jwt malformed/i.test(message)) return "La clé publishable / anon Supabase est incorrecte.";
     if (/chantier_daily_logs|chantier_risks|daily_logs|chantier.*risks/i.test(message)) return "Le pilotage V13 n’est pas encore installé dans Supabase. Exécute le fichier supabase-v13-pilotage.sql dans l’éditeur SQL.";
     if (/chantier_document|journal_can_manage_chantier_documents|create_chantier_document/i.test(message)) return "La bibliothèque documentaire n’est pas encore installée dans Supabase. Vérifie l’action GitHub « Deployer les migrations Supabase ».";
-    if (/briefing_operation_code|participating_companies|journal_portal_apps|journal_cover_path|chantier-cover-images|create_journal_portal_app/i.test(message)) return "La mise à jour V14 n’est pas encore installée dans Supabase. Vérifie l’action GitHub « Deployer les migrations Supabase ».";
+    if (/participating_companies|track|journal_portal_apps|journal_cover_path|chantier-cover-images|create_journal_portal_app/i.test(message)) return "La mise à jour V14.1 n’est pas encore installée dans Supabase. Vérifie l’action GitHub « Deployer les migrations Supabase ».";
     if (/relation .* does not exist|schema cache/i.test(message)) return "Le schéma Supabase n’est pas installé : exécute supabase-schema.sql dans l’éditeur SQL.";
     if (/get_journal_administration_dashboard|set_journal_user_access|revoke_journal_user_access/i.test(message)) return "La mise à jour d’administration n’est pas encore installée dans Supabase. Exécute le fichier supabase-administration-v11.sql.";
     if (/reset_journal_chantier_feed|delete_journal_chantier|list_journal_chantier_storage_paths/i.test(message)) return "La maintenance propriétaire n’est pas encore installée dans Supabase. Exécute le fichier supabase-v12.1-owner-maintenance.sql.";
@@ -233,12 +207,6 @@
   function escapeHtml(value) { return String(value ?? "").replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[char])); }
   function normaliseText(value, max = 500) { return String(value || "").trim().replace(/\s+/g, " ").slice(0, max); }
   function normaliseList(values) { return [...new Set((Array.isArray(values) ? values : []).map(item => normaliseText(item, 100)).filter(Boolean))]; }
-  function operationTitle(value) {
-    const text = normaliseText(value, 160);
-    if (!text) return "";
-    return text.replace(/^F_[^_]+_/, "").replaceAll("_", " ").replace(/\bPMP\b/g, "PMP").replace(/\bSST\b/g, "SST");
-  }
-  function operationDisplay(value) { return `${value} · ${operationTitle(value)}`; }
   function chantierCompanies(chantier) {
     const raw = chantier?.participating_companies;
     if (Array.isArray(raw)) return normaliseList(raw);
@@ -248,12 +216,25 @@
     }
     return [];
   }
+  function chantierLineTrackLabel(chantier) {
+    const line = normaliseText(chantier?.line_code, 100);
+    const track = normaliseText(chantier?.track, 100);
+    return [line && `Ligne ${line}`, track && `Voie ${track}`].filter(Boolean).join(" · ");
+  }
+  function chantierPkLabel(chantier) {
+    const start = normaliseText(chantier?.pk_start, 80);
+    const end = normaliseText(chantier?.pk_end, 80);
+    if (start && end) return `PK ${start} → ${end}`;
+    return start ? `PK ${start}` : (end ? `PK ${end}` : "");
+  }
+  function chantierRouteLabel(chantier) { return [chantierLineTrackLabel(chantier), chantierPkLabel(chantier)].filter(Boolean).join(" · "); }
   function chantierCoverUrl(chantier) { return chantier?.cover_image_data || chantier?.cover_signed_url || ""; }
   function iconSvg(name, className = "ui-icon") {
     const icons = {
       "user-plus": '<circle cx="9" cy="8" r="3"/><path d="M3.5 20c.7-3.5 2.5-5.2 5.5-5.2s4.8 1.7 5.5 5.2M18 8v6M15 11h6"/>',
-      "field-note": '<path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.4"/><path d="M18.5 18.5v4M16.5 20.5h4"/>',
-      "book-export": '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2-2V8L14 2Z"/><path d="M14 2v6h6M12 11v6M9.5 14.5 12 17l2.5-2.5"/>',
+      "terrain-note": '<rect x="5" y="4" width="14" height="16" rx="3"/><path d="M8.5 9h6M8.5 13h4M14.8 17.2l3.3-3.3 1.3 1.3-3.3 3.3-2.1.8.8-2.1Z"/>',
+      "journal-book": '<path d="M4 5.5c2.7-1.1 5.8-.5 8 1.7v12.1c-2.2-2.1-5.3-2.7-8-1.6V5.5Z"/><path d="M20 5.5c-2.7-1.1-5.8-.5-8 1.7v12.1c2.2-2.1 5.3-2.7 8-1.6V5.5Z"/><path d="M8 10h2M14 10h2M8 13h2M14 13h2"/>',
+      "rail-route": '<path d="M7 4v16M17 4v16M9.5 6h5M9.5 10h5M9.5 14h5M5 20h14"/>',
       "folder-plan": '<path d="M3.5 6.5A2.5 2.5 0 0 1 6 4h4l2 2h6A2.5 2.5 0 0 1 20.5 8.5v9A2.5 2.5 0 0 1 18 20H6a2.5 2.5 0 0 1-2.5-2.5v-11Z"/><path d="m8 15 2.5-2.5 2 1.7 3.5-3.5M15.5 10.7h1.8v1.8"/>',
       "folder": '<path d="M3.5 6.5A2.5 2.5 0 0 1 6 4h4l2 2h6A2.5 2.5 0 0 1 20.5 8.5v9A2.5 2.5 0 0 1 18 20H6a2.5 2.5 0 0 1-2.5-2.5v-11Z"/>',
       "portal-app": '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 9h.01M12 9h.01M16 9h.01M8 14h.01M12 14h.01M16 14h.01"/>',
@@ -804,12 +785,12 @@
   }
   function renderSidebar() {
     const query = els.chantierSearch.value.trim().toLowerCase();
-    const html = app.chantiers.filter(item => !query || `${item.name} ${item.code} ${item.briefing_operation_code || ""} ${item.location || ""} ${chantierCompanies(item).join(" ")}`.toLowerCase().includes(query)).map(chantier => {
+    const html = app.chantiers.filter(item => !query || `${item.name} ${chantierRouteLabel(item)} ${chantierCompanies(item).join(" ")}`.toLowerCase().includes(query)).map(chantier => {
       const activity = activeMessagesFor(chantier.id).sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
       const active = String(chantier.id) === String(app.currentId);
       const cover = chantierCoverUrl(chantier);
-      const subtitle = activity ? truncate(activity.body || `${activity.message_type || "Information"} partagée`, 37) : (chantier.briefing_operation_code || chantier.location || "Aucune activité");
-      return `<button class="chantier-card ${active ? "active" : ""}" data-chantier-id="${chantier.id}"><span class="chantier-code ${cover ? "has-cover" : ""}">${cover ? `<img src="${escapeHtml(cover)}" alt="">` : escapeHtml(initial(chantier.code || chantier.name))}</span><span><strong>${escapeHtml(chantier.name || "Chantier sans nom")}</strong><small>${escapeHtml(subtitle)}</small></span>${activity && !active ? `<span class="unread-badge">•</span>` : ""}</button>`;
+      const subtitle = activity ? truncate(activity.body || `${activity.message_type || "Information"} partagée`, 37) : (chantierRouteLabel(chantier) || "Aucune activité");
+      return `<button class="chantier-card ${active ? "active" : ""}" data-chantier-id="${chantier.id}"><span class="chantier-code ${cover ? "has-cover" : ""}">${cover ? `<img src="${escapeHtml(cover)}" alt="">` : escapeHtml(initial(chantier.name))}</span><span><strong>${escapeHtml(chantier.name || "Chantier sans nom")}</strong><small>${escapeHtml(subtitle)}</small></span>${activity && !active ? `<span class="unread-badge">•</span>` : ""}</button>`;
     }).join("");
     const empty = isCloudReady() && !isJournalAdmin()
       ? app.access.requestStatus === "en_attente"
@@ -831,9 +812,9 @@
       els.siteAvatar.innerHTML = `<img src="journal-chantier-logo-v14.png" alt="">`;
     } else {
       els.siteName.textContent = chantier.name || "Chantier sans nom";
-      els.siteMeta.textContent = [chantier.briefing_operation_code || chantier.code, chantier.location, chantier.line_code].filter(Boolean).join(" · ") || "Journal partagé";
+      els.siteMeta.textContent = chantierRouteLabel(chantier) || "Journal partagé";
       const cover = chantierCoverUrl(chantier);
-      els.siteAvatar.innerHTML = cover ? `<img src="${escapeHtml(cover)}" alt="Photo du chantier">` : escapeHtml(initial(chantier.code || chantier.name));
+      els.siteAvatar.innerHTML = cover ? `<img src="${escapeHtml(cover)}" alt="Photo du chantier">` : escapeHtml(initial(chantier.name));
     }
   }
 
@@ -1721,7 +1702,8 @@
     const period = scope.from || scope.to ? `Période : ${scope.from ? new Intl.DateTimeFormat("fr-FR").format(new Date(`${scope.from}T12:00:00`)) : "Début"} - ${scope.to ? new Intl.DateTimeFormat("fr-FR").format(new Date(`${scope.to}T12:00:00`)) : "Aujourd’hui"}` : "Période : intégralité du journal";
     const coverPhoto = chantierCoverUrl(chantier);
     const chantierCompaniesList = chantierCompanies(chantier);
-    const operationCode = chantier.briefing_operation_code || chantier.code || "";
+    const lineTrack = chantierLineTrackLabel(chantier);
+    const pkRange = chantierPkLabel(chantier);
     const inPeriod = value => {
       const date = new Date(value || 0);
       if (scope.from && date < new Date(`${scope.from}T00:00:00`)) return false;
@@ -1752,8 +1734,8 @@
     const pilotage = includesPilotage ? `<section class="print-pilotage-panel"><div><span>Suivi opérationnel</span><h3>Repères de pilotage</h3><p>Les indicateurs ci-dessous reprennent la situation à la date de l’édition.</p></div><div class="print-pilotage-summary"><div><dt>Actions ouvertes</dt><dd>${openActions.length}</dd></div><div><dt>Actions en retard</dt><dd>${lateActions.length}</dd></div><div><dt>Vigilances ouvertes</dt><dd>${activeRisks.length}</dd></div><div><dt>Journées consignées</dt><dd>${dailyLogs.length}</dd></div></div></section>` : "";
     const documentRegister = libraryDocuments.length ? `<section class="print-document-register"><div class="print-register-heading"><div><span>Référentiel documentaire</span><h3>Documents classés</h3><p>Liste des documents disponibles dans les espaces Sécurité, Plans et Documents qualité.</p></div><b>${libraryDocuments.length} document${libraryDocuments.length > 1 ? "s" : ""}</b></div><table><thead><tr><th>Déposé le</th><th>Document</th><th>Classement</th><th>Indice</th></tr></thead><tbody>${libraryDocuments.map(documentItem => `<tr><td>${escapeHtml(formatSimpleDate(documentItem.created_at))}</td><td><b>${escapeHtml(documentItem.file_name || "Document")}</b>${documentItem.description ? `<small>${escapeHtml(truncate(documentItem.description, 145))}</small>` : ""}</td><td>${escapeHtml(documentPath(documentItem))}</td><td>${escapeHtml(documentItem.version_label || "-")}</td></tr>`).join("")}</tbody></table></section>` : "";
     const coverVisual = coverPhoto ? `<div class="print-cover-photo"><img src="${escapeHtml(coverPhoto)}" alt="Photo de couverture du chantier"></div><div class="print-cover-photo-overlay"></div>` : "";
-    const operationSheet = `<section class="print-operation-panel"><div><span>Fiche opérationnelle</span><h3>Repères du chantier</h3><p>Informations de référence saisies à partir du Briefing au pied de l’opération.</p></div><dl><div><dt>Opération / code F</dt><dd>${escapeHtml(operationCode || "Non renseigné")}</dd></div><div><dt>Implantation</dt><dd>${escapeHtml([chantier.line_code, chantier.pk_start && `PK ${chantier.pk_start}`, chantier.pk_end && `à ${chantier.pk_end}`].filter(Boolean).join(" · ") || chantier.location || "Non renseignée")}</dd></div><div><dt>Pilotage</dt><dd>${escapeHtml([chantier.project_manager, chantier.operation_manager].filter(Boolean).join(" · ") || "Non renseigné")}</dd></div><div><dt>Entreprises</dt><dd>${escapeHtml(chantierCompaniesList.join(" · ") || "Non renseignées")}</dd></div></dl></section>`;
-    els.printCover.innerHTML = `<section class="print-book-cover ${coverPhoto ? "has-cover-photo" : ""}">${coverVisual}<div class="print-cover-topline"><div class="print-cover-brand"><img src="journal-chantier-logo-v14.png" alt=""><span><b>Journal chantier</b><small>Carnet d'opérations</small></span></div><span class="print-cover-edition">Édition du ${escapeHtml(printDate)}</span></div><div class="print-cover-main"><span class="print-cover-kicker">Historique de chantier</span><h1>${escapeHtml(chantier.name || "Chantier sans nom")}</h1><p>${escapeHtml(operationCode ? `Chantier ${operationCode}` : "Journal partagé sécurisé")}</p></div><dl class="print-cover-metadata"><div><dt>Localisation</dt><dd>${escapeHtml(chantier.location || "Non renseignée")}</dd></div><div><dt>Période couverte</dt><dd>${escapeHtml(period.replace(/^Période : /, ""))}</dd></div><div><dt>Édité le</dt><dd>${escapeHtml(formatDateTime(nowIso()))}</dd></div></dl><div class="print-cover-foot"><span>Messagerie, photos, actions et documentation</span><span>Document de suivi interne</span></div></section><section class="print-book-opening"><div class="print-opening-title"><span>01 · Repères du dossier</span><h2>Vue d’ensemble</h2><p>Cette édition rassemble l’historique chronologique du chantier, les pièces jointes et le référentiel documentaire associé.</p></div>${operationSheet}<div class="print-record-stats">${recordStats.map(([value, label, tone]) => `<div class="${tone}"><b>${escapeHtml(value)}</b><span>${escapeHtml(label)}</span></div>`).join("")}</div>${pilotage}${documentRegister}</section><section class="print-history-heading"><span>02 · Chronologie du chantier</span><h2>Journal des événements</h2><p>${escapeHtml(`${messages.length} événement${messages.length > 1 ? "s" : ""} · ${photos.length} photo${photos.length > 1 ? "s" : ""} · ${messageFiles.length} fichier${messageFiles.length > 1 ? "s" : ""}`)}</p></section>`;
+    const operationSheet = `<section class="print-operation-panel"><div><span>Fiche chantier</span><h3>Repères du chantier</h3><p>Les informations utiles pour lire et classer l’historique du chantier.</p></div><dl><div><dt>Ligne / voie</dt><dd>${escapeHtml(lineTrack || "Non renseignées")}</dd></div><div><dt>PK</dt><dd>${escapeHtml(pkRange || "Non renseignés")}</dd></div><div><dt>Phase</dt><dd>${escapeHtml(chantier.operation_phase || "À préciser")}</dd></div><div><dt>Entreprises</dt><dd>${escapeHtml(chantierCompaniesList.join(" · ") || "Non renseignées")}</dd></div></dl></section>`;
+    els.printCover.innerHTML = `<section class="print-book-cover ${coverPhoto ? "has-cover-photo" : ""}">${coverVisual}<div class="print-cover-topline"><div class="print-cover-brand"><img src="journal-chantier-logo-v14.png" alt=""><span><b>Journal chantier</b><small>Carnet d'opérations</small></span></div><span class="print-cover-edition">Édition du ${escapeHtml(printDate)}</span></div><div class="print-cover-main"><span class="print-cover-kicker">Historique de chantier</span><h1>${escapeHtml(chantier.name || "Chantier sans nom")}</h1><p>Journal partagé sécurisé</p></div><dl class="print-cover-metadata"><div><dt>Ligne / voie</dt><dd>${escapeHtml(lineTrack || "Non renseignées")}</dd></div><div><dt>Période couverte</dt><dd>${escapeHtml(period.replace(/^Période : /, ""))}</dd></div><div><dt>Édité le</dt><dd>${escapeHtml(formatDateTime(nowIso()))}</dd></div></dl><div class="print-cover-foot"><span>Messagerie, photos, actions et documentation</span><span>Document de suivi interne</span></div></section><section class="print-book-opening"><div class="print-opening-title"><span>01 · Repères du dossier</span><h2>Vue d’ensemble</h2><p>Cette édition rassemble l’historique chronologique du chantier, les pièces jointes et le référentiel documentaire associé.</p></div>${operationSheet}<div class="print-record-stats">${recordStats.map(([value, label, tone]) => `<div class="${tone}"><b>${escapeHtml(value)}</b><span>${escapeHtml(label)}</span></div>`).join("")}</div>${pilotage}${documentRegister}</section><section class="print-history-heading"><span>02 · Chronologie du chantier</span><h2>Journal des événements</h2><p>${escapeHtml(`${messages.length} événement${messages.length > 1 ? "s" : ""} · ${photos.length} photo${photos.length > 1 ? "s" : ""} · ${messageFiles.length} fichier${messageFiles.length > 1 ? "s" : ""}`)}</p></section>`;
   }
   function renderAccessControls() {
     const hasGlobalRights = !isCloudReady() || isJournalAdmin();
@@ -1791,26 +1773,24 @@
     els.appShell.classList.remove("sidebar-open");
     setActiveTab("chat");
   }
-  function chantierPayload(values) {
-    const operation = normaliseText(values.briefing_operation_code || values.code, 160).toUpperCase();
-    const code = normaliseText(values.code || operation, 160).toUpperCase();
-    const name = normaliseText(values.name || operationTitle(operation) || code, 160);
+  function generatedChantierCode(name) {
+    const stem = normaliseText(name, 80).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);
+    return `CHANTIER-${stem || "NOUVEAU"}-${Date.now().toString(36).toUpperCase()}`;
+  }
+  function chantierPayload(values, existing = null) {
+    const name = normaliseText(values.name, 160);
+    const code = normaliseText(existing?.code || values.code, 160) || generatedChantierCode(name);
     const plannedStart = /^\d{4}-\d{2}-\d{2}$/.test(String(values.planned_start || "")) ? values.planned_start : null;
     const plannedEnd = /^\d{4}-\d{2}-\d{2}$/.test(String(values.planned_end || "")) ? values.planned_end : null;
-    if (!operation) throw new Error("Sélectionne une opération du Briefing ou renseigne un code chantier libre.");
-    if (!code) throw new Error("Le code chantier est obligatoire.");
     if (!name) throw new Error("Le nom du chantier est obligatoire.");
     if (plannedStart && plannedEnd && plannedEnd < plannedStart) throw new Error("La date de fin ne peut pas précéder la date de début.");
     return {
       code, name,
-      location: normaliseText(values.location, 220),
       description: normaliseText(values.description, 2400),
-      briefing_operation_code: operation,
       line_code: normaliseText(values.line_code, 100),
+      track: normaliseText(values.track, 100),
       pk_start: normaliseText(values.pk_start, 80),
       pk_end: normaliseText(values.pk_end, 80),
-      project_manager: normaliseText(values.project_manager, 160),
-      operation_manager: normaliseText(values.operation_manager, 160),
       participating_companies: normaliseList(values.participating_companies),
       operation_phase: normaliseText(values.operation_phase, 100),
       planned_start: plannedStart,
@@ -1921,7 +1901,7 @@
   async function updateCurrentChantier(values) {
     const chantier = currentChantier();
     if (!chantier) throw new Error("Chantier introuvable.");
-    const payload = { ...chantierPayload(values), updated_at: nowIso() };
+    const payload = { ...chantierPayload(values, chantier), updated_at: nowIso() };
     if (isCloudReady()) {
       const { error } = await app.db.from("chantiers").update(payload).eq("id", chantier.id);
       if (error) throw error;
@@ -2495,54 +2475,33 @@
     $("enableNotificationsBtn").addEventListener("click", ensureNotificationPermission);
   }
 
-  function chantierOperationChoice(chantier) {
-    const code = normaliseText(chantier?.briefing_operation_code || chantier?.code, 160).toUpperCase();
-    return BRIEFING_OPERATION_CATALOG.includes(code) ? code : (code ? "__custom__" : "");
-  }
   function chantierFormMarkup(formId, chantier = null) {
-    const selectedOperation = chantierOperationChoice(chantier);
-    const operationCode = normaliseText(chantier?.briefing_operation_code || chantier?.code, 160).toUpperCase();
-    const customOperation = selectedOperation === "__custom__" ? operationCode : "";
     const companies = chantierCompanies(chantier);
-    const customCompanies = companies.filter(company => !BRIEFING_COMPANY_CATALOG.includes(company)).join(", ");
+    const customCompanies = companies.filter(company => !COMPANY_CATALOG.includes(company)).join(", ");
     const cover = chantierCoverUrl(chantier);
-    const phase = normaliseText(chantier?.operation_phase, 100);
-    const operationOptions = [`<option value="">Sélectionner dans le catalogue Briefing</option>`, ...BRIEFING_OPERATION_CATALOG.map(code => `<option value="${escapeHtml(code)}" ${selectedOperation === code ? "selected" : ""}>${escapeHtml(operationDisplay(code))}</option>`), `<option value="__custom__" ${selectedOperation === "__custom__" ? "selected" : ""}>Autre opération — saisie libre</option>`].join("");
+    const legacyPhase = { "Préparation": "Phase prépa", "Travaux": "Phase réalisation", "Essais / réception": "Réception du chantier", "Clôture": "Phase finition" };
+    const phase = legacyPhase[normaliseText(chantier?.operation_phase, 100)] || normaliseText(chantier?.operation_phase, 100);
+    const phases = ["Phase prépa", "Phase réalisation", "Phase finition", "Réception du chantier"];
     return `<form id="${formId}" class="form-grid chantier-setup-form" novalidate>
-      <div class="chantier-form-intro span-2"><span>${iconSvg("field-note", "ui-icon")}</span><div><b>Fiche opérationnelle</b><p>Le code F du Briefing devient la référence du chantier, de ses documents et de son futur archivage.</p></div></div>
-      <label class="form-field span-2"><span>Opération de référence — catalogue Briefing</span><select name="operation_choice" id="${formId}Operation">${operationOptions}</select></label>
-      <label class="form-field span-2" id="${formId}CustomOperationWrap" ${selectedOperation === "__custom__" ? "" : "hidden"}><span>Code F ou référence libre *</span><input id="${formId}CustomOperation" name="custom_operation" maxlength="160" value="${escapeHtml(customOperation)}" placeholder="Ex. F_70000_NOM_OPERATION"></label>
-      <label class="form-field"><span>Nom visible du chantier *</span><input name="name" required maxlength="160" value="${escapeHtml(chantier?.name || "")}" placeholder="Ex. SST Montereau — phase travaux"></label>
-      <label class="form-field"><span>Code chantier / code F *</span><input id="${formId}Code" name="code" required maxlength="160" value="${escapeHtml(chantier?.code || (selectedOperation && selectedOperation !== "__custom__" ? selectedOperation : ""))}" placeholder="Sélectionne une opération ou saisis un code"></label>
-      <label class="form-field span-2"><span>Localisation / secteur</span><input name="location" maxlength="220" value="${escapeHtml(chantier?.location || "")}" placeholder="Ex. Montereau · Seine-et-Marne"></label>
-      <label class="form-field"><span>Ligne / voie</span><input name="line_code" maxlength="100" value="${escapeHtml(chantier?.line_code || "")}" placeholder="Ex. V2M · voie 1"></label>
-      <div class="field-pair"><label class="form-field"><span>PK début</span><input name="pk_start" maxlength="80" value="${escapeHtml(chantier?.pk_start || "")}" placeholder="80,050"></label><label class="form-field"><span>PK fin</span><input name="pk_end" maxlength="80" value="${escapeHtml(chantier?.pk_end || "")}" placeholder="80,340"></label></div>
-      <label class="form-field"><span>Chef de projet</span><input name="project_manager" maxlength="160" value="${escapeHtml(chantier?.project_manager || "")}" placeholder="Nom, prénom ou fonction"></label>
-      <label class="form-field"><span>Responsable opération</span><input name="operation_manager" maxlength="160" value="${escapeHtml(chantier?.operation_manager || "")}" placeholder="Nom, prénom ou fonction"></label>
-      <label class="form-field"><span>Début prévisionnel</span><input name="planned_start" type="date" value="${escapeHtml(chantier?.planned_start || "")}"></label>
-      <label class="form-field"><span>Fin prévisionnelle</span><input name="planned_end" type="date" value="${escapeHtml(chantier?.planned_end || "")}"></label>
-      <label class="form-field span-2"><span>Phase de l’opération</span><select name="operation_phase"><option value="">À préciser</option>${["Préparation", "Travaux", "Essais / réception", "Clôture", "Suspendue"].map(label => `<option ${phase === label ? "selected" : ""}>${label}</option>`).join("")}</select></label>
-      <fieldset class="company-picker span-2"><legend>Entreprises majeures participantes</legend><p>Catalogue repris du Briefing. Tu peux compléter librement ci-dessous.</p><div class="company-checkbox-grid">${BRIEFING_COMPANY_CATALOG.map(company => `<label><input type="checkbox" name="participating_companies" value="${escapeHtml(company)}" ${companies.includes(company) ? "checked" : ""}><span>${escapeHtml(company)}</span></label>`).join("")}</div><label class="form-field company-other"><span>Autre(s) entreprise(s)</span><input name="other_companies" maxlength="500" value="${escapeHtml(customCompanies)}" placeholder="Ex. Colas, entreprise locale (séparer par une virgule)"></label></fieldset>
+      <div class="chantier-form-intro span-2"><span>${iconSvg("rail-route", "ui-icon")}</span><div><b>Fiche chantier simplifiée</b><p>Les repères essentiels pour organiser le journal et la couverture PDF, sans alourdir la saisie.</p></div></div>
+      <label class="form-field span-2"><span>Nom du chantier *</span><input name="name" required maxlength="160" value="${escapeHtml(chantier?.name || "")}" placeholder="Ex. SST Montereau — phase travaux"></label>
+      <div class="field-pair span-2"><label class="form-field"><span>Ligne</span><input name="line_code" maxlength="100" value="${escapeHtml(chantier?.line_code || "")}" placeholder="Ex. V2M"></label><label class="form-field"><span>Voie</span><input name="track" maxlength="100" value="${escapeHtml(chantier?.track || "")}" placeholder="Ex. voie 1"></label></div>
+      <div class="field-pair span-2"><label class="form-field"><span>PK début</span><input name="pk_start" maxlength="80" value="${escapeHtml(chantier?.pk_start || "")}" placeholder="80,050"></label><label class="form-field"><span>PK fin</span><input name="pk_end" maxlength="80" value="${escapeHtml(chantier?.pk_end || "")}" placeholder="80,340"></label></div>
+      <div class="field-pair span-2"><label class="form-field"><span>Début prévisionnel</span><input name="planned_start" type="date" value="${escapeHtml(chantier?.planned_start || "")}"></label><label class="form-field"><span>Fin prévisionnelle</span><input name="planned_end" type="date" value="${escapeHtml(chantier?.planned_end || "")}"></label></div>
+      <label class="form-field span-2"><span>Phase de l’opération</span><select name="operation_phase"><option value="">À préciser</option>${phases.map(label => `<option ${phase === label ? "selected" : ""}>${label}</option>`).join("")}</select></label>
+      <fieldset class="company-picker span-2"><legend>Entreprises majeures participantes</legend><p>Sélectionne les entreprises principales, puis ajoute librement les autres si besoin.</p><div class="company-checkbox-grid">${COMPANY_CATALOG.map(company => `<label><input type="checkbox" name="participating_companies" value="${escapeHtml(company)}" ${companies.includes(company) ? "checked" : ""}><span>${escapeHtml(company)}</span></label>`).join("")}</div><label class="form-field company-other"><span>Autre(s) entreprise(s)</span><input name="other_companies" maxlength="500" value="${escapeHtml(customCompanies)}" placeholder="Ex. Colas, entreprise locale (séparer par une virgule)"></label></fieldset>
       <section class="cover-upload span-2"><div><b>Photo de couverture</b><p>Elle apparaîtra sur la première page du carnet PDF du chantier.</p></div><label class="cover-file-select"><input type="file" name="cover_file" accept="image/jpeg,image/png,image/webp"><span>Choisir une photo</span></label><div class="cover-photo-preview ${cover ? "has-image" : ""}" id="${formId}CoverPreview">${cover ? `<img src="${escapeHtml(cover)}" alt="Photo de couverture actuelle">` : `<span>Photo du chantier</span>`}</div>${cover ? `<label class="cover-remove"><input type="checkbox" name="remove_cover"> Retirer la photo actuelle</label>` : ""}</section>
       <label class="form-field span-2"><span>Objet ou contexte</span><textarea name="description" maxlength="2400" placeholder="Travaux prévus, contraintes, enjeux, interfaces…">${escapeHtml(chantier?.description || "")}</textarea></label>
     </form>`;
   }
   function collectChantierFormValues(form) {
     const data = new FormData(form);
-    const operationChoice = normaliseText(data.get("operation_choice"), 160);
-    const customOperation = normaliseText(data.get("custom_operation"), 160).toUpperCase();
-    const enteredCode = normaliseText(data.get("code"), 160).toUpperCase();
-    const briefingOperationCode = operationChoice && operationChoice !== "__custom__" ? operationChoice : (customOperation || enteredCode);
     const companies = [
       ...data.getAll("participating_companies"),
       ...normaliseText(data.get("other_companies"), 500).split(/[,;\n]+/)
     ];
     return {
-      name: data.get("name"),
-      code: operationChoice && operationChoice !== "__custom__" ? operationChoice : enteredCode,
-      briefing_operation_code: briefingOperationCode,
-      location: data.get("location"), line_code: data.get("line_code"), pk_start: data.get("pk_start"), pk_end: data.get("pk_end"),
-      project_manager: data.get("project_manager"), operation_manager: data.get("operation_manager"),
+      name: data.get("name"), line_code: data.get("line_code"), track: data.get("track"), pk_start: data.get("pk_start"), pk_end: data.get("pk_end"),
       planned_start: data.get("planned_start"), planned_end: data.get("planned_end"), operation_phase: data.get("operation_phase"),
       participating_companies: companies, description: data.get("description"),
       coverFile: form.elements.cover_file?.files?.[0] || null,
@@ -2550,24 +2509,7 @@
     };
   }
   function wireChantierForm(form, formId) {
-    const operation = $(`${formId}Operation`), customWrap = $(`${formId}CustomOperationWrap`), custom = $(`${formId}CustomOperation`), code = $(`${formId}Code`), name = form.elements.name, fileInput = form.elements.cover_file, preview = $(`${formId}CoverPreview`);
-    const syncOperation = () => {
-      const value = String(operation?.value || "");
-      const selectedFromCatalog = BRIEFING_OPERATION_CATALOG.includes(value);
-      if (customWrap) customWrap.hidden = value !== "__custom__";
-      if (selectedFromCatalog) {
-        code.value = value;
-        code.readOnly = true;
-        const generatedName = operationTitle(value);
-        if (!name.value || name.dataset.generated === "true") { name.value = generatedName; name.dataset.generated = "true"; }
-      } else {
-        code.readOnly = false;
-        if (value === "__custom__" && custom?.value) code.value = custom.value.toUpperCase();
-      }
-    };
-    operation?.addEventListener("change", syncOperation);
-    custom?.addEventListener("input", () => { if (String(operation?.value) === "__custom__") code.value = custom.value.toUpperCase(); });
-    name?.addEventListener("input", () => { name.dataset.generated = "false"; });
+    const fileInput = form.elements.cover_file, preview = $(`${formId}CoverPreview`);
     fileInput?.addEventListener("change", () => {
       const file = fileInput.files?.[0];
       if (!file || !preview) return;
@@ -2579,7 +2521,6 @@
     form.elements.remove_cover?.addEventListener("change", event => {
       if (event.currentTarget.checked && preview) { preview.classList.remove("has-image"); preview.innerHTML = "<span>La photo sera retirée</span>"; }
     });
-    syncOperation();
   }
   function openNewChantierDialog() {
     if (app.mode === "cloud-guest") return openProfileDialog();
@@ -3294,7 +3235,7 @@
     openModal({
       title: "Ajout rapide terrain",
       subtitle: "Consigne une information, une alerte ou une photo sans quitter le chantier.",
-      body: `<div class="quick-add-intro"><span>${iconSvg("field-note")}</span><div><b>Consignation terrain</b><p>Un fait, une alerte ou une photo est ajouté au fil du chantier avec sa zone et sa date.</p></div></div><form id="quickAddForm" class="form-grid"><label class="form-field">Type<select name="message_type"><option value="Info">Information</option><option value="Journal">Journal / poste</option><option value="Sécurité">Sécurité</option><option value="Incident">Incident / vigilance</option><option value="Avancement">Avancement</option><option value="Aléa">Aléa</option><option value="Coactivité">Coactivité</option><option value="Décision">Décision</option></select></label><label class="form-field">Zone / voie / PK<input name="zone" placeholder="Ex. V2M – PK 80,190"></label><label class="form-field span-2">Information *<textarea name="body" required placeholder="Décris le fait constaté, l’action menée ou la consigne."></textarea></label><label class="form-field span-2">Photo / fichier (facultatif)<input name="file" type="file" accept="image/*,application/pdf,.pdf,.doc,.docx" capture="environment"><small>Une photo prise depuis le téléphone s’ouvre directement ici.</small></label><label class="form-field span-2"><span><input name="is_important" type="checkbox"> Épingler comme information permanente</span></label></form>`,
+      body: `<div class="quick-add-intro"><span>${iconSvg("terrain-note")}</span><div><b>Consignation terrain</b><p>Un fait, une alerte ou une photo est ajouté au fil du chantier avec sa zone et sa date.</p></div></div><form id="quickAddForm" class="form-grid"><label class="form-field">Type<select name="message_type"><option value="Info">Information</option><option value="Journal">Journal / poste</option><option value="Sécurité">Sécurité</option><option value="Incident">Incident / vigilance</option><option value="Avancement">Avancement</option><option value="Aléa">Aléa</option><option value="Coactivité">Coactivité</option><option value="Décision">Décision</option></select></label><label class="form-field">Zone / voie / PK<input name="zone" placeholder="Ex. V2M – PK 80,190"></label><label class="form-field span-2">Information *<textarea name="body" required placeholder="Décris le fait constaté, l’action menée ou la consigne."></textarea></label><label class="form-field span-2">Photo / fichier (facultatif)<input name="file" type="file" accept="image/*,application/pdf,.pdf,.doc,.docx" capture="environment"><small>Une photo prise depuis le téléphone s’ouvre directement ici.</small></label><label class="form-field span-2"><span><input name="is_important" type="checkbox"> Épingler comme information permanente</span></label></form>`,
       footer: `<button class="secondary-button" id="cancelQuickAdd">Annuler</button><button class="primary-button" id="saveQuickAdd">Ajouter au journal</button>`
     });
     $("cancelQuickAdd").addEventListener("click", closeModal);
@@ -3314,7 +3255,7 @@
     openModal({
       title: "Créer le carnet PDF",
       subtitle: "Une édition structurée du chantier, prête à archiver ou à transmettre.",
-      body: `<div class="export-book-preview"><span>${iconSvg("book-export")}</span><div><b>Un véritable carnet de chantier</b><p>Couverture, repères chiffrés, registre documentaire, photos et chronologie sont mis en page automatiquement.</p></div></div><form id="exportForm" class="form-grid"><p class="form-note span-2">Le carnet contient <b>toute la discussion du chantier</b> et la liste des documents classés. À l’étape suivante, sélectionne « Enregistrer au format PDF » dans l’écran d’impression du téléphone ou du navigateur.</p><label class="form-field">Du<input name="from" type="date"></label><label class="form-field">Au<input name="to" type="date"></label><label class="form-field span-2">Contenu<select name="scope"><option value="all">Tous les messages</option><option value="important">Messages importants uniquement</option></select></label><label class="form-field span-2"><span><input name="include_pilotage" type="checkbox" checked> Ajouter les indicateurs de pilotage dans le carnet</span></label></form>`,
+      body: `<div class="export-book-preview"><span>${iconSvg("journal-book")}</span><div><b>Un véritable carnet de chantier</b><p>Couverture, repères chiffrés, registre documentaire, photos et chronologie sont mis en page automatiquement.</p></div></div><form id="exportForm" class="form-grid"><p class="form-note span-2">Le carnet contient <b>toute la discussion du chantier</b> et la liste des documents classés. À l’étape suivante, sélectionne « Enregistrer au format PDF » dans l’écran d’impression du téléphone ou du navigateur.</p><label class="form-field">Du<input name="from" type="date"></label><label class="form-field">Au<input name="to" type="date"></label><label class="form-field span-2">Contenu<select name="scope"><option value="all">Tous les messages</option><option value="important">Messages importants uniquement</option></select></label><label class="form-field span-2"><span><input name="include_pilotage" type="checkbox" checked> Ajouter les indicateurs de pilotage dans le carnet</span></label></form>`,
       footer: `<button class="secondary-button" id="cancelExport">Annuler</button><button class="primary-button" id="runExport">Créer le PDF</button>`
     });
     $("cancelExport").addEventListener("click", closeModal);
@@ -3669,7 +3610,7 @@
   async function initialize() {
     wireEvents();
     const callbackError = takeAuthCallbackError();
-    if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("./service-worker-v13.js?v=14.0-briefing-portal").catch(error => console.warn("Service worker", error));
+    if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("./service-worker-v13.js?v=14.1-fiche-simple").catch(error => console.warn("Service worker", error));
     syncFromLocal();
     if (cloudConfigured()) {
       try { await initializeCloud(); }
