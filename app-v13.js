@@ -7,6 +7,39 @@
   const MAX_LOCAL_FILE_BYTES = 3 * 1024 * 1024;
   const MAX_CLOUD_FILE_BYTES = 48 * 1024 * 1024;
   const DOCUMENTS_BUCKET = "chantier-documents";
+  const COVER_IMAGES_BUCKET = "chantier-cover-images";
+  const MAX_COVER_IMAGE_BYTES = 8 * 1024 * 1024;
+  const BRIEFING_OPERATION_CATALOG = [
+    "F_62037_RCT_(750 000)",
+    "F_63594_RELEVEMENT_VITESSE",
+    "F_63598_SST_CEPOY_750000",
+    "F_63598_SST_SOUPPE_750000",
+    "F_63598_SST_THOMERY_830000",
+    "F_63599_PMP_AMILLY_750000",
+    "F_63599_PMP_CHALETTE_750000",
+    "F_63599_PMP_FONTENAY_750000",
+    "F_63599_PMP_GARENNE_750000",
+    "F_63599_PMP_LE-BETZ-DORDIVE_750000",
+    "F_63599_PMP_NEMOURS_750000",
+    "F_64710_SST_SAMOIS_830000",
+    "F_64711_SST_MONTEREAU_830000",
+    "F_64711_SST_SAMOREAU_746000",
+    "F_64711_SST_ST_MAMMES_830000",
+    "F_64712_PMP_AVON_830000",
+    "F_64713_PMP_CHAMPAGNE_746000",
+    "F_64714_SST_BOIS_LE_ROI_830000",
+    "F_64717_SST_VARENNES_746000",
+    "F_66817_PANCARTES",
+    "F_66846_RCT_P1",
+    "F_66859_RCT_P2",
+    "F_ALQ_FONTAINE_LE_PORT_746000",
+    "VS_MONTEREAU"
+  ];
+  const BRIEFING_COMPANY_CATALOG = ["SNCF", "ATIF", "SYSTRA", "ETF", "LSDR", "ETF SERVICE", "TSO", "HP ELEC", "TSO Signalisation", "Bouygues", "TSO (LTV)"];
+  const PORTAL_SUGGESTIONS = [
+    { id: "suggestion-briefing", name: "Briefing au pied de l’opération", description: "Configure son lien une seule fois pour retrouver le briefing depuis le terrain.", icon_key: "briefing", suggestion: true },
+    { id: "suggestion-report", name: "Rapport journalier", description: "Ajoute le lien de l’application de rapport journalier ou d’un autre outil terrain.", icon_key: "report", suggestion: true }
+  ];
   const $ = id => document.getElementById(id);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const nowIso = () => new Date().toISOString();
@@ -36,7 +69,8 @@
     access: { platformRole: "", requestStatus: "", pendingRequests: 0 },
     chantiers: [], currentId: null, messages: [], actions: [], dailyLogs: [], risks: [], members: [], reactions: [], readStates: [],
     documentFolders: [], documents: [], documentViewFolderId: null,
-    documentLibrary: { available: false, canManage: false, migrationError: "" }, documentUrlCache: new Map(), local: null,
+    documentLibrary: { available: false, canManage: false, migrationError: "" }, documentUrlCache: new Map(),
+    portalApps: [], portal: { available: false, migrationError: "" }, coverUrlCache: new Map(), local: null,
     pendingFiles: [], replyTo: null, typeFilter: "", search: "", onlyImportant: false, isDictating: false,
     advancedFilters: { from: "", to: "", zone: "", author: "", attachment: false }, lastOperationalAlertSignature: "",
     imageRecoveryInFlight: new Set(), imagePreviewRepairInFlight: new Set(), imagePreviewRepairTried: new Set(),
@@ -57,7 +91,7 @@
     profileAvatar: $("profileAvatar"), connectionLine: $("connectionLine"), connectionText: $("connectionText"),
     siteName: $("siteName"), siteMeta: $("siteMeta"), siteAvatar: $("siteAvatar"),
     connectionBanner: $("connectionBanner"), openSetupBtn: $("openSetupBtn"), messageCount: $("messageCount"),
-    planCount: $("planCount"), actionCount: $("actionCount"), pilotageCount: $("pilotageCount"), messageFeed: $("messageFeed"),
+    planCount: $("planCount"), actionCount: $("actionCount"), pilotageCount: $("pilotageCount"), appsCount: $("appsCount"), messageFeed: $("messageFeed"),
     messageSearch: $("messageSearch"), typeFilter: $("typeFilter"), importantFilterBtn: $("importantFilterBtn"), advancedSearchBtn: $("advancedSearchBtn"),
     jumpBottomBtn: $("jumpBottomBtn"), composerShell: $("composerShell"), composerMeta: $("composerMeta"),
     composerMetaBtn: $("composerMetaBtn"), composerToolsBtn: $("composerToolsBtn"), composerToolTray: $("composerToolTray"), messageType: $("messageType"), messageZone: $("messageZone"),
@@ -66,6 +100,7 @@
     documentHeaderActions: $("documentHeaderActions"), documentSecurityNote: $("documentSecurityNote"), documentBreadcrumb: $("documentBreadcrumb"), bulkImportBtn: $("bulkImportBtn"), addRootFolderBtn: $("addRootFolderBtn"),
     documentFolderGrid: $("documentFolderGrid"), documentFileGrid: $("documentFileGrid"),
     actionSummary: $("actionSummary"), actionBoard: $("actionBoard"), printCover: $("printCover"),
+    portalAppsGrid: $("portalAppsGrid"), portalAppsNotice: $("portalAppsNotice"), addPortalAppBtn: $("addPortalAppBtn"),
     pilotageSummary: $("pilotageSummary"), pilotageAlerts: $("pilotageAlerts"), dailyLogList: $("dailyLogList"), riskList: $("riskList"),
     modalBackdrop: $("modalBackdrop"), modal: document.querySelector(".modal"), modalTitle: $("modalTitle"),
     modalSubtitle: $("modalSubtitle"), modalBody: $("modalBody"), modalFoot: $("modalFoot"), modalCloseBtn: $("modalCloseBtn"), toastStack: $("toastStack"),
@@ -74,7 +109,7 @@
   };
 
   function defaultLocalData() {
-    return { profile: { id: `local-${makeId()}`, full_name: "", company: "", email: "" }, chantiers: [], messages: [], actions: [], dailyLogs: [], risks: [], members: [], reactions: [], readStates: [], documentFolders: [], documents: [], currentId: null };
+    return { profile: { id: `local-${makeId()}`, full_name: "", company: "", email: "" }, chantiers: [], messages: [], actions: [], dailyLogs: [], risks: [], members: [], reactions: [], readStates: [], documentFolders: [], documents: [], portalApps: [], currentId: null };
   }
 
   function loadLocalData() {
@@ -92,7 +127,8 @@
           reactions: Array.isArray(loaded.reactions) ? loaded.reactions : [],
           readStates: Array.isArray(loaded.readStates) ? loaded.readStates : [],
           documentFolders: Array.isArray(loaded.documentFolders) ? loaded.documentFolders : [],
-          documents: Array.isArray(loaded.documents) ? loaded.documents : [] };
+          documents: Array.isArray(loaded.documents) ? loaded.documents : [],
+          portalApps: Array.isArray(loaded.portalApps) ? loaded.portalApps : [] };
       }
     } catch (error) { console.warn("Journal local illisible", error); }
     return defaultLocalData();
@@ -138,6 +174,7 @@
     if (/invalid api key|invalid jwt|jwt malformed/i.test(message)) return "La clé publishable / anon Supabase est incorrecte.";
     if (/chantier_daily_logs|chantier_risks|daily_logs|chantier.*risks/i.test(message)) return "Le pilotage V13 n’est pas encore installé dans Supabase. Exécute le fichier supabase-v13-pilotage.sql dans l’éditeur SQL.";
     if (/chantier_document|journal_can_manage_chantier_documents|create_chantier_document/i.test(message)) return "La bibliothèque documentaire n’est pas encore installée dans Supabase. Vérifie l’action GitHub « Deployer les migrations Supabase ».";
+    if (/briefing_operation_code|participating_companies|journal_portal_apps|journal_cover_path|chantier-cover-images|create_journal_portal_app/i.test(message)) return "La mise à jour V14 n’est pas encore installée dans Supabase. Vérifie l’action GitHub « Deployer les migrations Supabase ».";
     if (/relation .* does not exist|schema cache/i.test(message)) return "Le schéma Supabase n’est pas installé : exécute supabase-schema.sql dans l’éditeur SQL.";
     if (/get_journal_administration_dashboard|set_journal_user_access|revoke_journal_user_access/i.test(message)) return "La mise à jour d’administration n’est pas encore installée dans Supabase. Exécute le fichier supabase-administration-v11.sql.";
     if (/reset_journal_chantier_feed|delete_journal_chantier|list_journal_chantier_storage_paths/i.test(message)) return "La maintenance propriétaire n’est pas encore installée dans Supabase. Exécute le fichier supabase-v12.1-owner-maintenance.sql.";
@@ -194,13 +231,36 @@
   function ownName() { return app.profile.full_name.trim() || (isCloudReady() ? app.user.email?.split("@")[0] || "Intervenant" : "Intervenant"); }
   function initial(value = "?") { return String(value || "?").trim().split(/\s+/).slice(0, 2).map(word => word[0]).join("").toUpperCase() || "?"; }
   function escapeHtml(value) { return String(value ?? "").replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[char])); }
+  function normaliseText(value, max = 500) { return String(value || "").trim().replace(/\s+/g, " ").slice(0, max); }
+  function normaliseList(values) { return [...new Set((Array.isArray(values) ? values : []).map(item => normaliseText(item, 100)).filter(Boolean))]; }
+  function operationTitle(value) {
+    const text = normaliseText(value, 160);
+    if (!text) return "";
+    return text.replace(/^F_[^_]+_/, "").replaceAll("_", " ").replace(/\bPMP\b/g, "PMP").replace(/\bSST\b/g, "SST");
+  }
+  function operationDisplay(value) { return `${value} · ${operationTitle(value)}`; }
+  function chantierCompanies(chantier) {
+    const raw = chantier?.participating_companies;
+    if (Array.isArray(raw)) return normaliseList(raw);
+    if (typeof raw === "string") {
+      try { return normaliseList(JSON.parse(raw)); }
+      catch { return normaliseList(raw.split(/[,;\n]+/)); }
+    }
+    return [];
+  }
+  function chantierCoverUrl(chantier) { return chantier?.cover_image_data || chantier?.cover_signed_url || ""; }
   function iconSvg(name, className = "ui-icon") {
     const icons = {
       "user-plus": '<circle cx="9" cy="8" r="3"/><path d="M3.5 20c.7-3.5 2.5-5.2 5.5-5.2s4.8 1.7 5.5 5.2M18 8v6M15 11h6"/>',
       "field-note": '<path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.4"/><path d="M18.5 18.5v4M16.5 20.5h4"/>',
       "book-export": '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2-2V8L14 2Z"/><path d="M14 2v6h6M12 11v6M9.5 14.5 12 17l2.5-2.5"/>',
       "folder-plan": '<path d="M3.5 6.5A2.5 2.5 0 0 1 6 4h4l2 2h6A2.5 2.5 0 0 1 20.5 8.5v9A2.5 2.5 0 0 1 18 20H6a2.5 2.5 0 0 1-2.5-2.5v-11Z"/><path d="m8 15 2.5-2.5 2 1.7 3.5-3.5M15.5 10.7h1.8v1.8"/>',
-      "folder": '<path d="M3.5 6.5A2.5 2.5 0 0 1 6 4h4l2 2h6A2.5 2.5 0 0 1 20.5 8.5v9A2.5 2.5 0 0 1 18 20H6a2.5 2.5 0 0 1-2.5-2.5v-11Z"/>'
+      "folder": '<path d="M3.5 6.5A2.5 2.5 0 0 1 6 4h4l2 2h6A2.5 2.5 0 0 1 20.5 8.5v9A2.5 2.5 0 0 1 18 20H6a2.5 2.5 0 0 1-2.5-2.5v-11Z"/>',
+      "portal-app": '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 9h.01M12 9h.01M16 9h.01M8 14h.01M12 14h.01M16 14h.01"/>',
+      "briefing": '<path d="M5 4.5h14v15H5z"/><path d="M8 8h8M8 11.5h8M8 15h4"/><path d="m15.5 16 1.2 1.2 2.3-2.5"/>',
+      "report": '<path d="M7 3.5h7l4 4V20.5H7z"/><path d="M14 3.5v4h4M10 12h5M10 15h5M10 18h3"/>',
+      "tool": '<path d="m14.5 6.5 3-3 3 3-3 3"/><path d="m13 8-8.5 8.5V20h3.5L16.5 11.5"/><path d="m5 5 2.5 2.5M8.5 4.5 5 8"/>',
+      "safety": '<path d="M12 3 5 6v5.1c0 4.5 3 8.6 7 9.9 4-1.3 7-5.4 7-9.9V6l-7-3Z"/><path d="m8.5 12 2.2 2.2 4.8-4.8"/>'
     };
     return `<svg class="${className}" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${icons[name] || ""}</svg>`;
   }
@@ -335,6 +395,8 @@
     app.documentFolders = app.local.documentFolders || [];
     app.documents = app.local.documents || [];
     app.documentLibrary = { available: true, canManage: true, migrationError: "" };
+    app.portalApps = app.local.portalApps || [];
+    app.portal = { available: true, migrationError: "" };
     saveLocalData();
   }
 
@@ -366,6 +428,7 @@
         { id: "demo-doc-root-quality", chantier_id: chantierId, parent_id: null, root_code: "qualite", name: "Documents qualité", is_root: true, created_at: now }
       ],
       documents: [{ id: "demo-library-document-1", chantier_id: chantierId, folder_id: "demo-doc-root-plans", file_name: "Plan de principe — démonstration.txt", mime_type: "text/plain", bytes: 112, description: "Document de démonstration de la bibliothèque.", version_label: "Indice A", created_by_name: "Responsable travaux", created_at: now, data_url: "data:text/plain;charset=utf-8,Document%20de%20demonstration%20de%20la%20bibliotheque%20du%20chantier." }],
+      portalApps: [{ id: "demo-briefing", name: "Briefing au pied de l’opération", url: "https://example.com/briefing", description: "Exemple de lien vers une application terrain.", icon_key: "briefing", created_at: now }],
       members: [], reactions: [], readStates: [], currentId: chantierId
     };
   }
@@ -389,8 +452,10 @@
     app.readStates = demo.readStates;
     app.documentFolders = demo.documentFolders;
     app.documents = demo.documents;
+    app.portalApps = demo.portalApps;
     app.documentViewFolderId = null;
     app.documentLibrary = { available: true, canManage: true, migrationError: "" };
+    app.portal = { available: true, migrationError: "" };
     app.activeTab = "chat";
     closeModal();
     renderAll();
@@ -414,6 +479,8 @@
       app.documents = [];
       app.documentViewFolderId = null;
       app.documentLibrary = { available: false, canManage: false, migrationError: "" };
+      app.portalApps = [];
+      app.portal = { available: false, migrationError: "" };
     }
     renderAll();
   }
@@ -447,6 +514,30 @@
     }
   }
 
+  async function signedChantierCoverUrl(storagePath, { force = false } = {}) {
+    if (!storagePath || !isCloudReady()) return "";
+    const cached = app.coverUrlCache.get(storagePath);
+    if (!force && cached?.url && cached.expiresAt > Date.now() + 30_000) return cached.url;
+    try {
+      const { data, error } = await app.db.storage.from(COVER_IMAGES_BUCKET).createSignedUrl(storagePath, 3600);
+      if (error) throw error;
+      const url = data?.signedUrl || "";
+      if (url) app.coverUrlCache.set(storagePath, { url, expiresAt: Date.now() + 54 * 60 * 1000 });
+      return url;
+    } catch (error) {
+      console.warn("Lien de couverture indisponible", error);
+      return cached?.url || "";
+    }
+  }
+
+  async function hydrateChantierCovers(chantiers) {
+    return Promise.all((chantiers || []).map(async chantier => {
+      if (!chantier?.cover_storage_path) return chantier;
+      const cover_signed_url = await signedChantierCoverUrl(chantier.cover_storage_path);
+      return { ...chantier, cover_signed_url };
+    }));
+  }
+
   async function hydrateCloudAttachments(messages) {
     const ids = messages.map(message => message.id);
     if (!ids.length) return messages.map(message => ({ ...message, attachments: [] }));
@@ -469,6 +560,7 @@
       app.messages = []; app.actions = []; app.dailyLogs = []; app.risks = []; app.reactions = []; app.readStates = [];
       app.documentFolders = []; app.documents = []; app.documentViewFolderId = null;
       app.documentLibrary = { available: false, canManage: false, migrationError: "" };
+      app.portalApps = []; app.portal = { available: false, migrationError: "" };
       renderAll({ keepPosition: true });
       return;
     }
@@ -564,15 +656,38 @@
         .on("postgres_changes", { event: "*", schema: "public", table: "chantier_document_folders", filter: `chantier_id=eq.${app.currentId}` }, scheduleCloudRefresh)
         .on("postgres_changes", { event: "*", schema: "public", table: "chantier_documents", filter: `chantier_id=eq.${app.currentId}` }, scheduleCloudRefresh);
     }
+    if (app.portal.available) {
+      channel.on("postgres_changes", { event: "*", schema: "public", table: "journal_portal_apps" }, () => {
+        refreshCloudPortalApps().then(renderApps).catch(error => console.warn("Portail non actualisé", error));
+      });
+    }
     app.realtimeChannel = channel.subscribe();
   }
   async function refreshCloudChantiers() {
     const { data, error } = await app.db.from("chantiers").select("*").order("updated_at", { ascending: false });
     if (error) throw error;
-    app.chantiers = data || [];
+    app.chantiers = await hydrateChantierCovers(data || []);
     if (!app.currentId || !app.chantiers.some(item => String(item.id) === String(app.currentId))) app.currentId = app.chantiers[0]?.id || null;
     await refreshCloudCurrent();
+    await refreshCloudPortalApps();
+    renderApps();
     subscribeCurrentChantier();
+  }
+  async function refreshCloudPortalApps() {
+    if (!isCloudReady()) {
+      app.portalApps = [];
+      app.portal = { available: false, migrationError: "" };
+      return;
+    }
+    const { data, error } = await app.db.from("journal_portal_apps").select("*").order("created_at", { ascending: true });
+    if (error) {
+      app.portalApps = [];
+      app.portal = { available: false, migrationError: "Le portail d’applications sera disponible dès que la migration V14 sera installée." };
+      console.info("Portail d’applications en attente de la migration V14.");
+      return;
+    }
+    app.portalApps = data || [];
+    app.portal = { available: true, migrationError: "" };
   }
   async function refreshAccessContext() {
     if (!isCloudReady()) {
@@ -615,6 +730,7 @@
         if (app.realtimeChannel) app.db.removeChannel(app.realtimeChannel);
         app.mode = "cloud-guest"; app.user = null; app.chantiers = []; app.messages = []; app.actions = []; app.dailyLogs = []; app.risks = []; app.documentFolders = []; app.documents = []; app.documentViewFolderId = null;
         app.documentLibrary = { available: false, canManage: false, migrationError: "" };
+        app.portalApps = []; app.portal = { available: false, migrationError: "" };
         app.access = { platformRole: "", requestStatus: "", pendingRequests: 0 };
         renderAll();
       }
@@ -633,6 +749,7 @@
     } else {
       app.mode = "cloud-guest"; app.user = null; app.chantiers = []; app.messages = []; app.actions = []; app.dailyLogs = []; app.risks = []; app.documentFolders = []; app.documents = []; app.documentViewFolderId = null;
       app.documentLibrary = { available: false, canManage: false, migrationError: "" };
+      app.portalApps = []; app.portal = { available: false, migrationError: "" };
     }
   }
 
@@ -687,10 +804,12 @@
   }
   function renderSidebar() {
     const query = els.chantierSearch.value.trim().toLowerCase();
-    const html = app.chantiers.filter(item => !query || `${item.name} ${item.code} ${item.location || ""}`.toLowerCase().includes(query)).map(chantier => {
+    const html = app.chantiers.filter(item => !query || `${item.name} ${item.code} ${item.briefing_operation_code || ""} ${item.location || ""} ${chantierCompanies(item).join(" ")}`.toLowerCase().includes(query)).map(chantier => {
       const activity = activeMessagesFor(chantier.id).sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
       const active = String(chantier.id) === String(app.currentId);
-      return `<button class="chantier-card ${active ? "active" : ""}" data-chantier-id="${chantier.id}"><span class="chantier-code">${escapeHtml(initial(chantier.code || chantier.name))}</span><span><strong>${escapeHtml(chantier.name || "Chantier sans nom")}</strong><small>${escapeHtml(activity ? truncate(activity.body || `${activity.message_type || "Information"} partagée`, 37) : chantier.location || "Aucune activité")}</small></span>${activity && !active ? `<span class="unread-badge">•</span>` : ""}</button>`;
+      const cover = chantierCoverUrl(chantier);
+      const subtitle = activity ? truncate(activity.body || `${activity.message_type || "Information"} partagée`, 37) : (chantier.briefing_operation_code || chantier.location || "Aucune activité");
+      return `<button class="chantier-card ${active ? "active" : ""}" data-chantier-id="${chantier.id}"><span class="chantier-code ${cover ? "has-cover" : ""}">${cover ? `<img src="${escapeHtml(cover)}" alt="">` : escapeHtml(initial(chantier.code || chantier.name))}</span><span><strong>${escapeHtml(chantier.name || "Chantier sans nom")}</strong><small>${escapeHtml(subtitle)}</small></span>${activity && !active ? `<span class="unread-badge">•</span>` : ""}</button>`;
     }).join("");
     const empty = isCloudReady() && !isJournalAdmin()
       ? app.access.requestStatus === "en_attente"
@@ -709,11 +828,12 @@
       els.siteMeta.textContent = isCloudReady()
         ? isJournalAdmin() ? "Crée un chantier pour commencer" : requestStatusLabel(app.access.requestStatus) || "Aucun chantier attribué"
         : "Connexion au journal requise";
-      els.siteAvatar.textContent = "JC";
+      els.siteAvatar.innerHTML = `<img src="journal-chantier-logo-v14.png" alt="">`;
     } else {
       els.siteName.textContent = chantier.name || "Chantier sans nom";
-      els.siteMeta.textContent = [chantier.code, chantier.location].filter(Boolean).join(" · ") || "Journal partagé";
-      els.siteAvatar.textContent = initial(chantier.code || chantier.name);
+      els.siteMeta.textContent = [chantier.briefing_operation_code || chantier.code, chantier.location, chantier.line_code].filter(Boolean).join(" · ") || "Journal partagé";
+      const cover = chantierCoverUrl(chantier);
+      els.siteAvatar.innerHTML = cover ? `<img src="${escapeHtml(cover)}" alt="Photo du chantier">` : escapeHtml(initial(chantier.code || chantier.name));
     }
   }
 
@@ -1476,12 +1596,132 @@
       } catch (error) { console.info("Notification non affichée", error); }
     }
   }
+  function canManagePortalApps() { return !isCloudReady() ? app.mode === "local" || app.mode === "demo" : isJournalOwner(); }
+  function portalIconKey(value) { return ({ briefing: "briefing", report: "report", tool: "tool", folder: "folder", safety: "safety" })[value] || "portal-app"; }
+  function isConfiguredSuggestion(suggestion, items) {
+    const target = normaliseText(suggestion.name, 100).toLowerCase();
+    return items.some(item => normaliseText(item.name, 100).toLowerCase() === target);
+  }
+  function portalAppCard(item) {
+    const manager = canManagePortalApps();
+    const configured = Boolean(item.url);
+    const action = configured ? "open-portal-app" : "configure-portal-suggestion";
+    const detail = item.description || (configured ? "Application disponible depuis le Journal chantier." : "Lien à renseigner par le propriétaire principal.");
+    return `<article class="portal-app-card ${item.suggestion ? "is-suggestion" : ""}"><button class="portal-app-open" data-action="${action}" data-portal-app-id="${escapeHtml(item.id)}" data-portal-suggestion="${escapeHtml(item.name || "")}" ${configured ? "" : (manager ? "" : "disabled") }><span class="portal-app-icon">${iconSvg(portalIconKey(item.icon_key), "portal-icon-svg")}</span><span class="portal-app-copy"><b>${escapeHtml(item.name || "Application")}</b><small>${escapeHtml(detail)}</small></span><span class="portal-app-arrow" aria-hidden="true">${configured ? "↗" : "＋"}</span></button>${manager && !item.suggestion ? `<button class="portal-app-menu" data-action="portal-app-menu" data-portal-app-id="${escapeHtml(item.id)}" aria-label="Gérer ${escapeHtml(item.name || "l’application")}">⋮</button>` : ""}</article>`;
+  }
+  function renderApps() {
+    if (!els.portalAppsGrid) return;
+    const apps = app.portalApps || [];
+    const suggestions = PORTAL_SUGGESTIONS.filter(suggestion => !isConfiguredSuggestion(suggestion, apps));
+    const displayed = [...apps, ...suggestions];
+    els.appsCount.textContent = apps.length;
+    els.addPortalAppBtn.hidden = !canManagePortalApps();
+    els.portalAppsNotice.hidden = false;
+    if (isCloudReady() && !app.portal.available) {
+      els.portalAppsNotice.innerHTML = `<span>◌</span><p><b>Portail en préparation</b><br>${escapeHtml(app.portal.migrationError || "La migration V14 va activer le portail d’applications.")}</p>`;
+    } else if (canManagePortalApps()) {
+      els.portalAppsNotice.innerHTML = "<span>✦</span><p><b>Portail administrable</b><br>Ajoute un lien vers une application HTML ou PWA déjà publiée. Il sera accessible à tous les comptes autorisés, sans partager leur session.</p>";
+    } else {
+      els.portalAppsNotice.innerHTML = "<span>⌁</span><p><b>Outils terrain</b><br>Les applications mises à disposition par le propriétaire sont ouvertes dans une page séparée et sécurisée.</p>";
+    }
+    if (!displayed.length) {
+      showEmpty(els.portalAppsGrid, "Aucune application ajoutée", "Le propriétaire peut ajouter le Briefing, le Rapport journalier ou un autre outil terrain.", "▦");
+      return;
+    }
+    els.portalAppsGrid.innerHTML = displayed.map(portalAppCard).join("");
+  }
+  function safePortalUrl(value) {
+    let parsed;
+    try { parsed = new URL(normaliseText(value, 600)); }
+    catch { throw new Error("Saisis une adresse complète commençant par https://."); }
+    if (parsed.protocol !== "https:") throw new Error("Pour protéger le journal, le lien doit commencer par https://.");
+    return parsed.toString();
+  }
+  function portalAppById(id) { return (app.portalApps || []).find(item => String(item.id) === String(id)) || null; }
+  function openPortalApp(item) {
+    if (!item?.url) return openPortalAppDialog(null, item?.name || "");
+    try { window.open(safePortalUrl(item.url), "_blank", "noopener,noreferrer"); }
+    catch (error) { toast(friendlyError(error), "error"); }
+  }
+  async function savePortalApp(values, existing = null) {
+    const payload = {
+      name: normaliseText(values.name, 100), url: safePortalUrl(values.url), description: normaliseText(values.description, 900), icon_key: values.icon_key || "app"
+    };
+    if (!payload.name) throw new Error("Le nom de l’application est obligatoire.");
+    if (isCloudReady()) {
+      if (!app.portal.available) throw new Error("La migration V14 du portail n’est pas encore installée dans Supabase.");
+      const rpc = existing ? "update_journal_portal_app" : "create_journal_portal_app";
+      const params = existing
+        ? { p_id: existing.id, p_name: payload.name, p_url: payload.url, p_description: payload.description, p_icon_key: payload.icon_key }
+        : { p_name: payload.name, p_url: payload.url, p_description: payload.description, p_icon_key: payload.icon_key };
+      const { error } = await app.db.rpc(rpc, params);
+      if (error) throw error;
+      await refreshCloudPortalApps();
+    } else {
+      const list = app.local.portalApps || (app.local.portalApps = []);
+      if (existing) Object.assign(existing, payload, { updated_at: nowIso() });
+      else list.push({ id: makeId(), ...payload, created_at: nowIso(), created_by: ownId() });
+      app.portalApps = list;
+      saveLocalData();
+    }
+    renderApps();
+  }
+  async function deletePortalApp(item) {
+    if (!item) return;
+    if (isCloudReady()) {
+      const { error } = await app.db.rpc("delete_journal_portal_app", { p_id: item.id });
+      if (error) throw error;
+      await refreshCloudPortalApps();
+    } else {
+      app.local.portalApps = (app.local.portalApps || []).filter(appItem => String(appItem.id) !== String(item.id));
+      app.portalApps = app.local.portalApps;
+      saveLocalData();
+    }
+    renderApps();
+  }
+  function openPortalAppDialog(existing = null, suggestedName = "") {
+    if (!canManagePortalApps()) return toast("Seul le propriétaire principal peut gérer les applications.", "warning");
+    if (isCloudReady() && !app.portal.available) return toast("La migration V14 doit d’abord être appliquée par GitHub Actions.", "warning");
+    const values = existing || { name: suggestedName, description: suggestedName ? "Accès direct depuis le Journal chantier." : "", icon_key: suggestedName.toLowerCase().includes("briefing") ? "briefing" : (suggestedName.toLowerCase().includes("rapport") ? "report" : "app"), url: "" };
+    openModal({
+      title: existing ? "Modifier une application" : "Ajouter une application", subtitle: "Le lien est ouvert dans une page séparée : la session du Journal n’est jamais transmise.",
+      body: `<form id="portalAppForm" class="form-grid one" novalidate><div class="portal-form-intro"><span>${iconSvg("portal-app", "ui-icon")}</span><p><b>Application HTML ou PWA</b><br>Colle son adresse de publication HTTPS, par exemple son lien GitHub Pages.</p></div><label class="form-field">Nom *<input name="name" required maxlength="100" value="${escapeHtml(values.name || "")}" placeholder="Ex. Briefing au pied de l’opération"></label><label class="form-field">Adresse d’ouverture *<input name="url" type="url" required maxlength="600" value="${escapeHtml(values.url || "")}" placeholder="https://..." inputmode="url" autocapitalize="none" spellcheck="false"></label><label class="form-field">Type d’icône<select name="icon_key">${[["briefing", "Briefing"], ["report", "Rapport"], ["tool", "Outil terrain"], ["folder", "Documents"], ["safety", "Sécurité"], ["app", "Application"]].map(([key, label]) => `<option value="${key}" ${values.icon_key === key ? "selected" : ""}>${label}</option>`).join("")}</select></label><label class="form-field">Description<textarea name="description" maxlength="900" placeholder="À quoi sert cette application ?">${escapeHtml(values.description || "")}</textarea></label></form>`,
+      footer: `<button class="secondary-button" id="cancelPortalApp">Annuler</button><button class="primary-button" id="savePortalApp">${existing ? "Enregistrer" : "Ajouter au portail"}</button>`
+    });
+    const form = $("portalAppForm");
+    $("cancelPortalApp").addEventListener("click", closeModal);
+    $("savePortalApp").addEventListener("click", async () => {
+      if (!form.reportValidity()) return;
+      try {
+        await savePortalApp(Object.fromEntries(new FormData(form).entries()), existing);
+        closeModal(); toast(existing ? "Application mise à jour." : "Application ajoutée au portail.", "success");
+      } catch (error) { toast(`Enregistrement impossible : ${friendlyError(error)}`, "error"); }
+    });
+  }
+  function openPortalAppMenu(item) {
+    if (!item || !canManagePortalApps()) return;
+    openModal({
+      title: "Gérer l’application", subtitle: item.name,
+      body: `<div class="menu-list"><button id="editPortalApp">✎ Modifier</button><button class="danger" id="deletePortalApp">⌫ Retirer du portail</button></div>`,
+      footer: `<button class="secondary-button" id="closePortalAppMenu">Fermer</button>`
+    });
+    $("closePortalAppMenu").addEventListener("click", closeModal);
+    $("editPortalApp").addEventListener("click", () => { closeModal(); openPortalAppDialog(item); });
+    $("deletePortalApp").addEventListener("click", async () => {
+      if (!window.confirm(`Retirer « ${item.name} » du portail ?`)) return;
+      try { await deletePortalApp(item); closeModal(); toast("Application retirée du portail.", "success"); }
+      catch (error) { toast(`Suppression impossible : ${friendlyError(error)}`, "error"); }
+    });
+  }
   function renderPrintCover() {
     const chantier = currentChantier();
     if (!chantier) return;
     const scope = app.printScope || {};
     const printDate = new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "long", year: "numeric" }).format(new Date());
     const period = scope.from || scope.to ? `Période : ${scope.from ? new Intl.DateTimeFormat("fr-FR").format(new Date(`${scope.from}T12:00:00`)) : "Début"} - ${scope.to ? new Intl.DateTimeFormat("fr-FR").format(new Date(`${scope.to}T12:00:00`)) : "Aujourd’hui"}` : "Période : intégralité du journal";
+    const coverPhoto = chantierCoverUrl(chantier);
+    const chantierCompaniesList = chantierCompanies(chantier);
+    const operationCode = chantier.briefing_operation_code || chantier.code || "";
     const inPeriod = value => {
       const date = new Date(value || 0);
       if (scope.from && date < new Date(`${scope.from}T00:00:00`)) return false;
@@ -1511,7 +1751,9 @@
     if (includesPilotage) recordStats.push([openActions.length, "actions ouvertes", lateActions.length ? "warning" : "green"], [dailyLogs.length, "journées consignées", "blue"], [activeRisks.length, "vigilances ouvertes", activeRisks.length ? "warning" : "green"]);
     const pilotage = includesPilotage ? `<section class="print-pilotage-panel"><div><span>Suivi opérationnel</span><h3>Repères de pilotage</h3><p>Les indicateurs ci-dessous reprennent la situation à la date de l’édition.</p></div><div class="print-pilotage-summary"><div><dt>Actions ouvertes</dt><dd>${openActions.length}</dd></div><div><dt>Actions en retard</dt><dd>${lateActions.length}</dd></div><div><dt>Vigilances ouvertes</dt><dd>${activeRisks.length}</dd></div><div><dt>Journées consignées</dt><dd>${dailyLogs.length}</dd></div></div></section>` : "";
     const documentRegister = libraryDocuments.length ? `<section class="print-document-register"><div class="print-register-heading"><div><span>Référentiel documentaire</span><h3>Documents classés</h3><p>Liste des documents disponibles dans les espaces Sécurité, Plans et Documents qualité.</p></div><b>${libraryDocuments.length} document${libraryDocuments.length > 1 ? "s" : ""}</b></div><table><thead><tr><th>Déposé le</th><th>Document</th><th>Classement</th><th>Indice</th></tr></thead><tbody>${libraryDocuments.map(documentItem => `<tr><td>${escapeHtml(formatSimpleDate(documentItem.created_at))}</td><td><b>${escapeHtml(documentItem.file_name || "Document")}</b>${documentItem.description ? `<small>${escapeHtml(truncate(documentItem.description, 145))}</small>` : ""}</td><td>${escapeHtml(documentPath(documentItem))}</td><td>${escapeHtml(documentItem.version_label || "-")}</td></tr>`).join("")}</tbody></table></section>` : "";
-    els.printCover.innerHTML = `<section class="print-book-cover"><div class="print-cover-topline"><div class="print-cover-brand"><img src="journal-chantier-logo-v14.png" alt=""><span><b>Journal chantier</b><small>Carnet d'opérations</small></span></div><span class="print-cover-edition">Édition du ${escapeHtml(printDate)}</span></div><div class="print-cover-main"><span class="print-cover-kicker">Historique de chantier</span><h1>${escapeHtml(chantier.name || "Chantier sans nom")}</h1><p>${escapeHtml(chantier.code ? `Chantier ${chantier.code}` : "Journal partagé sécurisé")}</p></div><dl class="print-cover-metadata"><div><dt>Localisation</dt><dd>${escapeHtml(chantier.location || "Non renseignée")}</dd></div><div><dt>Période couverte</dt><dd>${escapeHtml(period.replace(/^Période : /, ""))}</dd></div><div><dt>Édité le</dt><dd>${escapeHtml(formatDateTime(nowIso()))}</dd></div></dl><div class="print-cover-foot"><span>Messagerie, photos, actions et documentation</span><span>Document de suivi interne</span></div></section><section class="print-book-opening"><div class="print-opening-title"><span>01 · Repères du dossier</span><h2>Vue d’ensemble</h2><p>Cette édition rassemble l’historique chronologique du chantier, les pièces jointes et le référentiel documentaire associé.</p></div><div class="print-record-stats">${recordStats.map(([value, label, tone]) => `<div class="${tone}"><b>${escapeHtml(value)}</b><span>${escapeHtml(label)}</span></div>`).join("")}</div>${pilotage}${documentRegister}</section><section class="print-history-heading"><span>02 · Chronologie du chantier</span><h2>Journal des événements</h2><p>${escapeHtml(`${messages.length} événement${messages.length > 1 ? "s" : ""} · ${photos.length} photo${photos.length > 1 ? "s" : ""} · ${messageFiles.length} fichier${messageFiles.length > 1 ? "s" : ""}`)}</p></section>`;
+    const coverVisual = coverPhoto ? `<div class="print-cover-photo"><img src="${escapeHtml(coverPhoto)}" alt="Photo de couverture du chantier"></div><div class="print-cover-photo-overlay"></div>` : "";
+    const operationSheet = `<section class="print-operation-panel"><div><span>Fiche opérationnelle</span><h3>Repères du chantier</h3><p>Informations de référence saisies à partir du Briefing au pied de l’opération.</p></div><dl><div><dt>Opération / code F</dt><dd>${escapeHtml(operationCode || "Non renseigné")}</dd></div><div><dt>Implantation</dt><dd>${escapeHtml([chantier.line_code, chantier.pk_start && `PK ${chantier.pk_start}`, chantier.pk_end && `à ${chantier.pk_end}`].filter(Boolean).join(" · ") || chantier.location || "Non renseignée")}</dd></div><div><dt>Pilotage</dt><dd>${escapeHtml([chantier.project_manager, chantier.operation_manager].filter(Boolean).join(" · ") || "Non renseigné")}</dd></div><div><dt>Entreprises</dt><dd>${escapeHtml(chantierCompaniesList.join(" · ") || "Non renseignées")}</dd></div></dl></section>`;
+    els.printCover.innerHTML = `<section class="print-book-cover ${coverPhoto ? "has-cover-photo" : ""}">${coverVisual}<div class="print-cover-topline"><div class="print-cover-brand"><img src="journal-chantier-logo-v14.png" alt=""><span><b>Journal chantier</b><small>Carnet d'opérations</small></span></div><span class="print-cover-edition">Édition du ${escapeHtml(printDate)}</span></div><div class="print-cover-main"><span class="print-cover-kicker">Historique de chantier</span><h1>${escapeHtml(chantier.name || "Chantier sans nom")}</h1><p>${escapeHtml(operationCode ? `Chantier ${operationCode}` : "Journal partagé sécurisé")}</p></div><dl class="print-cover-metadata"><div><dt>Localisation</dt><dd>${escapeHtml(chantier.location || "Non renseignée")}</dd></div><div><dt>Période couverte</dt><dd>${escapeHtml(period.replace(/^Période : /, ""))}</dd></div><div><dt>Édité le</dt><dd>${escapeHtml(formatDateTime(nowIso()))}</dd></div></dl><div class="print-cover-foot"><span>Messagerie, photos, actions et documentation</span><span>Document de suivi interne</span></div></section><section class="print-book-opening"><div class="print-opening-title"><span>01 · Repères du dossier</span><h2>Vue d’ensemble</h2><p>Cette édition rassemble l’historique chronologique du chantier, les pièces jointes et le référentiel documentaire associé.</p></div>${operationSheet}<div class="print-record-stats">${recordStats.map(([value, label, tone]) => `<div class="${tone}"><b>${escapeHtml(value)}</b><span>${escapeHtml(label)}</span></div>`).join("")}</div>${pilotage}${documentRegister}</section><section class="print-history-heading"><span>02 · Chronologie du chantier</span><h2>Journal des événements</h2><p>${escapeHtml(`${messages.length} événement${messages.length > 1 ? "s" : ""} · ${photos.length} photo${photos.length > 1 ? "s" : ""} · ${messageFiles.length} fichier${messageFiles.length > 1 ? "s" : ""}`)}</p></section>`;
   }
   function renderAccessControls() {
     const hasGlobalRights = !isCloudReady() || isJournalAdmin();
@@ -1529,7 +1771,7 @@
       els.inviteBtn.innerHTML = `${iconSvg("user-plus")}<span>Inviter</span>`;
     }
   }
-  function renderAll(options) { renderProfile(); renderConnection(); renderAccessControls(); renderSidebar(); renderHeader(); renderPinnedMessages(); renderMessages(options); renderPlans(); renderActions(); renderPilotage(); renderPrintCover(); }
+  function renderAll(options) { renderProfile(); renderConnection(); renderAccessControls(); renderSidebar(); renderHeader(); renderPinnedMessages(); renderMessages(options); renderPlans(); renderActions(); renderPilotage(); renderApps(); renderPrintCover(); }
   function setActiveTab(tab) {
     app.activeTab = tab;
     $$(".tab").forEach(button => button.classList.toggle("active", button.dataset.tab === tab));
@@ -1549,17 +1791,123 @@
     els.appShell.classList.remove("sidebar-open");
     setActiveTab("chat");
   }
+  function chantierPayload(values) {
+    const operation = normaliseText(values.briefing_operation_code || values.code, 160).toUpperCase();
+    const code = normaliseText(values.code || operation, 160).toUpperCase();
+    const name = normaliseText(values.name || operationTitle(operation) || code, 160);
+    const plannedStart = /^\d{4}-\d{2}-\d{2}$/.test(String(values.planned_start || "")) ? values.planned_start : null;
+    const plannedEnd = /^\d{4}-\d{2}-\d{2}$/.test(String(values.planned_end || "")) ? values.planned_end : null;
+    if (!operation) throw new Error("Sélectionne une opération du Briefing ou renseigne un code chantier libre.");
+    if (!code) throw new Error("Le code chantier est obligatoire.");
+    if (!name) throw new Error("Le nom du chantier est obligatoire.");
+    if (plannedStart && plannedEnd && plannedEnd < plannedStart) throw new Error("La date de fin ne peut pas précéder la date de début.");
+    return {
+      code, name,
+      location: normaliseText(values.location, 220),
+      description: normaliseText(values.description, 2400),
+      briefing_operation_code: operation,
+      line_code: normaliseText(values.line_code, 100),
+      pk_start: normaliseText(values.pk_start, 80),
+      pk_end: normaliseText(values.pk_end, 80),
+      project_manager: normaliseText(values.project_manager, 160),
+      operation_manager: normaliseText(values.operation_manager, 160),
+      participating_companies: normaliseList(values.participating_companies),
+      operation_phase: normaliseText(values.operation_phase, 100),
+      planned_start: plannedStart,
+      planned_end: plannedEnd
+    };
+  }
+  function coverFileExtension(file) {
+    const mime = String(file?.type || "").toLowerCase();
+    if (mime === "image/png") return "png";
+    if (mime === "image/webp") return "webp";
+    return "jpg";
+  }
+  async function prepareChantierCoverFile(file) {
+    if (!file) return null;
+    const mime = String(file.type || "").toLowerCase();
+    if (!fileIsImage(file) || !["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(mime)) {
+      throw new Error("Choisis une photo JPEG, PNG ou WebP pour la couverture.");
+    }
+    if (!file.size || file.size > MAX_COVER_IMAGE_BYTES * 5) throw new Error("La photo de couverture est trop volumineuse. Choisis une image de moins de 40 Mo.");
+    if (typeof URL.createObjectURL !== "function") {
+      if (file.size > MAX_COVER_IMAGE_BYTES) throw new Error("Cette photo doit être réduite avant l’envoi.");
+      return file;
+    }
+    const objectUrl = URL.createObjectURL(file);
+    try {
+      const image = new Image();
+      image.decoding = "async";
+      await new Promise((resolve, reject) => {
+        image.onload = resolve;
+        image.onerror = () => reject(new Error("La photo de couverture ne peut pas être lue."));
+        image.src = objectUrl;
+      });
+      const ratio = Math.min(1, 1800 / Math.max(image.naturalWidth || 1, image.naturalHeight || 1));
+      const width = Math.max(1, Math.round((image.naturalWidth || 1) * ratio));
+      const height = Math.max(1, Math.round((image.naturalHeight || 1) * ratio));
+      if (ratio === 1 && file.size <= MAX_COVER_IMAGE_BYTES) return file;
+      const canvas = document.createElement("canvas");
+      canvas.width = width; canvas.height = height;
+      const context = canvas.getContext("2d", { alpha: false });
+      if (!context) throw new Error("La réduction de la photo est indisponible sur cet appareil.");
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, width, height);
+      context.drawImage(image, 0, 0, width, height);
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", 0.86));
+      if (!blob) throw new Error("La photo de couverture n’a pas pu être préparée.");
+      if (blob.size > MAX_COVER_IMAGE_BYTES) throw new Error("La photo préparée dépasse 8 Mo. Choisis une image plus légère.");
+      return new File([blob], `couverture-${Date.now()}.jpg`, { type: "image/jpeg" });
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
+  }
+  async function uploadChantierCover(chantier, file) {
+    const prepared = await prepareChantierCoverFile(file);
+    if (!prepared) return "";
+    const path = `covers/${chantier.id}/${makeId()}.${coverFileExtension(prepared)}`;
+    const { error: uploadError } = await app.db.storage.from(COVER_IMAGES_BUCKET).upload(path, prepared, {
+      upsert: false,
+      cacheControl: "3600",
+      contentType: prepared.type || "image/jpeg"
+    });
+    if (uploadError) throw uploadError;
+    const { error: updateError } = await app.db.from("chantiers").update({ cover_storage_path: path, updated_at: nowIso() }).eq("id", chantier.id);
+    if (updateError) {
+      await app.db.storage.from(COVER_IMAGES_BUCKET).remove([path]);
+      throw updateError;
+    }
+    if (chantier.cover_storage_path && chantier.cover_storage_path !== path) {
+      app.db.storage.from(COVER_IMAGES_BUCKET).remove([chantier.cover_storage_path]).catch(error => console.warn("Ancienne couverture non retirée", error));
+    }
+    return path;
+  }
+  async function removeChantierCover(chantier) {
+    if (!chantier?.cover_storage_path) return;
+    const { error } = await app.db.from("chantiers").update({ cover_storage_path: null, updated_at: nowIso() }).eq("id", chantier.id);
+    if (error) throw error;
+    app.coverUrlCache.delete(chantier.cover_storage_path);
+    app.db.storage.from(COVER_IMAGES_BUCKET).remove([chantier.cover_storage_path]).catch(storageError => console.warn("Couverture à nettoyer", storageError));
+  }
   async function createChantier(values) {
-    const payload = { code: values.code.trim().toUpperCase(), name: values.name.trim(), location: values.location.trim(), description: values.description.trim() };
-    if (!payload.name) throw new Error("Le nom du chantier est obligatoire.");
+    const payload = chantierPayload(values);
     if (isCloudReady()) {
       const { data, error } = await app.db.from("chantiers").insert(payload).select().single();
       if (error) throw error;
       app.currentId = data.id;
+      let coverWarning = "";
+      if (values.coverFile) {
+        try { await uploadChantierCover(data, values.coverFile); }
+        catch (error) { console.warn("Couverture non enregistrée", error); coverWarning = ` La photo de couverture n’a pas été enregistrée : ${friendlyError(error)}`; }
+      }
       await refreshCloudChantiers();
-      toast("Chantier créé et prêt à être partagé.", "success");
+      toast(`Chantier créé et prêt à être partagé.${coverWarning}`, coverWarning ? "warning" : "success");
     } else {
       const chantier = { id: makeId(), ...payload, created_at: nowIso(), updated_at: nowIso(), created_by: ownId() };
+      if (values.coverFile) {
+        const cover = await prepareChantierCoverFile(values.coverFile);
+        chantier.cover_image_data = await readAsDataUrl(cover);
+      }
       app.local.chantiers.unshift(chantier);
       app.local.members.push({ id: makeId(), chantier_id: chantier.id, email: app.profile.email, full_name: ownName(), role: "administrateur" });
       app.chantiers = app.local.chantiers;
@@ -1572,13 +1920,23 @@
   }
   async function updateCurrentChantier(values) {
     const chantier = currentChantier();
-    const payload = { code: values.code.trim().toUpperCase(), name: values.name.trim(), location: values.location.trim(), description: values.description.trim(), updated_at: nowIso() };
-    if (!payload.name) throw new Error("Le nom du chantier est obligatoire.");
+    if (!chantier) throw new Error("Chantier introuvable.");
+    const payload = { ...chantierPayload(values), updated_at: nowIso() };
     if (isCloudReady()) {
       const { error } = await app.db.from("chantiers").update(payload).eq("id", chantier.id);
       if (error) throw error;
+      if (values.removeCover) await removeChantierCover(chantier);
+      if (values.coverFile) await uploadChantierCover(chantier, values.coverFile);
       await refreshCloudChantiers();
-    } else { Object.assign(chantier, payload); saveLocalData(); renderAll(); }
+    } else {
+      Object.assign(chantier, payload);
+      if (values.removeCover) delete chantier.cover_image_data;
+      if (values.coverFile) {
+        const cover = await prepareChantierCoverFile(values.coverFile);
+        chantier.cover_image_data = await readAsDataUrl(cover);
+      }
+      saveLocalData(); renderAll();
+    }
     toast("Informations du chantier enregistrées.", "success");
   }
 
@@ -2137,37 +2495,126 @@
     $("enableNotificationsBtn").addEventListener("click", ensureNotificationPermission);
   }
 
+  function chantierOperationChoice(chantier) {
+    const code = normaliseText(chantier?.briefing_operation_code || chantier?.code, 160).toUpperCase();
+    return BRIEFING_OPERATION_CATALOG.includes(code) ? code : (code ? "__custom__" : "");
+  }
+  function chantierFormMarkup(formId, chantier = null) {
+    const selectedOperation = chantierOperationChoice(chantier);
+    const operationCode = normaliseText(chantier?.briefing_operation_code || chantier?.code, 160).toUpperCase();
+    const customOperation = selectedOperation === "__custom__" ? operationCode : "";
+    const companies = chantierCompanies(chantier);
+    const customCompanies = companies.filter(company => !BRIEFING_COMPANY_CATALOG.includes(company)).join(", ");
+    const cover = chantierCoverUrl(chantier);
+    const phase = normaliseText(chantier?.operation_phase, 100);
+    const operationOptions = [`<option value="">Sélectionner dans le catalogue Briefing</option>`, ...BRIEFING_OPERATION_CATALOG.map(code => `<option value="${escapeHtml(code)}" ${selectedOperation === code ? "selected" : ""}>${escapeHtml(operationDisplay(code))}</option>`), `<option value="__custom__" ${selectedOperation === "__custom__" ? "selected" : ""}>Autre opération — saisie libre</option>`].join("");
+    return `<form id="${formId}" class="form-grid chantier-setup-form" novalidate>
+      <div class="chantier-form-intro span-2"><span>${iconSvg("field-note", "ui-icon")}</span><div><b>Fiche opérationnelle</b><p>Le code F du Briefing devient la référence du chantier, de ses documents et de son futur archivage.</p></div></div>
+      <label class="form-field span-2"><span>Opération de référence — catalogue Briefing</span><select name="operation_choice" id="${formId}Operation">${operationOptions}</select></label>
+      <label class="form-field span-2" id="${formId}CustomOperationWrap" ${selectedOperation === "__custom__" ? "" : "hidden"}><span>Code F ou référence libre *</span><input id="${formId}CustomOperation" name="custom_operation" maxlength="160" value="${escapeHtml(customOperation)}" placeholder="Ex. F_70000_NOM_OPERATION"></label>
+      <label class="form-field"><span>Nom visible du chantier *</span><input name="name" required maxlength="160" value="${escapeHtml(chantier?.name || "")}" placeholder="Ex. SST Montereau — phase travaux"></label>
+      <label class="form-field"><span>Code chantier / code F *</span><input id="${formId}Code" name="code" required maxlength="160" value="${escapeHtml(chantier?.code || (selectedOperation && selectedOperation !== "__custom__" ? selectedOperation : ""))}" placeholder="Sélectionne une opération ou saisis un code"></label>
+      <label class="form-field span-2"><span>Localisation / secteur</span><input name="location" maxlength="220" value="${escapeHtml(chantier?.location || "")}" placeholder="Ex. Montereau · Seine-et-Marne"></label>
+      <label class="form-field"><span>Ligne / voie</span><input name="line_code" maxlength="100" value="${escapeHtml(chantier?.line_code || "")}" placeholder="Ex. V2M · voie 1"></label>
+      <div class="field-pair"><label class="form-field"><span>PK début</span><input name="pk_start" maxlength="80" value="${escapeHtml(chantier?.pk_start || "")}" placeholder="80,050"></label><label class="form-field"><span>PK fin</span><input name="pk_end" maxlength="80" value="${escapeHtml(chantier?.pk_end || "")}" placeholder="80,340"></label></div>
+      <label class="form-field"><span>Chef de projet</span><input name="project_manager" maxlength="160" value="${escapeHtml(chantier?.project_manager || "")}" placeholder="Nom, prénom ou fonction"></label>
+      <label class="form-field"><span>Responsable opération</span><input name="operation_manager" maxlength="160" value="${escapeHtml(chantier?.operation_manager || "")}" placeholder="Nom, prénom ou fonction"></label>
+      <label class="form-field"><span>Début prévisionnel</span><input name="planned_start" type="date" value="${escapeHtml(chantier?.planned_start || "")}"></label>
+      <label class="form-field"><span>Fin prévisionnelle</span><input name="planned_end" type="date" value="${escapeHtml(chantier?.planned_end || "")}"></label>
+      <label class="form-field span-2"><span>Phase de l’opération</span><select name="operation_phase"><option value="">À préciser</option>${["Préparation", "Travaux", "Essais / réception", "Clôture", "Suspendue"].map(label => `<option ${phase === label ? "selected" : ""}>${label}</option>`).join("")}</select></label>
+      <fieldset class="company-picker span-2"><legend>Entreprises majeures participantes</legend><p>Catalogue repris du Briefing. Tu peux compléter librement ci-dessous.</p><div class="company-checkbox-grid">${BRIEFING_COMPANY_CATALOG.map(company => `<label><input type="checkbox" name="participating_companies" value="${escapeHtml(company)}" ${companies.includes(company) ? "checked" : ""}><span>${escapeHtml(company)}</span></label>`).join("")}</div><label class="form-field company-other"><span>Autre(s) entreprise(s)</span><input name="other_companies" maxlength="500" value="${escapeHtml(customCompanies)}" placeholder="Ex. Colas, entreprise locale (séparer par une virgule)"></label></fieldset>
+      <section class="cover-upload span-2"><div><b>Photo de couverture</b><p>Elle apparaîtra sur la première page du carnet PDF du chantier.</p></div><label class="cover-file-select"><input type="file" name="cover_file" accept="image/jpeg,image/png,image/webp"><span>Choisir une photo</span></label><div class="cover-photo-preview ${cover ? "has-image" : ""}" id="${formId}CoverPreview">${cover ? `<img src="${escapeHtml(cover)}" alt="Photo de couverture actuelle">` : `<span>Photo du chantier</span>`}</div>${cover ? `<label class="cover-remove"><input type="checkbox" name="remove_cover"> Retirer la photo actuelle</label>` : ""}</section>
+      <label class="form-field span-2"><span>Objet ou contexte</span><textarea name="description" maxlength="2400" placeholder="Travaux prévus, contraintes, enjeux, interfaces…">${escapeHtml(chantier?.description || "")}</textarea></label>
+    </form>`;
+  }
+  function collectChantierFormValues(form) {
+    const data = new FormData(form);
+    const operationChoice = normaliseText(data.get("operation_choice"), 160);
+    const customOperation = normaliseText(data.get("custom_operation"), 160).toUpperCase();
+    const enteredCode = normaliseText(data.get("code"), 160).toUpperCase();
+    const briefingOperationCode = operationChoice && operationChoice !== "__custom__" ? operationChoice : (customOperation || enteredCode);
+    const companies = [
+      ...data.getAll("participating_companies"),
+      ...normaliseText(data.get("other_companies"), 500).split(/[,;\n]+/)
+    ];
+    return {
+      name: data.get("name"),
+      code: operationChoice && operationChoice !== "__custom__" ? operationChoice : enteredCode,
+      briefing_operation_code: briefingOperationCode,
+      location: data.get("location"), line_code: data.get("line_code"), pk_start: data.get("pk_start"), pk_end: data.get("pk_end"),
+      project_manager: data.get("project_manager"), operation_manager: data.get("operation_manager"),
+      planned_start: data.get("planned_start"), planned_end: data.get("planned_end"), operation_phase: data.get("operation_phase"),
+      participating_companies: companies, description: data.get("description"),
+      coverFile: form.elements.cover_file?.files?.[0] || null,
+      removeCover: Boolean(form.elements.remove_cover?.checked)
+    };
+  }
+  function wireChantierForm(form, formId) {
+    const operation = $(`${formId}Operation`), customWrap = $(`${formId}CustomOperationWrap`), custom = $(`${formId}CustomOperation`), code = $(`${formId}Code`), name = form.elements.name, fileInput = form.elements.cover_file, preview = $(`${formId}CoverPreview`);
+    const syncOperation = () => {
+      const value = String(operation?.value || "");
+      const selectedFromCatalog = BRIEFING_OPERATION_CATALOG.includes(value);
+      if (customWrap) customWrap.hidden = value !== "__custom__";
+      if (selectedFromCatalog) {
+        code.value = value;
+        code.readOnly = true;
+        const generatedName = operationTitle(value);
+        if (!name.value || name.dataset.generated === "true") { name.value = generatedName; name.dataset.generated = "true"; }
+      } else {
+        code.readOnly = false;
+        if (value === "__custom__" && custom?.value) code.value = custom.value.toUpperCase();
+      }
+    };
+    operation?.addEventListener("change", syncOperation);
+    custom?.addEventListener("input", () => { if (String(operation?.value) === "__custom__") code.value = custom.value.toUpperCase(); });
+    name?.addEventListener("input", () => { name.dataset.generated = "false"; });
+    fileInput?.addEventListener("change", () => {
+      const file = fileInput.files?.[0];
+      if (!file || !preview) return;
+      if (!fileIsImage(file)) { toast("Choisis une image pour la couverture.", "warning"); fileInput.value = ""; return; }
+      const objectUrl = URL.createObjectURL(file);
+      preview.classList.add("has-image");
+      preview.innerHTML = `<img src="${escapeHtml(objectUrl)}" alt="Aperçu de la photo de couverture">`;
+    });
+    form.elements.remove_cover?.addEventListener("change", event => {
+      if (event.currentTarget.checked && preview) { preview.classList.remove("has-image"); preview.innerHTML = "<span>La photo sera retirée</span>"; }
+    });
+    syncOperation();
+  }
   function openNewChantierDialog() {
     if (app.mode === "cloud-guest") return openProfileDialog();
     if (isCloudReady() && !isJournalAdmin()) return openAccessStatusDialog();
     openModal({
       title: "Nouveau chantier",
       subtitle: isCloudReady() ? "Le créateur devient administrateur du chantier." : "Ce chantier restera d’abord sur cet appareil.",
-      body: `<form id="chantierForm" class="form-grid"><label class="form-field"><span>Nom du chantier *</span><input name="name" required placeholder="Ex. TSV Montereau – RCT"></label><label class="form-field"><span>Code chantier</span><input name="code" placeholder="Ex. MONTEREAU-2026"></label><label class="form-field span-2"><span>Localisation / ligne / PK</span><input name="location" placeholder="Ex. ML 750000 · V2M · PK 80,050 à 80,340"></label><label class="form-field span-2"><span>Objet ou contexte</span><textarea name="description" placeholder="Travaux prévus, entreprises, contraintes…"></textarea></label></form>`,
-      footer: `<button class="secondary-button" id="cancelChantier">Annuler</button><button class="primary-button" id="saveChantier">Créer le chantier</button>`
+      body: chantierFormMarkup("chantierForm"),
+      footer: `<button class="secondary-button" id="cancelChantier">Annuler</button><button class="primary-button" id="saveChantier">Créer le chantier</button>`, wide: true
     });
+    const form = $("chantierForm");
+    wireChantierForm(form, "chantierForm");
     $("cancelChantier").addEventListener("click", closeModal);
     $("saveChantier").addEventListener("click", async () => {
-      const form = $("chantierForm");
       if (!form.reportValidity()) return;
-      try { await createChantier(Object.fromEntries(new FormData(form).entries())); closeModal(); }
-      catch (error) { toast(`Création impossible : ${error.message}`, "error"); }
+      try { await createChantier(collectChantierFormValues(form)); closeModal(); }
+      catch (error) { toast(`Création impossible : ${friendlyError(error)}`, "error"); }
     });
   }
   function openSiteInfoDialog() {
     const chantier = currentChantier();
     if (!chantier) return openNewChantierDialog();
+    if (isCloudReady() && !isJournalAdmin()) return toast("Seuls les administrateurs peuvent modifier la fiche chantier.", "warning");
     openModal({
-      title: "Informations du chantier", subtitle: "Ces informations figurent en en-tête et dans le PDF.",
-      body: `<form id="siteInfoForm" class="form-grid"><label class="form-field"><span>Nom du chantier *</span><input name="name" required value="${escapeHtml(chantier.name || "")}"></label><label class="form-field"><span>Code chantier</span><input name="code" value="${escapeHtml(chantier.code || "")}"></label><label class="form-field span-2"><span>Localisation / ligne / PK</span><input name="location" value="${escapeHtml(chantier.location || "")}"></label><label class="form-field span-2"><span>Objet ou contexte</span><textarea name="description">${escapeHtml(chantier.description || "")}</textarea></label></form>`,
-      footer: `<button class="secondary-button" id="cancelSiteInfo">Fermer</button><button class="primary-button" id="saveSiteInfo">Enregistrer</button>`
+      title: "Fiche chantier", subtitle: "Ces informations figurent en en-tête et sur la couverture du PDF.",
+      body: chantierFormMarkup("siteInfoForm", chantier),
+      footer: `<button class="secondary-button" id="cancelSiteInfo">Fermer</button><button class="primary-button" id="saveSiteInfo">Enregistrer</button>`, wide: true
     });
+    const form = $("siteInfoForm");
+    wireChantierForm(form, "siteInfoForm");
     $("cancelSiteInfo").addEventListener("click", closeModal);
     $("saveSiteInfo").addEventListener("click", async () => {
-      const form = $("siteInfoForm");
       if (!form.reportValidity()) return;
-      try { await updateCurrentChantier(Object.fromEntries(new FormData(form).entries())); closeModal(); }
-      catch (error) { toast(`Enregistrement impossible : ${error.message}`, "error"); }
+      try { await updateCurrentChantier(collectChantierFormValues(form)); closeModal(); }
+      catch (error) { toast(`Enregistrement impossible : ${friendlyError(error)}`, "error"); }
     });
   }
   function beginPasswordRecovery(user) {
@@ -3084,6 +3531,14 @@
     } else if (action === "open-alert-action") {
       const item = activeActionsFor(app.currentId).find(actionItem => String(actionItem.id) === String(element.dataset.actionId));
       if (item) { closeModal(); setActiveTab("actions"); setTimeout(() => openActionMenu(item), 60); }
+    } else if (action === "open-portal-app") {
+      const item = portalAppById(element.dataset.portalAppId);
+      if (item) openPortalApp(item);
+    } else if (action === "configure-portal-suggestion") {
+      openPortalAppDialog(null, element.dataset.portalSuggestion || "");
+    } else if (action === "portal-app-menu") {
+      const item = portalAppById(element.dataset.portalAppId);
+      if (item) openPortalAppMenu(item);
     }
   }
   function wireEvents() {
@@ -3109,6 +3564,7 @@
     $("openDailyLogBtn").addEventListener("click", openDailyLogDialog);
     $("addRiskBtn").addEventListener("click", openRiskDialog);
     $("openRiskBtn").addEventListener("click", openRiskDialog);
+    els.addPortalAppBtn.addEventListener("click", () => openPortalAppDialog());
     els.advancedSearchBtn.addEventListener("click", openAdvancedSearchDialog);
     els.openSetupBtn.addEventListener("click", () => location.reload());
     $("openSidebarBtn").addEventListener("click", () => els.appShell.classList.add("sidebar-open"));
@@ -3144,7 +3600,7 @@
     els.messageInput.addEventListener("keydown", event => {
       if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); sendComposerMessage(); }
     });
-    [els.messageFeed, els.attachmentPreview, els.replyPreview, els.documentBreadcrumb, els.documentFolderGrid, els.documentFileGrid, els.actionBoard, els.pinnedMessages, els.pilotageAlerts, els.dailyLogList, els.riskList, els.modalBody].forEach(target => target.addEventListener("click", handleDynamicClick));
+    [els.messageFeed, els.attachmentPreview, els.replyPreview, els.documentBreadcrumb, els.documentFolderGrid, els.documentFileGrid, els.actionBoard, els.pinnedMessages, els.pilotageAlerts, els.dailyLogList, els.riskList, els.portalAppsGrid, els.modalBody].forEach(target => target.addEventListener("click", handleDynamicClick));
     // Si une URL signée arrive en fin de vie, on ne remonte pas tout le fil :
     // seule cette image reçoit un lien neuf, une unique fois.
     els.messageFeed.addEventListener("error", event => { recoverFeedImage(event.target); }, true);
@@ -3213,7 +3669,7 @@
   async function initialize() {
     wireEvents();
     const callbackError = takeAuthCallbackError();
-    if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("./service-worker-v13.js?v=13.3.3-admin-docs").catch(error => console.warn("Service worker", error));
+    if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("./service-worker-v13.js?v=14.0-briefing-portal").catch(error => console.warn("Service worker", error));
     syncFromLocal();
     if (cloudConfigured()) {
       try { await initializeCloud(); }

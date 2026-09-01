@@ -11,11 +11,11 @@
   <link rel="icon" href="journal-chantier-logo-v14.png" type="image/png">
   <title>Journal Chantier Connecté</title>
   <!-- Bibliothèque Supabase embarquée : elle ne dépend plus d’un CDN bloqué sur le réseau terrain. -->
-  <script src="supabase.js?v=13.3.3-admin-docs" defer></script>
+  <script src="supabase.js?v=14.0-briefing-portal" defer></script>
   <!-- config.js est le seul fichier de configuration public, partagé par tous les appareils. -->
-  <script src="config.js?v=13.3.3-admin-docs" defer></script>
-  <link rel="stylesheet" href="styles-v13.css?v=13.3.3-admin-docs">
-  <script src="app-v13.js?v=13.3.3-admin-docs" defer></script>
+  <script src="config.js?v=14.0-briefing-portal" defer></script>
+  <link rel="stylesheet" href="styles-v13.css?v=14.0-briefing-portal">
+  <script src="app-v13.js?v=14.0-briefing-portal" defer></script>
 </head>
 <body>
   <div class="app-shell" id="appShell">
@@ -79,6 +79,7 @@
         <button class="tab" data-tab="plans"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H10l2 2h5.5A2.5 2.5 0 0 1 20 7.5v10A2.5 2.5 0 0 1 17.5 20h-11A2.5 2.5 0 0 1 4 17.5v-12Z"/><path d="M8 12h8M8 16h5"/></svg> Documentation <small id="planCount">0</small></button>
         <button class="tab" data-tab="actions"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="m8.5 12.2 2.2 2.2 4.9-4.9"/></svg> Actions <small id="actionCount">0</small></button>
         <button class="tab" data-tab="pilotage"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/><path d="M3 20h18"/></svg> Pilotage <small id="pilotageCount">0</small></button>
+        <button class="tab" data-tab="apps"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 9h.01M12 9h.01M16 9h.01M8 14h.01M12 14h.01M16 14h.01"/></svg> Mes applications <small id="appsCount">0</small></button>
       </nav>
 
       <section class="content-area">
@@ -193,6 +194,15 @@
               <div class="pilotage-list" id="riskList"></div>
             </section>
           </div>
+        </section>
+
+        <section class="portal-view view" data-view="apps">
+          <div class="library-header portal-header">
+            <div><h2>Mes applications</h2><p>Les outils terrain et opérationnels accessibles depuis le Journal chantier.</p></div>
+            <button class="primary-button" id="addPortalAppBtn">＋ Ajouter une application</button>
+          </div>
+          <section class="portal-apps-notice" id="portalAppsNotice" hidden></section>
+          <div class="portal-apps-grid" id="portalAppsGrid"></div>
         </section>
       </section>
     </main>
