@@ -1,0 +1,3 @@
+# Etat local cree par Supabase CLI
+.supabase/
+supabase/.temp/

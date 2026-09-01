@@ -11,11 +11,11 @@
   <link rel="icon" href="journal-chantier.svg" type="image/svg+xml">
   <title>Journal Chantier Connecté</title>
   <!-- Bibliothèque Supabase embarquée : elle ne dépend plus d’un CDN bloqué sur le réseau terrain. -->
-  <script src="supabase.js?v=13.3" defer></script>
+  <script src="supabase.js?v=13.3-docs" defer></script>
   <!-- config.js est le seul fichier de configuration public, partagé par tous les appareils. -->
-  <script src="config.js?v=13.3" defer></script>
-  <link rel="stylesheet" href="styles-v13.css?v=13.3">
-  <script src="app-v13.js?v=13.3" defer></script>
+  <script src="config.js?v=13.3-docs" defer></script>
+  <link rel="stylesheet" href="styles-v13.css?v=13.3-docs">
+  <script src="app-v13.js?v=13.3-docs" defer></script>
 </head>
 <body>
   <div class="app-shell" id="appShell">
@@ -76,7 +76,7 @@
 
       <nav class="tabs" aria-label="Espaces du chantier">
         <button class="tab active" data-tab="chat"><span>▰</span> Discussion <small id="messageCount">0</small></button>
-        <button class="tab" data-tab="plans"><span>▱</span> Plans & documents <small id="planCount">0</small></button>
+        <button class="tab" data-tab="plans"><span>▱</span> Documentation <small id="planCount">0</small></button>
         <button class="tab" data-tab="actions"><span>✓</span> Actions <small id="actionCount">0</small></button>
         <button class="tab" data-tab="pilotage"><span>◈</span> Pilotage <small id="pilotageCount">0</small></button>
       </nav>
@@ -147,18 +147,19 @@
         </section>
 
         <section class="plans-view view" data-view="plans">
-          <div class="library-header">
-            <div><h2>Plans & documents</h2><p>Une source unique pour les plans diffusés, schémas et études du chantier.</p></div>
-            <button class="primary-button" id="addPlanBtn">＋ Ajouter un plan</button>
+          <div class="library-header documentation-header">
+            <div><h2>Documentation du chantier</h2><p>Plans, sécurité et qualité classés dans une bibliothèque sécurisée.</p></div>
+            <div class="documentation-header-actions" id="documentHeaderActions" hidden>
+              <button class="secondary-button" id="addFolderBtn">＋ Sous-dossier</button>
+              <button class="primary-button" id="addPlanBtn">＋ Ajouter un document</button>
+            </div>
           </div>
-          <div class="plan-filters" id="planFilters">
-            <button class="filter-pill active" data-plan-filter="">Tous</button>
-            <button class="filter-pill" data-plan-filter="Plan validé">Plans validés</button>
-            <button class="filter-pill" data-plan-filter="À diffuser">À diffuser</button>
-            <button class="filter-pill" data-plan-filter="Étude">Études</button>
-            <button class="filter-pill" data-plan-filter="Schéma">Schémas</button>
+          <div class="document-security-note" id="documentSecurityNote" hidden></div>
+          <div class="document-breadcrumb" id="documentBreadcrumb"></div>
+          <div class="document-library">
+            <div class="document-folder-grid" id="documentFolderGrid"></div>
+            <div class="document-file-grid" id="documentFileGrid"></div>
           </div>
-          <div class="plan-grid" id="planGrid"></div>
         </section>
 
         <section class="actions-view view" data-view="actions">

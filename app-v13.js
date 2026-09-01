@@ -6,6 +6,7 @@
   const RUNTIME_CONFIG_KEY = "journal_chantier_supabase_runtime_v1";
   const MAX_LOCAL_FILE_BYTES = 3 * 1024 * 1024;
   const MAX_CLOUD_FILE_BYTES = 48 * 1024 * 1024;
+  const DOCUMENTS_BUCKET = "chantier-documents";
   const $ = id => document.getElementById(id);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const nowIso = () => new Date().toISOString();
@@ -33,7 +34,9 @@
     mode: "local", db: null, user: null,
     profile: { id: "", full_name: "", company: "", email: "" },
     access: { platformRole: "", requestStatus: "", pendingRequests: 0 },
-    chantiers: [], currentId: null, messages: [], actions: [], dailyLogs: [], risks: [], members: [], reactions: [], readStates: [], local: null,
+    chantiers: [], currentId: null, messages: [], actions: [], dailyLogs: [], risks: [], members: [], reactions: [], readStates: [],
+    documentFolders: [], documents: [], documentViewFolderId: null,
+    documentLibrary: { available: false, canManage: false, migrationError: "" }, documentUrlCache: new Map(), local: null,
     pendingFiles: [], replyTo: null, typeFilter: "", search: "", onlyImportant: false, isDictating: false,
     advancedFilters: { from: "", to: "", zone: "", author: "", attachment: false }, lastOperationalAlertSignature: "",
     imageRecoveryInFlight: new Set(), imagePreviewRepairInFlight: new Set(), imagePreviewRepairTried: new Set(),
@@ -59,7 +62,9 @@
     jumpBottomBtn: $("jumpBottomBtn"), composerShell: $("composerShell"), composerMeta: $("composerMeta"),
     composerMetaBtn: $("composerMetaBtn"), composerToolsBtn: $("composerToolsBtn"), composerToolTray: $("composerToolTray"), messageType: $("messageType"), messageZone: $("messageZone"),
     messageImportant: $("messageImportant"), replyPreview: $("replyPreview"), attachmentPreview: $("attachmentPreview"),
-    fileInput: $("fileInput"), cameraInput: $("cameraInput"), messageInput: $("messageInput"), planGrid: $("planGrid"), pinnedMessages: $("pinnedMessages"),
+    fileInput: $("fileInput"), cameraInput: $("cameraInput"), messageInput: $("messageInput"), pinnedMessages: $("pinnedMessages"),
+    documentHeaderActions: $("documentHeaderActions"), documentSecurityNote: $("documentSecurityNote"), documentBreadcrumb: $("documentBreadcrumb"),
+    documentFolderGrid: $("documentFolderGrid"), documentFileGrid: $("documentFileGrid"),
     actionSummary: $("actionSummary"), actionBoard: $("actionBoard"), printCover: $("printCover"),
     pilotageSummary: $("pilotageSummary"), pilotageAlerts: $("pilotageAlerts"), dailyLogList: $("dailyLogList"), riskList: $("riskList"),
     modalBackdrop: $("modalBackdrop"), modal: document.querySelector(".modal"), modalTitle: $("modalTitle"),
@@ -69,7 +74,7 @@
   };
 
   function defaultLocalData() {
-    return { profile: { id: `local-${makeId()}`, full_name: "", company: "", email: "" }, chantiers: [], messages: [], actions: [], dailyLogs: [], risks: [], members: [], reactions: [], readStates: [], currentId: null };
+    return { profile: { id: `local-${makeId()}`, full_name: "", company: "", email: "" }, chantiers: [], messages: [], actions: [], dailyLogs: [], risks: [], members: [], reactions: [], readStates: [], documentFolders: [], documents: [], currentId: null };
   }
 
   function loadLocalData() {
@@ -85,7 +90,9 @@
           risks: Array.isArray(loaded.risks) ? loaded.risks : [],
           members: Array.isArray(loaded.members) ? loaded.members : [],
           reactions: Array.isArray(loaded.reactions) ? loaded.reactions : [],
-          readStates: Array.isArray(loaded.readStates) ? loaded.readStates : [] };
+          readStates: Array.isArray(loaded.readStates) ? loaded.readStates : [],
+          documentFolders: Array.isArray(loaded.documentFolders) ? loaded.documentFolders : [],
+          documents: Array.isArray(loaded.documents) ? loaded.documents : [] };
       }
     } catch (error) { console.warn("Journal local illisible", error); }
     return defaultLocalData();
@@ -130,6 +137,7 @@
     const message = String(error?.message || error || "Erreur inconnue");
     if (/invalid api key|invalid jwt|jwt malformed/i.test(message)) return "La clé publishable / anon Supabase est incorrecte.";
     if (/chantier_daily_logs|chantier_risks|daily_logs|chantier.*risks/i.test(message)) return "Le pilotage V13 n’est pas encore installé dans Supabase. Exécute le fichier supabase-v13-pilotage.sql dans l’éditeur SQL.";
+    if (/chantier_document|journal_can_manage_chantier_documents|create_chantier_document/i.test(message)) return "La bibliothèque documentaire n’est pas encore installée dans Supabase. Vérifie l’action GitHub « Deployer les migrations Supabase ».";
     if (/relation .* does not exist|schema cache/i.test(message)) return "Le schéma Supabase n’est pas installé : exécute supabase-schema.sql dans l’éditeur SQL.";
     if (/get_journal_administration_dashboard|set_journal_user_access|revoke_journal_user_access/i.test(message)) return "La mise à jour d’administration n’est pas encore installée dans Supabase. Exécute le fichier supabase-administration-v11.sql.";
     if (/reset_journal_chantier_feed|delete_journal_chantier|list_journal_chantier_storage_paths/i.test(message)) return "La maintenance propriétaire n’est pas encore installée dans Supabase. Exécute le fichier supabase-v12.1-owner-maintenance.sql.";
@@ -168,6 +176,7 @@
   function isCloudReady() { return app.mode === "cloud" && Boolean(app.user && app.db); }
   function isJournalAdmin() { return isCloudReady() && ["proprietaire", "administrateur_general"].includes(app.access.platformRole); }
   function isJournalOwner() { return isCloudReady() && app.access.platformRole === "proprietaire"; }
+  function canManageDocuments() { return !isCloudReady() ? app.mode === "local" || app.mode === "demo" : Boolean(app.documentLibrary.canManage); }
   function roleLabel(role) {
     return ({
       proprietaire: "Propriétaire principal",
@@ -313,6 +322,9 @@
     app.members = app.local.members;
     app.reactions = app.local.reactions || [];
     app.readStates = app.local.readStates || [];
+    app.documentFolders = app.local.documentFolders || [];
+    app.documents = app.local.documents || [];
+    app.documentLibrary = { available: true, canManage: true, migrationError: "" };
     saveLocalData();
   }
 
@@ -338,6 +350,12 @@
       ],
       dailyLogs: [{ id: "demo-daily-log-1", chantier_id: chantierId, log_date: now.slice(0, 10), shift: "Nuit", zone: "Chantier Test", weather: "Sec", workforce: "2 agents", work_summary: "Préparation et contrôle du balisage avant intervention.", constraints: "Aucune contrainte notable.", safety_summary: "Briefing réalisé avant prise de poste.", decisions: "Plan de principe diffusé aux équipes.", next_steps: "Contrôle final avant démarrage.", author_id: "demo-rlt", author_name: "Responsable travaux", created_at: now }],
       risks: [{ id: "demo-risk-1", chantier_id: chantierId, category: "Point de vigilance", severity: "moderee", status: "ouvert", zone: "Chantier Test", description: "Maintenir une vigilance sur la séparation des circulations et de la zone travaux.", immediate_measures: "Balisage vérifié et rappel au briefing.", author_id: "demo-rlt", author_name: "Responsable travaux", created_at: now }],
+      documentFolders: [
+        { id: "demo-doc-root-security", chantier_id: chantierId, parent_id: null, root_code: "securite", name: "Sécurité", is_root: true, created_at: now },
+        { id: "demo-doc-root-plans", chantier_id: chantierId, parent_id: null, root_code: "plans", name: "Plans", is_root: true, created_at: now },
+        { id: "demo-doc-root-quality", chantier_id: chantierId, parent_id: null, root_code: "qualite", name: "Documents qualité", is_root: true, created_at: now }
+      ],
+      documents: [{ id: "demo-library-document-1", chantier_id: chantierId, folder_id: "demo-doc-root-plans", file_name: "Plan de principe — démonstration.txt", mime_type: "text/plain", bytes: 112, description: "Document de démonstration de la bibliothèque.", version_label: "Indice A", created_by_name: "Responsable travaux", created_at: now, data_url: "data:text/plain;charset=utf-8,Document%20de%20demonstration%20de%20la%20bibliotheque%20du%20chantier." }],
       members: [], reactions: [], readStates: [], currentId: chantierId
     };
   }
@@ -359,6 +377,10 @@
     app.members = demo.members;
     app.reactions = demo.reactions;
     app.readStates = demo.readStates;
+    app.documentFolders = demo.documentFolders;
+    app.documents = demo.documents;
+    app.documentViewFolderId = null;
+    app.documentLibrary = { available: true, canManage: true, migrationError: "" };
     app.activeTab = "chat";
     closeModal();
     renderAll();
@@ -378,6 +400,10 @@
       app.dailyLogs = [];
       app.risks = [];
       app.members = [];
+      app.documentFolders = [];
+      app.documents = [];
+      app.documentViewFolderId = null;
+      app.documentLibrary = { available: false, canManage: false, migrationError: "" };
     }
     renderAll();
   }
@@ -429,14 +455,23 @@
   }
 
   async function refreshCloudCurrent() {
-    if (!isCloudReady() || !app.currentId) { app.messages = []; app.actions = []; app.dailyLogs = []; app.risks = []; app.reactions = []; app.readStates = []; renderAll({ keepPosition: true }); return; }
-    const [messageResponse, actionResponse, dailyLogResponse, riskResponse, reactionResponse, readResponse] = await Promise.all([
+    if (!isCloudReady() || !app.currentId) {
+      app.messages = []; app.actions = []; app.dailyLogs = []; app.risks = []; app.reactions = []; app.readStates = [];
+      app.documentFolders = []; app.documents = []; app.documentViewFolderId = null;
+      app.documentLibrary = { available: false, canManage: false, migrationError: "" };
+      renderAll({ keepPosition: true });
+      return;
+    }
+    const [messageResponse, actionResponse, dailyLogResponse, riskResponse, reactionResponse, readResponse, folderResponse, documentResponse, documentPermissionResponse] = await Promise.all([
       app.db.from("chantier_messages").select("*").eq("chantier_id", app.currentId).order("created_at").limit(1500),
       app.db.from("action_items").select("*").eq("chantier_id", app.currentId).order("created_at", { ascending: false }),
       app.db.from("chantier_daily_logs").select("*").eq("chantier_id", app.currentId).order("log_date", { ascending: false }).order("created_at", { ascending: false }).limit(180),
       app.db.from("chantier_risks").select("*").eq("chantier_id", app.currentId).order("status").order("created_at", { ascending: false }).limit(300),
       app.db.from("chantier_message_reactions").select("*").eq("chantier_id", app.currentId).order("created_at"),
-      app.db.from("chantier_read_states").select("*").eq("chantier_id", app.currentId)
+      app.db.from("chantier_read_states").select("*").eq("chantier_id", app.currentId),
+      app.db.from("chantier_document_folders").select("*").eq("chantier_id", app.currentId).order("is_root", { ascending: false }).order("name"),
+      app.db.from("chantier_documents").select("*").eq("chantier_id", app.currentId).order("created_at", { ascending: false }),
+      app.db.rpc("can_manage_chantier_documents", { p_chantier_id: app.currentId })
     ]);
     if (messageResponse.error) throw messageResponse.error;
     if (actionResponse.error) throw actionResponse.error;
@@ -450,8 +485,19 @@
     // migration V12 n’a pas encore été exécutée.
     app.reactions = reactionResponse.error ? [] : (reactionResponse.data || []);
     app.readStates = readResponse.error ? [] : (readResponse.data || []);
+
+    const documentError = folderResponse.error || documentResponse.error || documentPermissionResponse.error;
+    app.documentFolders = documentError ? [] : (folderResponse.data || []);
+    app.documents = documentError ? [] : (documentResponse.data || []);
+    app.documentLibrary = {
+      available: !documentError,
+      canManage: !documentError && Boolean(documentPermissionResponse.data),
+      migrationError: documentError ? "La bibliothèque documentaire doit être activée dans Supabase." : ""
+    };
+    if (app.documentViewFolderId && !app.documentFolders.some(folder => String(folder.id) === String(app.documentViewFolderId))) app.documentViewFolderId = null;
     if (reactionResponse.error || readResponse.error) console.info("Fonctions V12 en attente de la migration Supabase.");
     if (dailyLogResponse.error || riskResponse.error) console.info("Fonctions de pilotage V13 en attente de la migration Supabase.");
+    if (documentError) console.info("Bibliothèque documentaire en attente de la migration V13.3.");
     markChantierRead().catch(error => console.warn("Lecture non enregistrée", error));
     renderAll({ keepPosition: true });
   }
@@ -487,7 +533,7 @@
     if (!isCloudReady()) return;
     if (app.realtimeChannel) app.db.removeChannel(app.realtimeChannel);
     if (!app.currentId) return;
-    app.realtimeChannel = app.db.channel(`chantier-${app.currentId}`)
+    const channel = app.db.channel(`chantier-${app.currentId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "chantier_messages", filter: `chantier_id=eq.${app.currentId}` }, scheduleCloudRefresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "chantier_attachments", filter: `chantier_id=eq.${app.currentId}` }, scheduleCloudRefresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "action_items", filter: `chantier_id=eq.${app.currentId}` }, scheduleCloudRefresh)
@@ -499,8 +545,16 @@
       .on("postgres_changes", { event: "*", schema: "public", table: "chantier_read_states", filter: `chantier_id=eq.${app.currentId}` }, payload => {
         const changedUserId = payload?.new?.user_id || payload?.old?.user_id;
         if (String(changedUserId || "") !== String(ownId())) scheduleCloudRefresh();
-      })
-      .subscribe();
+      });
+    // Tant que la migration documentaire n'est pas exécutée, ne pas inscrire
+    // ces deux tables au canal : les anciennes fonctions temps réel restent
+    // ainsi totalement inchangées.
+    if (app.documentLibrary.available) {
+      channel
+        .on("postgres_changes", { event: "*", schema: "public", table: "chantier_document_folders", filter: `chantier_id=eq.${app.currentId}` }, scheduleCloudRefresh)
+        .on("postgres_changes", { event: "*", schema: "public", table: "chantier_documents", filter: `chantier_id=eq.${app.currentId}` }, scheduleCloudRefresh);
+    }
+    app.realtimeChannel = channel.subscribe();
   }
   async function refreshCloudChantiers() {
     const { data, error } = await app.db.from("chantiers").select("*").order("updated_at", { ascending: false });
@@ -549,7 +603,8 @@
       }, 0);
       if (event === "SIGNED_OUT") {
         if (app.realtimeChannel) app.db.removeChannel(app.realtimeChannel);
-        app.mode = "cloud-guest"; app.user = null; app.chantiers = []; app.messages = []; app.actions = []; app.dailyLogs = []; app.risks = [];
+        app.mode = "cloud-guest"; app.user = null; app.chantiers = []; app.messages = []; app.actions = []; app.dailyLogs = []; app.risks = []; app.documentFolders = []; app.documents = []; app.documentViewFolderId = null;
+        app.documentLibrary = { available: false, canManage: false, migrationError: "" };
         app.access = { platformRole: "", requestStatus: "", pendingRequests: 0 };
         renderAll();
       }
@@ -566,7 +621,8 @@
       await refreshAccessContext();
       await refreshCloudChantiers();
     } else {
-      app.mode = "cloud-guest"; app.user = null; app.chantiers = []; app.messages = []; app.actions = []; app.dailyLogs = []; app.risks = [];
+      app.mode = "cloud-guest"; app.user = null; app.chantiers = []; app.messages = []; app.actions = []; app.dailyLogs = []; app.risks = []; app.documentFolders = []; app.documents = []; app.documentViewFolderId = null;
+      app.documentLibrary = { available: false, canManage: false, migrationError: "" };
     }
   }
 
@@ -834,20 +890,360 @@
     else requestAnimationFrame(scrollMessagesToBottom);
   }
   function allCurrentAttachments() { return currentMessages().flatMap(message => (message.attachments || []).map(file => ({ ...file, message }))); }
+  function documentRootMeta(rootCode) {
+    return ({
+      securite: { icon: "🦺", label: "Sécurité", description: "Consignes, analyses de risques, briefings et autorisations." },
+      plans: { icon: "▱", label: "Plans", description: "Plans d’exécution, schémas, relevés et études." },
+      qualite: { icon: "✓", label: "Documents qualité", description: "Contrôles, procédures, fiches et preuves qualité." }
+    })[rootCode] || { icon: "▰", label: "Dossier", description: "Documents du chantier." };
+  }
+  function documentFolderById(id) { return (app.documentFolders || []).find(folder => String(folder.id) === String(id)) || null; }
+  function currentDocumentFolder() { return documentFolderById(app.documentViewFolderId); }
+  function documentFoldersAt(parentId = null) {
+    return (app.documentFolders || []).filter(folder => parentId ? String(folder.parent_id) === String(parentId) : !folder.parent_id)
+      .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "fr"));
+  }
+  function documentsAt(folderId) {
+    return (app.documents || []).filter(documentItem => String(documentItem.folder_id) === String(folderId))
+      .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+  }
+  function documentAncestors(folder) {
+    const result = [];
+    let cursor = folder, safety = 0;
+    while (cursor && safety < 30) { result.unshift(cursor); cursor = cursor.parent_id ? documentFolderById(cursor.parent_id) : null; safety += 1; }
+    return result;
+  }
+  function ensureLocalDocumentRoots(chantierId) {
+    if (isCloudReady() || !chantierId) return;
+    const target = app.local?.documentFolders || app.documentFolders;
+    const existing = new Set(target.filter(folder => String(folder.chantier_id) === String(chantierId) && folder.is_root).map(folder => folder.root_code));
+    const roots = [["securite", "Sécurité"], ["plans", "Plans"], ["qualite", "Documents qualité"]];
+    let changed = false;
+    roots.forEach(([rootCode, name]) => {
+      if (existing.has(rootCode)) return;
+      target.push({ id: makeId(), chantier_id: chantierId, parent_id: null, root_code: rootCode, name, is_root: true, created_by: ownId(), created_by_name: ownName(), created_at: nowIso(), updated_at: nowIso() });
+      changed = true;
+    });
+    if (changed) { app.documentFolders = target; saveLocalData(); }
+  }
+  function documentFileIcon(documentItem) {
+    const mime = String(documentItem.mime_type || "").toLowerCase();
+    const name = String(documentItem.file_name || "").toLowerCase();
+    if (mime.startsWith("image/") || /\.(png|jpe?g|gif|webp|heic|heif)$/i.test(name)) return "▧";
+    if (mime === "application/pdf" || name.endsWith(".pdf")) return "PDF";
+    if (/word|\.docx?$/i.test(`${mime} ${name}`)) return "DOC";
+    if (/sheet|excel|\.xlsx?$/i.test(`${mime} ${name}`)) return "XLS";
+    if (/text|json|xml|\.txt$/i.test(`${mime} ${name}`)) return "TXT";
+    if (/\.dwg|\.dxf/i.test(name)) return "DWG";
+    return "FIC";
+  }
+  function documentCanPreview(documentItem) {
+    const mime = String(documentItem.mime_type || "").toLowerCase();
+    const name = String(documentItem.file_name || "").toLowerCase();
+    return mime.startsWith("image/") || mime === "application/pdf" || name.endsWith(".pdf") || mime.startsWith("text/") || /\.(txt|json|xml|csv|md)$/i.test(name);
+  }
+  function documentIsText(documentItem) {
+    const mime = String(documentItem.mime_type || "").toLowerCase();
+    return mime.startsWith("text/") || /\.(txt|json|xml|csv|md)$/i.test(String(documentItem.file_name || ""));
+  }
+  function documentIsPdf(documentItem) { return String(documentItem.mime_type || "").toLowerCase() === "application/pdf" || /\.pdf$/i.test(String(documentItem.file_name || "")); }
+  function documentIsImage(documentItem) { return fileIsImage(documentItem); }
+  function documentSourceUrl(documentItem) { return documentItem.data_url || documentItem.signed_url || ""; }
+  async function signedDocumentUrl(documentItem, { force = false } = {}) {
+    if (!documentItem?.storage_path) return documentSourceUrl(documentItem);
+    const cached = app.documentUrlCache.get(documentItem.storage_path);
+    if (!force && cached?.url && cached.expiresAt > Date.now() + 30_000) return cached.url;
+    const { data, error } = await app.db.storage.from(DOCUMENTS_BUCKET).createSignedUrl(documentItem.storage_path, 300);
+    if (error) throw error;
+    const url = data?.signedUrl || "";
+    if (!url) throw new Error("Impossible de préparer la consultation sécurisée du document.");
+    app.documentUrlCache.set(documentItem.storage_path, { url, expiresAt: Date.now() + 4 * 60 * 1000 });
+    return url;
+  }
+  function documentFolderCard(folder) {
+    const meta = documentRootMeta(folder.root_code);
+    const children = documentFoldersAt(folder.id).length;
+    const files = documentsAt(folder.id).length;
+    const isRoot = Boolean(folder.is_root);
+    return `<article class="document-folder-card ${isRoot ? `root-${escapeHtml(folder.root_code)}` : ""}"><button class="document-folder-open" data-action="open-document-folder" data-folder-id="${escapeHtml(folder.id)}"><span class="document-folder-icon">${escapeHtml(isRoot ? meta.icon : "▰")}</span><span class="document-folder-copy"><b>${escapeHtml(folder.name || meta.label)}</b><small>${escapeHtml(isRoot ? meta.description : `${children} sous-dossier${children > 1 ? "s" : ""} · ${files} document${files > 1 ? "s" : ""}`)}</small></span><span class="document-folder-chevron" aria-hidden="true">›</span></button>${canManageDocuments() ? `<button class="document-card-menu" data-action="document-folder-menu" data-folder-id="${escapeHtml(folder.id)}" aria-label="Gérer le dossier">⋮</button>` : ""}</article>`;
+  }
+  function documentFileCard(documentItem) {
+    const detail = [documentItem.version_label && `Indice ${documentItem.version_label}`, formatBytes(documentItem.bytes), documentItem.created_by_name, formatDateTime(documentItem.created_at)].filter(Boolean).join(" · ");
+    return `<article class="document-file-card"><button class="document-file-open" data-action="open-document" data-document-id="${escapeHtml(documentItem.id)}"><span class="document-file-icon">${escapeHtml(documentFileIcon(documentItem))}</span><span class="document-file-copy"><b title="${escapeHtml(documentItem.file_name || "Document")}">${escapeHtml(documentItem.file_name || "Document")}</b><small>${escapeHtml(detail || "Document classé")}</small>${documentItem.description ? `<em>${escapeHtml(truncate(documentItem.description, 120))}</em>` : ""}</span><span class="document-consult-label">Consulter</span></button>${canManageDocuments() ? `<button class="document-card-menu" data-action="document-menu" data-document-id="${escapeHtml(documentItem.id)}" aria-label="Gérer le document">⋮</button>` : ""}</article>`;
+  }
+  function renderDocumentBreadcrumb(folder) {
+    const ancestors = folder ? documentAncestors(folder) : [];
+    els.documentBreadcrumb.innerHTML = `<button class="document-crumb ${folder ? "" : "current"}" data-action="document-home">Bibliothèque</button>${ancestors.map((item, index) => `<span aria-hidden="true">›</span><button class="document-crumb ${index === ancestors.length - 1 ? "current" : ""}" data-action="open-document-folder" data-folder-id="${escapeHtml(item.id)}">${escapeHtml(item.name)}</button>`).join("")}`;
+  }
   function renderPlans() {
     const chantier = currentChantier();
+    els.documentHeaderActions.hidden = true;
+    els.documentSecurityNote.hidden = true;
     if (!chantier) {
-      showEmpty(els.planGrid, "Aucun chantier sélectionné", "Crée un chantier avant de classer des plans.", "▱");
+      els.documentBreadcrumb.innerHTML = "";
+      showEmpty(els.documentFolderGrid, "Aucun chantier sélectionné", "Crée ou sélectionne un chantier avant d’ouvrir sa documentation.", "▱");
+      els.documentFileGrid.innerHTML = "";
       els.planCount.textContent = "0";
       return;
     }
-    const all = allCurrentAttachments(), plans = all.filter(file => file.category === "plan" || file.category === "document").filter(file => !app.planFilter || file.plan_status === app.planFilter || file.plan_category === app.planFilter).sort((a, b) => new Date(b.created_at || b.message.created_at) - new Date(a.created_at || a.message.created_at));
-    els.planCount.textContent = all.filter(file => file.category === "plan" || file.category === "document").length;
-    if (!plans.length) { showEmpty(els.planGrid, "Aucun plan ou document", "Ajoute le premier plan diffusé pour le retrouver facilement ici.", "▱"); return; }
-    els.planGrid.innerHTML = plans.map(file => {
-      const name = file.file_name || file.name || "Document", url = attachmentUrl(file);
-      return `<article class="plan-card"><div class="plan-thumb">${fileIsImage(file) && url ? `<img src="${escapeHtml(url)}" alt="">` : escapeHtml(fileIcon(file))}<span class="plan-status">${escapeHtml(file.plan_status || file.plan_category || "Document")}</span></div><div class="plan-body"><h3 title="${escapeHtml(name)}">${escapeHtml(name)}</h3><p>${escapeHtml([file.revision && `Indice ${file.revision}`, file.zone || file.message.zone, file.message.author_name].filter(Boolean).join(" · ") || "Ajouté au journal")}</p><p>${escapeHtml(formatDateTime(file.created_at || file.message.created_at))}</p></div><div class="plan-card-foot"><span>${escapeHtml(formatBytes(file.bytes || file.size))}</span><button class="text-link" data-action="open-attachment" data-attachment-id="${file.id}">Ouvrir</button></div></article>`;
-    }).join("");
+    if (!isCloudReady()) ensureLocalDocumentRoots(chantier.id);
+    if (isCloudReady() && !app.documentLibrary.available) {
+      els.documentBreadcrumb.innerHTML = "";
+      els.documentSecurityNote.hidden = false;
+      els.documentSecurityNote.innerHTML = `<span>🔒</span><p><b>Bibliothèque documentaire à activer</b><br>${escapeHtml(app.documentLibrary.migrationError || "Exécute la migration documentaire dans Supabase pour créer les dossiers sécurisés.")}</p>`;
+      showEmpty(els.documentFolderGrid, "Bibliothèque en attente", "Le journal et les photos restent disponibles. La migration ajoute les dossiers Sécurité, Plans et Documents qualité.", "▱");
+      els.documentFileGrid.innerHTML = "";
+      els.planCount.textContent = "0";
+      return;
+    }
+    const folder = currentDocumentFolder();
+    const folders = documentFoldersAt(folder?.id || null);
+    const files = folder ? documentsAt(folder.id) : [];
+    const isManager = canManageDocuments();
+    els.documentHeaderActions.hidden = !isManager || !folder;
+    els.documentSecurityNote.hidden = false;
+    els.documentSecurityNote.classList.toggle("read-only", !isManager);
+    els.documentSecurityNote.innerHTML = isManager
+      ? "<span>🔐</span><p><b>Administration documentaire</b><br>Vous pouvez créer des sous-dossiers et intégrer, modifier ou retirer les documents de ce chantier.</p>"
+      : "<span>🔒</span><p><b>Consultation en lecture seule</b><br>Seuls les administrateurs peuvent intégrer, modifier ou supprimer des documents. Aucun bouton de téléchargement n’est proposé.</p>";
+    renderDocumentBreadcrumb(folder);
+    els.planCount.textContent = String((app.documents || []).filter(documentItem => String(documentItem.chantier_id) === String(chantier.id)).length);
+    if (folders.length) els.documentFolderGrid.innerHTML = folders.map(documentFolderCard).join("");
+    else if (folder) els.documentFolderGrid.innerHTML = `<div class="document-inline-empty">Aucun sous-dossier dans « ${escapeHtml(folder.name)} ».</div>`;
+    else els.documentFolderGrid.innerHTML = `<div class="document-inline-empty">Les dossiers racine sont en cours de création.</div>`;
+    if (!folder) {
+      els.documentFileGrid.innerHTML = `<div class="document-empty-panel"><span>▱</span><div><b>Choisis un dossier</b><p>Les trois espaces de classement sont prêts : Sécurité, Plans et Documents qualité.</p></div></div>`;
+      return;
+    }
+    if (!files.length) {
+      els.documentFileGrid.innerHTML = `<div class="document-empty-panel"><span>▰</span><div><b>Aucun document dans ce dossier</b><p>${isManager ? "Utilise « Ajouter un document » pour classer le premier fichier ici." : "Un administrateur peut déposer les documents de ce dossier."}</p></div></div>`;
+      return;
+    }
+    els.documentFileGrid.innerHTML = files.map(documentFileCard).join("");
+  }
+  function openDocumentFolderDialog() {
+    const parent = currentDocumentFolder();
+    if (!parent) return toast("Ouvre d’abord Sécurité, Plans ou Documents qualité.", "warning");
+    if (!canManageDocuments()) return toast("Seuls les administrateurs peuvent créer un sous-dossier.", "error");
+    openModal({
+      title: "Créer un sous-dossier",
+      subtitle: `Dans ${parent.name}`,
+      body: `<form id="documentFolderForm" class="form-grid one"><label class="form-field">Nom du sous-dossier *<input name="name" required maxlength="120" placeholder="Ex. Plans d’exécution — voie 1"></label></form>`,
+      footer: `<button class="secondary-button" id="cancelDocumentFolder">Annuler</button><button class="primary-button" id="saveDocumentFolder">Créer</button>`
+    });
+    $("cancelDocumentFolder").addEventListener("click", closeModal);
+    $("saveDocumentFolder").addEventListener("click", async () => {
+      const form = $("documentFolderForm");
+      if (!form.reportValidity()) return;
+      const name = String(new FormData(form).get("name") || "").trim();
+      if (!name) return;
+      try {
+        if (isCloudReady()) {
+          const { error } = await app.db.rpc("create_chantier_document_folder", { p_chantier_id: parent.chantier_id, p_parent_id: parent.id, p_name: name });
+          if (error) throw error;
+          await refreshCloudCurrent();
+        } else {
+          const newFolder = { id: makeId(), chantier_id: parent.chantier_id, parent_id: parent.id, root_code: parent.root_code, name, is_root: false, created_by: ownId(), created_by_name: ownName(), created_at: nowIso(), updated_at: nowIso() };
+          app.local.documentFolders.push(newFolder); app.documentFolders = app.local.documentFolders; saveLocalData(); renderPlans();
+        }
+        closeModal();
+        toast("Sous-dossier créé.", "success");
+      } catch (error) { toast(`Création impossible : ${friendlyError(error)}`, "error"); }
+    });
+  }
+  async function addDocumentToLibrary(file, values, folder) {
+    if (!file) throw new Error("Choisis un fichier à classer.");
+    if (!folder) throw new Error("Choisis le dossier de destination.");
+    if (!canManageDocuments()) throw new Error("Seuls les administrateurs peuvent intégrer un document.");
+    const maxBytes = isCloudReady() ? MAX_CLOUD_FILE_BYTES : MAX_LOCAL_FILE_BYTES;
+    if (file.size > maxBytes) throw new Error(`${file.name} dépasse ${formatBytes(maxBytes)}.`);
+    const documentId = makeId();
+    const cleanName = String(file.name || "document").replace(/[^\w.\-]+/g, "_").replace(/^_+|_+$/g, "") || "document";
+    const payload = {
+      id: documentId, chantier_id: folder.chantier_id, folder_id: folder.id, file_name: String(values.file_name || file.name || "Document").trim(),
+      mime_type: file.type || "application/octet-stream", bytes: file.size || 0, description: String(values.description || "").trim(),
+      version_label: String(values.version_label || "").trim(), created_by: ownId(), created_by_name: ownName(), created_at: nowIso(), updated_at: nowIso()
+    };
+    if (!payload.file_name) throw new Error("Le nom du document est obligatoire.");
+    if (isCloudReady()) {
+      const storagePath = `documents/${folder.chantier_id}/${documentId}/${cleanName}`;
+      const bucket = app.db.storage.from(DOCUMENTS_BUCKET);
+      const { error: storageError } = await bucket.upload(storagePath, file, { contentType: payload.mime_type, upsert: false });
+      if (storageError) throw storageError;
+      try {
+        const { error: metadataError } = await app.db.rpc("create_chantier_document_metadata", {
+          p_document_id: documentId, p_chantier_id: folder.chantier_id, p_folder_id: folder.id, p_storage_path: storagePath,
+          p_file_name: payload.file_name, p_mime_type: payload.mime_type, p_bytes: payload.bytes, p_description: payload.description, p_version_label: payload.version_label
+        });
+        if (metadataError) throw metadataError;
+      } catch (error) {
+        await bucket.remove([storagePath]).catch(() => null);
+        throw error;
+      }
+      try { await addMessage({ body: `Document ajouté dans ${folder.name} : ${payload.file_name}${payload.version_label ? ` — Indice ${payload.version_label}` : ""}`, message_type: "Document", zone: "" }); }
+      catch (error) { console.warn("Message de diffusion documentaire non publié", error); }
+      await refreshCloudCurrent();
+      return;
+    }
+    payload.data_url = await readAsDataUrl(file);
+    app.local.documents.push(payload); app.documents = app.local.documents; saveLocalData(); renderPlans();
+  }
+  function openPlanDialog() {
+    const folder = currentDocumentFolder();
+    if (!folder) return toast("Ouvre d’abord le dossier de destination du document.", "warning");
+    if (!canManageDocuments()) return toast("Seuls les administrateurs peuvent intégrer un document.", "error");
+    openModal({
+      title: "Ajouter un document",
+      subtitle: `Destination : ${folder.name}`,
+      body: `<form id="documentUploadForm" class="form-grid"><label class="form-field span-2">Fichier *<input name="file" type="file" required></label><label class="form-field span-2">Nom affiché<input name="file_name" maxlength="180" placeholder="Par défaut : nom du fichier"></label><label class="form-field">Indice / version<input name="version_label" maxlength="80" placeholder="Ex. Indice B"></label><label class="form-field">Dossier<select disabled><option>${escapeHtml(folder.name)}</option></select></label><label class="form-field span-2">Description (facultative)<textarea name="description" maxlength="1200" placeholder="Nature du document, consigne d’utilisation, périmètre…"></textarea></label></form>`,
+      footer: `<button class="secondary-button" id="cancelDocumentUpload">Annuler</button><button class="primary-button" id="saveDocumentUpload">Classer le document</button>`
+    });
+    $("cancelDocumentUpload").addEventListener("click", closeModal);
+    $("saveDocumentUpload").addEventListener("click", async () => {
+      const form = $("documentUploadForm");
+      if (!form.reportValidity()) return;
+      const file = form.elements.file.files[0];
+      try {
+        const button = $("saveDocumentUpload"); button.disabled = true; button.textContent = "Classement…";
+        await addDocumentToLibrary(file, Object.fromEntries(new FormData(form).entries()), folder);
+        closeModal();
+        toast("Document classé dans la bibliothèque.", "success");
+      } catch (error) { toast(`Classement impossible : ${friendlyError(error)}`, "error"); }
+    });
+  }
+  async function openDocumentViewer(documentItem) {
+    if (!documentItem) return;
+    try {
+      const url = await signedDocumentUrl(documentItem);
+      if (!url) throw new Error("Ce document n’est plus disponible.");
+      const name = documentItem.file_name || "Document";
+      const detail = [documentItem.version_label && `Indice ${documentItem.version_label}`, formatBytes(documentItem.bytes), documentItem.created_by_name, formatDateTime(documentItem.created_at)].filter(Boolean).join(" · ");
+      const canPreview = documentCanPreview(documentItem);
+      const body = documentIsImage(documentItem)
+        ? `<div class="document-viewer-image-wrap"><img src="${escapeHtml(url)}" alt="${escapeHtml(name)}" class="document-viewer-image" draggable="false"></div>`
+        : documentIsPdf(documentItem)
+          ? `<iframe class="document-viewer-pdf" title="${escapeHtml(name)}" src="${escapeHtml(`${url}#toolbar=0&navpanes=0`)}" sandbox="allow-same-origin" referrerpolicy="no-referrer"></iframe>`
+          : documentIsText(documentItem)
+            ? `<pre class="document-viewer-text" id="documentTextPreview">Chargement du contenu…</pre>`
+            : `<div class="document-preview-unavailable"><span>${escapeHtml(documentFileIcon(documentItem))}</span><div><b>Prévisualisation indisponible</b><p>${canManageDocuments() ? "Ce format peut être ouvert par un administrateur depuis son appareil." : "Demande une version PDF ou image à un administrateur pour le consulter dans l’application."}</p></div></div>`;
+      openModal({
+        title: name, subtitle: detail || "Document du chantier", wide: true,
+        body: `${documentItem.description ? `<p class="document-viewer-description">${escapeHtml(documentItem.description)}</p>` : ""}${body}`,
+        footer: `<button class="secondary-button" id="closeDocumentViewer">Fermer</button>${canManageDocuments() ? `<button class="primary-button" id="adminOpenDocument">Ouvrir / télécharger</button>` : ""}`
+      });
+      $("closeDocumentViewer").addEventListener("click", closeModal);
+      $("adminOpenDocument")?.addEventListener("click", () => window.open(url, "_blank", "noopener"));
+      if (documentIsText(documentItem)) {
+        fetch(url, { credentials: "omit" }).then(response => response.ok ? response.text() : Promise.reject(new Error(`Lecture impossible (${response.status})`))).then(text => {
+          const preview = $("documentTextPreview");
+          if (preview) preview.textContent = text.slice(0, 250000);
+        }).catch(error => {
+          const preview = $("documentTextPreview");
+          if (preview) preview.textContent = `Contenu indisponible : ${friendlyError(error)}`;
+        });
+      }
+    } catch (error) { toast(`Ouverture impossible : ${friendlyError(error)}`, "error"); }
+  }
+  function openDocumentFolderMenu(folder) {
+    if (!canManageDocuments()) return toast("Seuls les administrateurs peuvent gérer les dossiers.", "error");
+    if (!folder) return;
+    const rootProtected = Boolean(folder.is_root);
+    openModal({
+      title: "Gérer le dossier", subtitle: folder.name,
+      body: rootProtected ? `<div class="form-note">Les dossiers racine Sécurité, Plans et Documents qualité sont protégés. Tu peux y créer autant de sous-dossiers que nécessaire.</div>` : `<div class="menu-list"><button id="renameDocumentFolder">✎ Renommer le sous-dossier</button><button class="danger" id="deleteDocumentFolder">⌫ Supprimer le sous-dossier vide</button></div>`,
+      footer: `<button class="secondary-button" id="closeDocumentFolderMenu">Fermer</button>`
+    });
+    $("closeDocumentFolderMenu").addEventListener("click", closeModal);
+    $("renameDocumentFolder")?.addEventListener("click", () => openDocumentFolderEditDialog(folder));
+    $("deleteDocumentFolder")?.addEventListener("click", () => deleteDocumentFolder(folder));
+  }
+  function openDocumentFolderEditDialog(folder) {
+    openModal({
+      title: "Renommer le sous-dossier", subtitle: "Le classement des documents reste inchangé.",
+      body: `<form id="documentFolderEditForm" class="form-grid one"><label class="form-field">Nom *<input name="name" required maxlength="120" value="${escapeHtml(folder.name)}"></label></form>`,
+      footer: `<button class="secondary-button" id="cancelDocumentFolderEdit">Annuler</button><button class="primary-button" id="saveDocumentFolderEdit">Enregistrer</button>`
+    });
+    $("cancelDocumentFolderEdit").addEventListener("click", closeModal);
+    $("saveDocumentFolderEdit").addEventListener("click", async () => {
+      const form = $("documentFolderEditForm"); if (!form.reportValidity()) return;
+      const name = String(new FormData(form).get("name") || "").trim();
+      try {
+        if (isCloudReady()) {
+          const { error } = await app.db.rpc("rename_chantier_document_folder", { p_folder_id: folder.id, p_name: name });
+          if (error) throw error;
+          await refreshCloudCurrent();
+        } else { folder.name = name; folder.updated_at = nowIso(); saveLocalData(); renderPlans(); }
+        closeModal(); toast("Dossier renommé.", "success");
+      } catch (error) { toast(`Modification impossible : ${friendlyError(error)}`, "error"); }
+    });
+  }
+  async function deleteDocumentFolder(folder) {
+    if (!folder || folder.is_root) return;
+    if (!window.confirm(`Supprimer le sous-dossier « ${folder.name} » ? Il doit être vide.`)) return;
+    try {
+      if (isCloudReady()) {
+        const { error } = await app.db.rpc("delete_chantier_document_folder", { p_folder_id: folder.id });
+        if (error) throw error;
+        app.documentViewFolderId = folder.parent_id || null;
+        await refreshCloudCurrent();
+      } else {
+        if (documentFoldersAt(folder.id).length || documentsAt(folder.id).length) throw new Error("Le dossier contient encore des éléments.");
+        app.local.documentFolders = app.local.documentFolders.filter(item => String(item.id) !== String(folder.id));
+        app.documentFolders = app.local.documentFolders; app.documentViewFolderId = folder.parent_id || null; saveLocalData(); renderPlans();
+      }
+      closeModal(); toast("Sous-dossier supprimé.", "success");
+    } catch (error) { toast(`Suppression impossible : ${friendlyError(error)}`, "error"); }
+  }
+  function openDocumentMenu(documentItem) {
+    if (!canManageDocuments()) return toast("Seuls les administrateurs peuvent gérer les documents.", "error");
+    if (!documentItem) return;
+    openModal({
+      title: "Gérer le document", subtitle: documentItem.file_name,
+      body: `<div class="menu-list"><button id="editDocumentMetadata">✎ Modifier les informations</button><button class="danger" id="deleteDocument">⌫ Supprimer le document</button></div>`,
+      footer: `<button class="secondary-button" id="closeDocumentMenu">Fermer</button>`
+    });
+    $("closeDocumentMenu").addEventListener("click", closeModal);
+    $("editDocumentMetadata").addEventListener("click", () => openDocumentEditDialog(documentItem));
+    $("deleteDocument").addEventListener("click", () => deleteDocument(documentItem));
+  }
+  function openDocumentEditDialog(documentItem) {
+    openModal({
+      title: "Modifier les informations", subtitle: "Le fichier original n’est pas modifié.",
+      body: `<form id="documentEditForm" class="form-grid"><label class="form-field span-2">Nom affiché *<input name="file_name" required maxlength="180" value="${escapeHtml(documentItem.file_name || "")}"></label><label class="form-field">Indice / version<input name="version_label" maxlength="80" value="${escapeHtml(documentItem.version_label || "")}"></label><label class="form-field">Format<input disabled value="${escapeHtml(documentItem.mime_type || "Fichier")}"></label><label class="form-field span-2">Description<textarea name="description" maxlength="1200">${escapeHtml(documentItem.description || "")}</textarea></label></form>`,
+      footer: `<button class="secondary-button" id="cancelDocumentEdit">Annuler</button><button class="primary-button" id="saveDocumentEdit">Enregistrer</button>`
+    });
+    $("cancelDocumentEdit").addEventListener("click", closeModal);
+    $("saveDocumentEdit").addEventListener("click", async () => {
+      const form = $("documentEditForm"); if (!form.reportValidity()) return;
+      const values = Object.fromEntries(new FormData(form).entries());
+      try {
+        if (isCloudReady()) {
+          const { error } = await app.db.rpc("update_chantier_document_metadata", { p_document_id: documentItem.id, p_file_name: values.file_name.trim(), p_description: values.description.trim(), p_version_label: values.version_label.trim() });
+          if (error) throw error;
+          await refreshCloudCurrent();
+        } else { Object.assign(documentItem, { file_name: values.file_name.trim(), description: values.description.trim(), version_label: values.version_label.trim(), updated_at: nowIso() }); saveLocalData(); renderPlans(); }
+        closeModal(); toast("Informations du document mises à jour.", "success");
+      } catch (error) { toast(`Modification impossible : ${friendlyError(error)}`, "error"); }
+    });
+  }
+  async function deleteDocument(documentItem) {
+    if (!documentItem || !window.confirm(`Supprimer définitivement « ${documentItem.file_name} » ?`)) return;
+    try {
+      if (isCloudReady()) {
+        const { data: storagePath, error } = await app.db.rpc("delete_chantier_document", { p_document_id: documentItem.id });
+        if (error) throw error;
+        if (storagePath) {
+          const { error: storageError } = await app.db.storage.from(DOCUMENTS_BUCKET).remove([storagePath]);
+          if (storageError) console.warn("Fichier distant à nettoyer", storageError);
+        }
+        try { await addMessage({ body: `Document retiré de la bibliothèque : ${documentItem.file_name}`, message_type: "Document", zone: "" }); }
+        catch (error) { console.warn("Message de retrait documentaire non publié", error); }
+        await refreshCloudCurrent();
+      } else {
+        app.local.documents = app.local.documents.filter(item => String(item.id) !== String(documentItem.id)); app.documents = app.local.documents; saveLocalData(); renderPlans();
+      }
+      closeModal(); toast("Document supprimé.", "success");
+    } catch (error) { toast(`Suppression impossible : ${friendlyError(error)}`, "error"); }
   }
   function actionIsLate(action) { return action.due_date && action.status !== "terminee" && new Date(`${action.due_date}T23:59:59`) < new Date(); }
   function actionStatusLabel(status) { return ({ a_faire: "À faire", en_cours: "En cours", terminee: "Terminée" })[status] || "À faire"; }
@@ -964,6 +1360,7 @@
   async function selectChantier(id) {
     if (String(id) === String(app.currentId)) { els.appShell.classList.remove("sidebar-open"); return; }
     app.currentId = id;
+    app.documentViewFolderId = null;
     if (isCloudReady()) { await refreshCloudCurrent(); subscribeCurrentChantier(); }
     else { saveLocalData(); renderAll(); }
     els.appShell.classList.remove("sidebar-open");
@@ -984,6 +1381,7 @@
       app.local.members.push({ id: makeId(), chantier_id: chantier.id, email: app.profile.email, full_name: ownName(), role: "administrateur" });
       app.chantiers = app.local.chantiers;
       app.currentId = chantier.id;
+      ensureLocalDocumentRoots(chantier.id);
       saveLocalData();
       renderAll();
       toast("Chantier créé en mode local.", "success");
@@ -2060,7 +2458,7 @@
       const selectedChantier = account.granted_chantier_id || "";
       const identity = account.full_name || account.email || "Compte sans nom";
       if (isOwner) return `<section class="dialog-item access-request" style="display:block"><div style="display:flex;gap:10px;align-items:center"><span class="mini-avatar">${escapeHtml(initial(identity))}</span><span><b>${escapeHtml(identity)}</b><small>${escapeHtml(account.email || "")} · ${escapeHtml(dashboardStatusLabel(account))}</small></span></div><p style="margin:12px 0 0;font-size:13px;color:var(--muted)">Compte protégé : propriétaire principal de l’application.</p></section>`;
-      return `<section class="dialog-item access-request" data-dashboard-user-id="${escapeHtml(account.user_id)}" style="display:block"><div style="display:flex;gap:10px;align-items:center"><span class="mini-avatar">${escapeHtml(initial(identity))}</span><span><b>${escapeHtml(identity)}</b><small>${escapeHtml(account.email || "")} · ${escapeHtml(dashboardStatusLabel(account))}</small></span></div><p style="margin:10px 0 0;font-size:12px;color:var(--muted)">Accès actuel : ${escapeHtml(dashboardChantiers(account))}</p><div class="form-grid" style="margin-top:12px"><label class="form-field">Niveau de droit<select data-dashboard-role><option value="membre" ${selectedRole === "membre" ? "selected" : ""}>Contributeur — lire, écrire, ajouter des documents</option><option value="lecture" ${selectedRole === "lecture" ? "selected" : ""}>Lecture seule — consulter et exporter</option><option value="administrateur" ${selectedRole === "administrateur" ? "selected" : ""}>Administrateur du chantier</option><option value="administrateur_general" ${selectedRole === "administrateur_general" ? "selected" : ""}>Administrateur général — tous les chantiers</option></select></label><label class="form-field">Chantier<select data-dashboard-chantier ${selectedRole === "administrateur_general" ? "disabled" : ""}>${chantierOptions.replace(`value="${escapeHtml(selectedChantier)}"`, `value="${escapeHtml(selectedChantier)}" selected`)}</select></label></div><div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px"><button class="secondary-button" data-dashboard-revoke>Retirer l’accès</button><button class="primary-button" data-dashboard-save>Enregistrer les droits</button></div></section>`;
+      return `<section class="dialog-item access-request" data-dashboard-user-id="${escapeHtml(account.user_id)}" style="display:block"><div style="display:flex;gap:10px;align-items:center"><span class="mini-avatar">${escapeHtml(initial(identity))}</span><span><b>${escapeHtml(identity)}</b><small>${escapeHtml(account.email || "")} · ${escapeHtml(dashboardStatusLabel(account))}</small></span></div><p style="margin:10px 0 0;font-size:12px;color:var(--muted)">Accès actuel : ${escapeHtml(dashboardChantiers(account))}</p><div class="form-grid" style="margin-top:12px"><label class="form-field">Niveau de droit<select data-dashboard-role><option value="membre" ${selectedRole === "membre" ? "selected" : ""}>Contributeur — lire et écrire dans le journal</option><option value="lecture" ${selectedRole === "lecture" ? "selected" : ""}>Lecture seule — journal et documents en consultation</option><option value="administrateur" ${selectedRole === "administrateur" ? "selected" : ""}>Administrateur du chantier</option><option value="administrateur_general" ${selectedRole === "administrateur_general" ? "selected" : ""}>Administrateur général — tous les chantiers</option></select></label><label class="form-field">Chantier<select data-dashboard-chantier ${selectedRole === "administrateur_general" ? "disabled" : ""}>${chantierOptions.replace(`value="${escapeHtml(selectedChantier)}"`, `value="${escapeHtml(selectedChantier)}" selected`)}</select></label></div><div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px"><button class="secondary-button" data-dashboard-revoke>Retirer l’accès</button><button class="primary-button" data-dashboard-save>Enregistrer les droits</button></div></section>`;
     }).join("") || `<div class="empty-state"><div class="empty-icon">♙</div><h3>Aucun compte recensé</h3><p>Les comptes apparaîtront ici après leur première connexion.</p></div>`;
     openModal({
       title: "Administration du journal",
@@ -2126,7 +2524,7 @@
     const chantierOptions = `<option value="">Choisir un chantier…</option>${app.chantiers.map(chantier => `<option value="${escapeHtml(chantier.id)}">${escapeHtml(chantier.name)}${chantier.code ? ` — ${escapeHtml(chantier.code)}` : ""}</option>`).join("")}`;
     const globalOption = isJournalOwner() ? `<option value="administrateur_general">Administrateur général — tous les chantiers</option>` : "";
     const requestCards = requests.length
-      ? requests.map(request => `<section class="dialog-item access-request" data-request-id="${escapeHtml(request.id)}" style="display:block"><div style="display:flex;gap:10px;align-items:center"><span class="mini-avatar">${escapeHtml(initial(request.full_name || request.email))}</span><span><b>${escapeHtml(request.full_name || "Nom non renseigné")}</b><small>${escapeHtml(request.email)}${request.company ? ` · ${escapeHtml(request.company)}` : ""}</small></span></div><div class="form-grid" style="margin-top:12px"><label class="form-field">Niveau de droit<select data-access-role><option value="membre">Contributeur — lire, écrire, ajouter des documents</option><option value="lecture">Lecture seule — consulter et exporter</option><option value="administrateur">Administrateur du chantier</option>${globalOption}</select></label><label class="form-field">Chantier<select data-access-chantier>${chantierOptions}</select></label></div><div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px"><button class="secondary-button" data-refuse-access>Refuser</button><button class="primary-button" data-approve-access>Valider l’accès</button></div></section>`).join("")
+      ? requests.map(request => `<section class="dialog-item access-request" data-request-id="${escapeHtml(request.id)}" style="display:block"><div style="display:flex;gap:10px;align-items:center"><span class="mini-avatar">${escapeHtml(initial(request.full_name || request.email))}</span><span><b>${escapeHtml(request.full_name || "Nom non renseigné")}</b><small>${escapeHtml(request.email)}${request.company ? ` · ${escapeHtml(request.company)}` : ""}</small></span></div><div class="form-grid" style="margin-top:12px"><label class="form-field">Niveau de droit<select data-access-role><option value="membre">Contributeur — lire et écrire dans le journal</option><option value="lecture">Lecture seule — journal et documents en consultation</option><option value="administrateur">Administrateur du chantier</option>${globalOption}</select></label><label class="form-field">Chantier<select data-access-chantier>${chantierOptions}</select></label></div><div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px"><button class="secondary-button" data-refuse-access>Refuser</button><button class="primary-button" data-approve-access>Valider l’accès</button></div></section>`).join("")
       : `<div class="empty-state"><div class="empty-icon">✓</div><h3>Aucune demande en attente</h3><p>Les nouveaux comptes apparaîtront ici avant d’accéder aux chantiers.</p></div>`;
 
     openModal({
@@ -2211,35 +2609,6 @@
     });
   }
 
-  function openPlanDialog() {
-    if (!currentChantier()) return openNewChantierDialog();
-    if (app.mode === "cloud-guest") return openProfileDialog();
-    openModal({
-      title: "Ajouter un plan ou document",
-      subtitle: "Le fichier sera classé dans la bibliothèque et signalé dans le fil.",
-      body: `<form id="planForm" class="form-grid"><label class="form-field span-2">Fichier *<input name="file" type="file" required accept="image/*,application/pdf,.pdf,.doc,.docx,.xls,.xlsx,.dwg,.dxf"></label><label class="form-field">Catégorie<select name="plan_category"><option>Plan validé</option><option>À diffuser</option><option>Étude</option><option>Schéma</option><option>Document</option></select></label><label class="form-field">Indice / version<input name="revision" placeholder="Ex. Indice B"></label><label class="form-field">Zone / PK<input name="zone" placeholder="Ex. V2M – PK 80,050"></label><label class="form-field">Statut<select name="plan_status"><option>À diffuser</option><option>Validé</option><option>Pour information</option><option>Obsolète</option></select></label><label class="form-field span-2">Commentaire dans le journal *<textarea name="comment" required placeholder="Ex. Plan de principe à utiliser pour la préparation de nuit."></textarea></label></form>`,
-      footer: `<button class="secondary-button" id="cancelPlan">Annuler</button><button class="primary-button" id="savePlan">Ajouter au journal</button>`
-    });
-    $("cancelPlan").addEventListener("click", closeModal);
-    $("savePlan").addEventListener("click", async () => {
-      const form = $("planForm");
-      if (!form.reportValidity()) return;
-      const values = Object.fromEntries(new FormData(form).entries()), file = form.elements.file.files[0];
-      if (!file) return;
-      try {
-        await addMessage({
-          body: values.comment, message_type: "Plan", zone: values.zone,
-          is_important: values.plan_status === "Validé"
-        }, [{ file }], {
-          category: "plan", plan_category: values.plan_status === "Validé" ? "Plan validé" : values.plan_category,
-          plan_status: values.plan_status, revision: values.revision, zone: values.zone
-        });
-        closeModal();
-        setActiveTab("plans");
-        toast("Plan ajouté à la bibliothèque et au journal.", "success");
-      } catch (error) { toast(`Ajout impossible : ${error.message}`, "error"); }
-    });
-  }
   function openActionDialog(sourceMessage = null) {
     if (!currentChantier()) return openNewChantierDialog();
     if (app.mode === "cloud-guest") return openProfileDialog();
@@ -2489,6 +2858,25 @@
     } else if (action === "open-attachment") {
       const attachment = findAttachment(element.dataset.attachmentId);
       if (attachment) await openAttachment(attachment);
+    } else if (action === "document-home") {
+      app.documentViewFolderId = null;
+      renderPlans();
+    } else if (action === "open-document-folder") {
+      const folder = documentFolderById(element.dataset.folderId);
+      if (folder) { app.documentViewFolderId = folder.id; renderPlans(); }
+    } else if (action === "open-document") {
+      const documentItem = (app.documents || []).find(item => String(item.id) === String(element.dataset.documentId));
+      if (documentItem) await openDocumentViewer(documentItem);
+    } else if (action === "document-folder-menu") {
+      event.preventDefault();
+      event.stopPropagation();
+      const folder = documentFolderById(element.dataset.folderId);
+      if (folder) openDocumentFolderMenu(folder);
+    } else if (action === "document-menu") {
+      event.preventDefault();
+      event.stopPropagation();
+      const documentItem = (app.documents || []).find(item => String(item.id) === String(element.dataset.documentId));
+      if (documentItem) openDocumentMenu(documentItem);
     } else if (action === "action-menu") {
       const item = activeActionsFor(app.currentId).find(actionItem => String(actionItem.id) === String(element.dataset.actionId));
       if (item) openActionMenu(item);
@@ -2520,6 +2908,7 @@
     $("exportBtn").addEventListener("click", openExportDialog);
     $("siteMenuBtn").addEventListener("click", openSiteInfoDialog);
     $("addPlanBtn").addEventListener("click", openPlanDialog);
+    $("addFolderBtn").addEventListener("click", openDocumentFolderDialog);
     $("addActionBtn").addEventListener("click", () => openActionDialog());
     $("addDailyLogBtn").addEventListener("click", openDailyLogDialog);
     $("openDailyLogBtn").addEventListener("click", openDailyLogDialog);
@@ -2560,7 +2949,7 @@
     els.messageInput.addEventListener("keydown", event => {
       if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); sendComposerMessage(); }
     });
-    [els.messageFeed, els.attachmentPreview, els.replyPreview, els.planGrid, els.actionBoard, els.pinnedMessages, els.pilotageAlerts, els.dailyLogList, els.riskList, els.modalBody].forEach(target => target.addEventListener("click", handleDynamicClick));
+    [els.messageFeed, els.attachmentPreview, els.replyPreview, els.documentBreadcrumb, els.documentFolderGrid, els.documentFileGrid, els.actionBoard, els.pinnedMessages, els.pilotageAlerts, els.dailyLogList, els.riskList, els.modalBody].forEach(target => target.addEventListener("click", handleDynamicClick));
     // Si une URL signée arrive en fin de vie, on ne remonte pas tout le fil :
     // seule cette image reçoit un lien neuf, une unique fois.
     els.messageFeed.addEventListener("error", event => { recoverFeedImage(event.target); }, true);
@@ -2629,7 +3018,7 @@
   async function initialize() {
     wireEvents();
     const callbackError = takeAuthCallbackError();
-    if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("./service-worker-v13.js?v=13.3").catch(error => console.warn("Service worker", error));
+    if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("./service-worker-v13.js?v=13.3-docs").catch(error => console.warn("Service worker", error));
     syncFromLocal();
     if (cloudConfigured()) {
       try { await initializeCloud(); }
