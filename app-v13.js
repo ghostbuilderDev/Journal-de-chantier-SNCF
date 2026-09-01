@@ -194,6 +194,14 @@
   function ownName() { return app.profile.full_name.trim() || (isCloudReady() ? app.user.email?.split("@")[0] || "Intervenant" : "Intervenant"); }
   function initial(value = "?") { return String(value || "?").trim().split(/\s+/).slice(0, 2).map(word => word[0]).join("").toUpperCase() || "?"; }
   function escapeHtml(value) { return String(value ?? "").replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[char])); }
+  function iconSvg(name, className = "ui-icon") {
+    const icons = {
+      "user-plus": '<circle cx="9" cy="8" r="3"/><path d="M3.5 20c.7-3.5 2.5-5.2 5.5-5.2s4.8 1.7 5.5 5.2M18 8v6M15 11h6"/>',
+      "field-note": '<path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.4"/><path d="M18.5 18.5v4M16.5 20.5h4"/>',
+      "book-export": '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8L14 2Z"/><path d="M14 2v6h6M12 11v6M9.5 14.5 12 17l2.5-2.5"/>'
+    };
+    return `<svg class="${className}" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${icons[name] || ""}</svg>`;
+  }
   function truncate(value, length = 100) { const text = String(value || ""); return text.length > length ? `${text.slice(0, length - 1)}…` : text; }
   function formatDateTime(value) { return value ? new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(value)) : ""; }
   function formatTime(value) { return value ? new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit" }).format(new Date(value)) : ""; }
@@ -1368,18 +1376,38 @@
     const chantier = currentChantier();
     if (!chantier) return;
     const scope = app.printScope || {};
-    const period = scope.from || scope.to ? `Période : ${scope.from ? new Intl.DateTimeFormat("fr-FR").format(new Date(`${scope.from}T12:00:00`)) : "Début"} – ${scope.to ? new Intl.DateTimeFormat("fr-FR").format(new Date(`${scope.to}T12:00:00`)) : "Aujourd’hui"}` : "Période : intégralité du journal";
+    const printDate = new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "long", year: "numeric" }).format(new Date());
+    const period = scope.from || scope.to ? `Période : ${scope.from ? new Intl.DateTimeFormat("fr-FR").format(new Date(`${scope.from}T12:00:00`)) : "Début"} - ${scope.to ? new Intl.DateTimeFormat("fr-FR").format(new Date(`${scope.to}T12:00:00`)) : "Aujourd’hui"}` : "Période : intégralité du journal";
     const inPeriod = value => {
       const date = new Date(value || 0);
       if (scope.from && date < new Date(`${scope.from}T00:00:00`)) return false;
       if (scope.to && date > new Date(`${scope.to}T23:59:59.999`)) return false;
       return true;
     };
+    const messages = filteredMessages();
+    const messageAttachments = messages.flatMap(message => message.deleted_at ? [] : (message.attachments || []));
+    const photos = messageAttachments.filter(fileIsImage);
+    const messageFiles = messageAttachments.filter(item => !fileIsImage(item));
     const actions = activeActionsFor(chantier.id);
     const dailyLogs = activeDailyLogsFor(chantier.id).filter(log => inPeriod(log.log_date ? `${log.log_date}T12:00:00` : log.created_at));
     const activeRisks = activeRisksFor(chantier.id).filter(risk => risk.status !== "traite");
-    const pilotage = scope.include_pilotage ? `<dl class="print-pilotage-summary"><div><dt>Journées consignées</dt><dd>${dailyLogs.length}</dd></div><div><dt>Actions ouvertes</dt><dd>${actions.filter(action => action.status !== "terminee").length}</dd></div><div><dt>Actions en retard</dt><dd>${actions.filter(actionIsLate).length}</dd></div><div><dt>Vigilances ouvertes</dt><dd>${activeRisks.length}</dd></div></dl>` : "";
-    els.printCover.innerHTML = `<h1>Journal de chantier – ${escapeHtml(chantier.name)}</h1><p>${escapeHtml([chantier.code && `Code : ${chantier.code}`, chantier.location && `Localisation : ${chantier.location}`, period, `Édité le ${formatDateTime(nowIso())}`].filter(Boolean).join(" · "))}</p><p class="print-note">Historique chronologique des discussions, photos et documents du chantier.</p>${pilotage}`;
+    const libraryDocuments = (app.documents || []).filter(documentItem => String(documentItem.chantier_id) === String(chantier.id) && !documentItem.deleted_at)
+      .sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0));
+    const openActions = actions.filter(action => action.status !== "terminee");
+    const lateActions = openActions.filter(actionIsLate);
+    const participants = new Set(messages.map(message => String(message.author_name || "").trim()).filter(Boolean));
+    const includesPilotage = scope.include_pilotage === true || scope.include_pilotage === "on";
+    const documentPath = documentItem => documentAncestors(documentFolderById(documentItem.folder_id)).map(folder => folder.name).filter(Boolean).join(" › ") || "Bibliothèque documentaire";
+    const recordStats = [
+      [messages.length, "événements consignés", "primary"],
+      [photos.length, "photos dans l'historique", "rose"],
+      [libraryDocuments.length, "documents classés", "olive"],
+      [participants.size, "intervenants", "dark"]
+    ];
+    if (includesPilotage) recordStats.push([openActions.length, "actions ouvertes", lateActions.length ? "warning" : "green"], [dailyLogs.length, "journées consignées", "blue"], [activeRisks.length, "vigilances ouvertes", activeRisks.length ? "warning" : "green"]);
+    const pilotage = includesPilotage ? `<section class="print-pilotage-panel"><div><span>Suivi opérationnel</span><h3>Repères de pilotage</h3><p>Les indicateurs ci-dessous reprennent la situation à la date de l’édition.</p></div><div class="print-pilotage-summary"><div><dt>Actions ouvertes</dt><dd>${openActions.length}</dd></div><div><dt>Actions en retard</dt><dd>${lateActions.length}</dd></div><div><dt>Vigilances ouvertes</dt><dd>${activeRisks.length}</dd></div><div><dt>Journées consignées</dt><dd>${dailyLogs.length}</dd></div></div></section>` : "";
+    const documentRegister = libraryDocuments.length ? `<section class="print-document-register"><div class="print-register-heading"><div><span>Référentiel documentaire</span><h3>Documents classés</h3><p>Liste des documents disponibles dans les espaces Sécurité, Plans et Documents qualité.</p></div><b>${libraryDocuments.length} document${libraryDocuments.length > 1 ? "s" : ""}</b></div><table><thead><tr><th>Déposé le</th><th>Document</th><th>Classement</th><th>Indice</th></tr></thead><tbody>${libraryDocuments.map(documentItem => `<tr><td>${escapeHtml(formatSimpleDate(documentItem.created_at))}</td><td><b>${escapeHtml(documentItem.file_name || "Document")}</b>${documentItem.description ? `<small>${escapeHtml(truncate(documentItem.description, 145))}</small>` : ""}</td><td>${escapeHtml(documentPath(documentItem))}</td><td>${escapeHtml(documentItem.version_label || "-")}</td></tr>`).join("")}</tbody></table></section>` : "";
+    els.printCover.innerHTML = `<section class="print-book-cover"><div class="print-cover-topline"><div class="print-cover-brand"><img src="journal-chantier-logo-v14.png" alt=""><span><b>Journal chantier</b><small>Carnet d'opérations</small></span></div><span class="print-cover-edition">Édition du ${escapeHtml(printDate)}</span></div><div class="print-cover-main"><span class="print-cover-kicker">Historique de chantier</span><h1>${escapeHtml(chantier.name || "Chantier sans nom")}</h1><p>${escapeHtml(chantier.code ? `Chantier ${chantier.code}` : "Journal partagé sécurisé")}</p></div><dl class="print-cover-metadata"><div><dt>Localisation</dt><dd>${escapeHtml(chantier.location || "Non renseignée")}</dd></div><div><dt>Période couverte</dt><dd>${escapeHtml(period.replace(/^Période : /, ""))}</dd></div><div><dt>Édité le</dt><dd>${escapeHtml(formatDateTime(nowIso()))}</dd></div></dl><div class="print-cover-foot"><span>Messagerie, photos, actions et documentation</span><span>Document de suivi interne</span></div></section><section class="print-book-opening"><div class="print-opening-title"><span>01 · Repères du dossier</span><h2>Vue d’ensemble</h2><p>Cette édition rassemble l’historique chronologique du chantier, les pièces jointes et le référentiel documentaire associé.</p></div><div class="print-record-stats">${recordStats.map(([value, label, tone]) => `<div class="${tone}"><b>${escapeHtml(value)}</b><span>${escapeHtml(label)}</span></div>`).join("")}</div>${pilotage}${documentRegister}</section><section class="print-history-heading"><span>02 · Chronologie du chantier</span><h2>Journal des événements</h2><p>${escapeHtml(`${messages.length} événement${messages.length > 1 ? "s" : ""} · ${photos.length} photo${photos.length > 1 ? "s" : ""} · ${messageFiles.length} fichier${messageFiles.length > 1 ? "s" : ""}`)}</p></section>`;
   }
   function renderAccessControls() {
     const hasGlobalRights = !isCloudReady() || isJournalAdmin();
@@ -1391,10 +1419,10 @@
     els.mobileAdminDashboardBtn.hidden = !isJournalOwner();
     if (isCloudReady() && isJournalAdmin()) {
       els.inviteBtn.title = "Gérer les demandes d’accès";
-      els.inviteBtn.innerHTML = `♙ <span>Demandes${app.access.pendingRequests ? ` (${app.access.pendingRequests})` : ""}</span>`;
+      els.inviteBtn.innerHTML = `${iconSvg("user-plus")}<span>Demandes${app.access.pendingRequests ? ` (${app.access.pendingRequests})` : ""}</span>`;
     } else {
       els.inviteBtn.title = "Inviter un interlocuteur";
-      els.inviteBtn.innerHTML = "♙ <span>Inviter</span>";
+      els.inviteBtn.innerHTML = `${iconSvg("user-plus")}<span>Inviter</span>`;
     }
   }
   function renderAll(options) { renderProfile(); renderConnection(); renderAccessControls(); renderSidebar(); renderHeader(); renderPinnedMessages(); renderMessages(options); renderPlans(); renderActions(); renderPilotage(); renderPrintCover(); }
@@ -1598,7 +1626,7 @@
     openModal({
       title: "Annoter la photo",
       subtitle: "Trace, entoure ou souligne avant l’envoi. L’original reste uniquement sur cet appareil tant que tu n’envoies pas.",
-      body: `<div class="annotation-tools"><label>Couleur <input id="annotationColor" type="color" value="#d10073"></label><label>Épaisseur <input id="annotationWidth" type="range" min="2" max="18" value="5"></label></div><canvas id="annotationCanvas" class="annotation-canvas" aria-label="Zone d’annotation de la photo"></canvas><p class="form-note" id="annotationHint">Chargement de la photo…</p>`,
+      body: `<div class="annotation-tools"><label>Couleur <input id="annotationColor" type="color" value="#d52845"></label><label>Épaisseur <input id="annotationWidth" type="range" min="2" max="18" value="5"></label></div><canvas id="annotationCanvas" class="annotation-canvas" aria-label="Zone d’annotation de la photo"></canvas><p class="form-note" id="annotationHint">Chargement de la photo…</p>`,
       footer: `<button class="secondary-button" id="cancelAnnotation">Annuler</button><button class="primary-button" id="saveAnnotation" disabled>Utiliser la photo annotée</button>`, wide: true
     });
     const canvas = $("annotationCanvas"), context = canvas.getContext("2d"), color = $("annotationColor"), width = $("annotationWidth"), hint = $("annotationHint"), save = $("saveAnnotation");
@@ -2705,7 +2733,7 @@
     openModal({
       title: "Ajout rapide terrain",
       subtitle: "Consigne une information, une alerte ou une photo sans quitter le chantier.",
-      body: `<form id="quickAddForm" class="form-grid"><label class="form-field">Type<select name="message_type"><option value="Info">Information</option><option value="Journal">Journal / poste</option><option value="Sécurité">Sécurité</option><option value="Incident">Incident / vigilance</option><option value="Avancement">Avancement</option><option value="Aléa">Aléa</option><option value="Coactivité">Coactivité</option><option value="Décision">Décision</option></select></label><label class="form-field">Zone / voie / PK<input name="zone" placeholder="Ex. V2M – PK 80,190"></label><label class="form-field span-2">Information *<textarea name="body" required placeholder="Décris le fait constaté, l’action menée ou la consigne."></textarea></label><label class="form-field span-2">Photo / fichier (facultatif)<input name="file" type="file" accept="image/*,application/pdf,.pdf,.doc,.docx" capture="environment"><small>Une photo prise depuis le téléphone s’ouvre directement ici.</small></label><label class="form-field span-2"><span><input name="is_important" type="checkbox"> Épingler comme information permanente</span></label></form>`,
+      body: `<div class="quick-add-intro"><span>${iconSvg("field-note")}</span><div><b>Consignation terrain</b><p>Un fait, une alerte ou une photo est ajouté au fil du chantier avec sa zone et sa date.</p></div></div><form id="quickAddForm" class="form-grid"><label class="form-field">Type<select name="message_type"><option value="Info">Information</option><option value="Journal">Journal / poste</option><option value="Sécurité">Sécurité</option><option value="Incident">Incident / vigilance</option><option value="Avancement">Avancement</option><option value="Aléa">Aléa</option><option value="Coactivité">Coactivité</option><option value="Décision">Décision</option></select></label><label class="form-field">Zone / voie / PK<input name="zone" placeholder="Ex. V2M – PK 80,190"></label><label class="form-field span-2">Information *<textarea name="body" required placeholder="Décris le fait constaté, l’action menée ou la consigne."></textarea></label><label class="form-field span-2">Photo / fichier (facultatif)<input name="file" type="file" accept="image/*,application/pdf,.pdf,.doc,.docx" capture="environment"><small>Une photo prise depuis le téléphone s’ouvre directement ici.</small></label><label class="form-field span-2"><span><input name="is_important" type="checkbox"> Épingler comme information permanente</span></label></form>`,
       footer: `<button class="secondary-button" id="cancelQuickAdd">Annuler</button><button class="primary-button" id="saveQuickAdd">Ajouter au journal</button>`
     });
     $("cancelQuickAdd").addEventListener("click", closeModal);
@@ -2723,10 +2751,10 @@
   function openExportDialog() {
     if (!currentChantier()) return openNewChantierDialog();
     openModal({
-      title: "Exporter le journal",
-      subtitle: "Le PDF reprend les messages, photos et la liste des documents dans l’ordre chronologique.",
-      body: `<form id="exportForm" class="form-grid"><p class="form-note span-2">Par défaut, l’impression contient <b>toute la discussion du chantier</b>. À l’étape suivante, sélectionne « Enregistrer au format PDF » dans l’écran d’impression du téléphone ou du navigateur.</p><label class="form-field">Du<input name="from" type="date"></label><label class="form-field">Au<input name="to" type="date"></label><label class="form-field span-2">Contenu<select name="scope"><option value="all">Tous les messages</option><option value="important">Messages importants uniquement</option></select></label><label class="form-field span-2"><span><input name="include_pilotage" type="checkbox" checked> Ajouter une synthèse de pilotage en première page</span></label></form>`,
-      footer: `<button class="secondary-button" id="cancelExport">Annuler</button><button class="primary-button" id="runExport">Imprimer / PDF</button>`
+      title: "Créer le carnet PDF",
+      subtitle: "Une édition structurée du chantier, prête à archiver ou à transmettre.",
+      body: `<div class="export-book-preview"><span>${iconSvg("book-export")}</span><div><b>Un véritable carnet de chantier</b><p>Couverture, repères chiffrés, registre documentaire, photos et chronologie sont mis en page automatiquement.</p></div></div><form id="exportForm" class="form-grid"><p class="form-note span-2">Le carnet contient <b>toute la discussion du chantier</b> et la liste des documents classés. À l’étape suivante, sélectionne « Enregistrer au format PDF » dans l’écran d’impression du téléphone ou du navigateur.</p><label class="form-field">Du<input name="from" type="date"></label><label class="form-field">Au<input name="to" type="date"></label><label class="form-field span-2">Contenu<select name="scope"><option value="all">Tous les messages</option><option value="important">Messages importants uniquement</option></select></label><label class="form-field span-2"><span><input name="include_pilotage" type="checkbox" checked> Ajouter les indicateurs de pilotage dans le carnet</span></label></form>`,
+      footer: `<button class="secondary-button" id="cancelExport">Annuler</button><button class="primary-button" id="runExport">Créer le PDF</button>`
     });
     $("cancelExport").addEventListener("click", closeModal);
     $("runExport").addEventListener("click", () => {

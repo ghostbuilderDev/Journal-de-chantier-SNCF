@@ -1,11 +1,11 @@
-const CACHE_NAME = "journal-chantier-connecte-v13.3.1-docs";
+const CACHE_NAME = "journal-chantier-connecte-v13.3.2-rj-pdf";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./styles-v13.css?v=13.3.1-docs",
-  "./app-v13.js?v=13.3.1-docs",
-  "./supabase.js?v=13.3.1-docs",
-  "./config.js?v=13.3.1-docs",
+  "./styles-v13.css?v=13.3.2-rj",
+  "./app-v13.js?v=13.3.2-rj",
+  "./supabase.js?v=13.3.2-rj",
+  "./config.js?v=13.3.2-rj",
   "./manifest.webmanifest",
   "./journal-chantier-logo-v14.png"
 ];

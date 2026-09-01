@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#82005a">
+  <meta name="theme-color" content="#b5122b">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -11,11 +11,11 @@
   <link rel="icon" href="journal-chantier-logo-v14.png" type="image/png">
   <title>Journal Chantier Connecté</title>
   <!-- Bibliothèque Supabase embarquée : elle ne dépend plus d’un CDN bloqué sur le réseau terrain. -->
-  <script src="supabase.js?v=13.3.1-docs" defer></script>
+  <script src="supabase.js?v=13.3.2-rj" defer></script>
   <!-- config.js est le seul fichier de configuration public, partagé par tous les appareils. -->
-  <script src="config.js?v=13.3.1-docs" defer></script>
-  <link rel="stylesheet" href="styles-v13.css?v=13.3.1-docs">
-  <script src="app-v13.js?v=13.3.1-docs" defer></script>
+  <script src="config.js?v=13.3.2-rj" defer></script>
+  <link rel="stylesheet" href="styles-v13.css?v=13.3.2-rj">
+  <script src="app-v13.js?v=13.3.2-rj" defer></script>
 </head>
 <body>
   <div class="app-shell" id="appShell">
@@ -29,7 +29,7 @@
         <button class="icon-button sidebar-close" id="closeSidebarBtn" aria-label="Fermer les chantiers">×</button>
       </div>
 
-      <button class="primary-button new-site-button" id="newChantierBtn">＋ Nouveau chantier</button>
+        <button class="primary-button new-site-button" id="newChantierBtn"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg> Nouveau chantier</button>
 
       <div class="sidebar-search">
         <span aria-hidden="true">⌕</span>
@@ -47,7 +47,7 @@
         </button>
         <!-- Sur mobile, les commandes d'administration restent accessibles ici.
              Le bouton ne devient visible que pour le rôle propriétaire. -->
-        <button class="sidebar-admin-button" id="mobileAdminDashboardBtn" hidden>⚙ Administration du journal</button>
+        <button class="sidebar-admin-button" id="mobileAdminDashboardBtn" hidden><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6v5.2c0 4.5 3.1 8.6 7.5 9.8 4.4-1.2 7.5-5.3 7.5-9.8V6L12 3Z"/><path d="m8.8 12 2.1 2.1 4.4-4.4"/></svg> Administration du journal</button>
         <div class="connection-line" id="connectionLine"><span class="status-dot offline"></span><span id="connectionText">Connexion au journal</span></div>
       </div>
     </aside>
@@ -60,11 +60,11 @@
           <span class="site-heading-copy"><b id="siteName">Choisissez un chantier</b><small id="siteMeta">Journal partagé sécurisé</small></span>
         </button>
         <div class="topbar-tools">
-          <button class="tool-button hide-small" id="adminDashboardBtn" title="Administrer les comptes" hidden>⚙ <span>Administration</span></button>
-          <button class="tool-button hide-small" id="inviteBtn" title="Inviter un interlocuteur">♙ <span>Inviter</span></button>
-          <button class="tool-button hide-small" id="notificationBtn" title="Activer les notifications">♧ <span>Alertes</span></button>
-          <button class="tool-button quick-add-tool" id="quickAddBtn" title="Ajouter une information terrain">＋ <span>Terrain</span></button>
-          <button class="tool-button primary-tool" id="exportBtn" title="Imprimer ou enregistrer le journal PDF">▣ <span>Exporter</span></button>
+          <button class="tool-button hide-small" id="adminDashboardBtn" title="Administrer les comptes" hidden><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6v5.2c0 4.5 3.1 8.6 7.5 9.8 4.4-1.2 7.5-5.3 7.5-9.8V6L12 3Z"/><path d="m8.8 12 2.1 2.1 4.4-4.4"/></svg><span>Administration</span></button>
+          <button class="tool-button hide-small" id="inviteBtn" title="Inviter un interlocuteur"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3.5 20c.7-3.5 2.5-5.2 5.5-5.2s4.8 1.7 5.5 5.2M18 8v6M15 11h6"/></svg><span>Inviter</span></button>
+          <button class="tool-button hide-small" id="notificationBtn" title="Activer les notifications"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg><span>Alertes</span></button>
+          <button class="tool-button quick-add-tool" id="quickAddBtn" title="Ajouter une information terrain"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.4"/><path d="M18.5 18.5v4M16.5 20.5h4"/></svg><span>Terrain</span></button>
+          <button class="tool-button primary-tool" id="exportBtn" title="Créer le carnet PDF du chantier"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8L14 2Z"/><path d="M14 2v6h6M12 11v6M9.5 14.5 12 17l2.5-2.5"/></svg><span>Exporter</span></button>
           <button class="icon-button more-button" id="siteMenuBtn" aria-label="Options du chantier">⋮</button>
         </div>
       </header>
@@ -75,10 +75,10 @@
       </section>
 
       <nav class="tabs" aria-label="Espaces du chantier">
-        <button class="tab active" data-tab="chat"><span>▰</span> Discussion <small id="messageCount">0</small></button>
-        <button class="tab" data-tab="plans"><span>▱</span> Documentation <small id="planCount">0</small></button>
-        <button class="tab" data-tab="actions"><span>✓</span> Actions <small id="actionCount">0</small></button>
-        <button class="tab" data-tab="pilotage"><span>◈</span> Pilotage <small id="pilotageCount">0</small></button>
+        <button class="tab active" data-tab="chat"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a7.4 7.4 0 0 1-8 7.4 8.4 8.4 0 0 1-3.2-.7L4 20l1.5-4.1A7.4 7.4 0 0 1 4 11.5a8 8 0 0 1 16 0Z"/><path d="M8 11h.01M12 11h.01M16 11h.01"/></svg> Discussion <small id="messageCount">0</small></button>
+        <button class="tab" data-tab="plans"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H10l2 2h5.5A2.5 2.5 0 0 1 20 7.5v10A2.5 2.5 0 0 1 17.5 20h-11A2.5 2.5 0 0 1 4 17.5v-12Z"/><path d="M8 12h8M8 16h5"/></svg> Documentation <small id="planCount">0</small></button>
+        <button class="tab" data-tab="actions"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="m8.5 12.2 2.2 2.2 4.9-4.9"/></svg> Actions <small id="actionCount">0</small></button>
+        <button class="tab" data-tab="pilotage"><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/><path d="M3 20h18"/></svg> Pilotage <small id="pilotageCount">0</small></button>
       </nav>
 
       <section class="content-area">

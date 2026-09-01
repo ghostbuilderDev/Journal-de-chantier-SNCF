@@ -5,8 +5,8 @@
   "lang": "fr",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#f4f6f8",
-  "theme_color": "#82005a",
+  "background_color": "#f5f7fa",
+  "theme_color": "#b5122b",
   "icons": [
     {
       "src": "journal-chantier-logo-v14.png",
