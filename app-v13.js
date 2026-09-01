@@ -63,7 +63,7 @@
     composerMetaBtn: $("composerMetaBtn"), composerToolsBtn: $("composerToolsBtn"), composerToolTray: $("composerToolTray"), messageType: $("messageType"), messageZone: $("messageZone"),
     messageImportant: $("messageImportant"), replyPreview: $("replyPreview"), attachmentPreview: $("attachmentPreview"),
     fileInput: $("fileInput"), cameraInput: $("cameraInput"), messageInput: $("messageInput"), pinnedMessages: $("pinnedMessages"),
-    documentHeaderActions: $("documentHeaderActions"), documentSecurityNote: $("documentSecurityNote"), documentBreadcrumb: $("documentBreadcrumb"), bulkImportBtn: $("bulkImportBtn"),
+    documentHeaderActions: $("documentHeaderActions"), documentSecurityNote: $("documentSecurityNote"), documentBreadcrumb: $("documentBreadcrumb"), bulkImportBtn: $("bulkImportBtn"), addRootFolderBtn: $("addRootFolderBtn"),
     documentFolderGrid: $("documentFolderGrid"), documentFileGrid: $("documentFileGrid"),
     actionSummary: $("actionSummary"), actionBoard: $("actionBoard"), printCover: $("printCover"),
     pilotageSummary: $("pilotageSummary"), pilotageAlerts: $("pilotageAlerts"), dailyLogList: $("dailyLogList"), riskList: $("riskList"),
@@ -198,7 +198,9 @@
     const icons = {
       "user-plus": '<circle cx="9" cy="8" r="3"/><path d="M3.5 20c.7-3.5 2.5-5.2 5.5-5.2s4.8 1.7 5.5 5.2M18 8v6M15 11h6"/>',
       "field-note": '<path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.4"/><path d="M18.5 18.5v4M16.5 20.5h4"/>',
-      "book-export": '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8L14 2Z"/><path d="M14 2v6h6M12 11v6M9.5 14.5 12 17l2.5-2.5"/>'
+      "book-export": '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2-2V8L14 2Z"/><path d="M14 2v6h6M12 11v6M9.5 14.5 12 17l2.5-2.5"/>',
+      "folder-plan": '<path d="M3.5 6.5A2.5 2.5 0 0 1 6 4h4l2 2h6A2.5 2.5 0 0 1 20.5 8.5v9A2.5 2.5 0 0 1 18 20H6a2.5 2.5 0 0 1-2.5-2.5v-11Z"/><path d="m8 15 2.5-2.5 2 1.7 3.5-3.5M15.5 10.7h1.8v1.8"/>',
+      "folder": '<path d="M3.5 6.5A2.5 2.5 0 0 1 6 4h4l2 2h6A2.5 2.5 0 0 1 20.5 8.5v9A2.5 2.5 0 0 1 18 20H6a2.5 2.5 0 0 1-2.5-2.5v-11Z"/>'
     };
     return `<svg class="${className}" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${icons[name] || ""}</svg>`;
   }
@@ -901,9 +903,16 @@
   function documentRootMeta(rootCode) {
     return ({
       securite: { icon: "🦺", label: "Sécurité", description: "Consignes, analyses de risques, briefings et autorisations." },
-      plans: { icon: "▱", label: "Plans", description: "Plans d’exécution, schémas, relevés et études." },
-      qualite: { icon: "✓", label: "Documents qualité", description: "Contrôles, procédures, fiches et preuves qualité." }
-    })[rootCode] || { icon: "▰", label: "Dossier", description: "Documents du chantier." };
+      plans: { icon: "folder-plan", label: "Plans", description: "Plans d’exécution, schémas, relevés et études." },
+      qualite: { icon: "✓", label: "Documents qualité", description: "Contrôles, procédures, fiches et preuves qualité." },
+      personnalise: { icon: "folder", label: "Dossier", description: "Documents du chantier." }
+    })[rootCode] || { icon: "folder", label: "Dossier", description: "Documents du chantier." };
+  }
+  function isCoreDocumentRoot(folder) { return Boolean(folder?.is_root && ["securite", "plans", "qualite"].includes(folder.root_code)); }
+  function documentFolderIconMarkup(folder) {
+    const meta = documentRootMeta(folder.root_code);
+    if (meta.icon === "folder-plan" || meta.icon === "folder") return iconSvg(meta.icon, "document-folder-svg");
+    return escapeHtml(folder.is_root ? meta.icon : "▰");
   }
   function documentFolderById(id) { return (app.documentFolders || []).find(folder => String(folder.id) === String(id)) || null; }
   function currentDocumentFolder() { return documentFolderById(app.documentViewFolderId); }
@@ -973,7 +982,8 @@
     const children = documentFoldersAt(folder.id).length;
     const files = documentsAt(folder.id).length;
     const isRoot = Boolean(folder.is_root);
-    return `<article class="document-folder-card ${isRoot ? `root-${escapeHtml(folder.root_code)}` : ""}"><button class="document-folder-open" data-action="open-document-folder" data-folder-id="${escapeHtml(folder.id)}"><span class="document-folder-icon">${escapeHtml(isRoot ? meta.icon : "▰")}</span><span class="document-folder-copy"><b>${escapeHtml(folder.name || meta.label)}</b><small>${escapeHtml(isRoot ? meta.description : `${children} sous-dossier${children > 1 ? "s" : ""} · ${files} document${files > 1 ? "s" : ""}`)}</small></span><span class="document-folder-chevron" aria-hidden="true">›</span></button>${canManageDocuments() ? `<button class="document-card-menu" data-action="document-folder-menu" data-folder-id="${escapeHtml(folder.id)}" aria-label="Gérer le dossier">⋮</button>` : ""}</article>`;
+    const description = isRoot && !isCoreDocumentRoot(folder) ? `${children} sous-dossier${children > 1 ? "s" : ""} · ${files} document${files > 1 ? "s" : ""}` : (isRoot ? meta.description : `${children} sous-dossier${children > 1 ? "s" : ""} · ${files} document${files > 1 ? "s" : ""}`);
+    return `<article class="document-folder-card ${isRoot ? `root-${escapeHtml(folder.root_code)}` : ""}"><button class="document-folder-open" data-action="open-document-folder" data-folder-id="${escapeHtml(folder.id)}"><span class="document-folder-icon">${documentFolderIconMarkup(folder)}</span><span class="document-folder-copy"><b>${escapeHtml(folder.name || meta.label)}</b><small>${escapeHtml(description)}</small></span><span class="document-folder-chevron" aria-hidden="true">›</span></button>${canManageDocuments() ? `<button class="document-card-menu" data-action="document-folder-menu" data-folder-id="${escapeHtml(folder.id)}" aria-label="Gérer le dossier">⋮</button>` : ""}</article>`;
   }
   function documentFileCard(documentItem) {
     const detail = [documentItem.version_label && `Indice ${documentItem.version_label}`, formatBytes(documentItem.bytes), documentItem.created_by_name, formatDateTime(documentItem.created_at)].filter(Boolean).join(" · ");
@@ -1008,7 +1018,11 @@
     const folders = documentFoldersAt(folder?.id || null);
     const files = folder ? documentsAt(folder.id) : [];
     const isManager = canManageDocuments();
-    els.documentHeaderActions.hidden = !isManager || !folder;
+    els.documentHeaderActions.hidden = !isManager;
+    els.bulkImportBtn.hidden = !folder;
+    $("addFolderBtn").hidden = !folder;
+    $("addPlanBtn").hidden = !folder;
+    els.addRootFolderBtn.hidden = Boolean(folder);
     els.documentSecurityNote.hidden = false;
     els.documentSecurityNote.classList.toggle("read-only", !isManager);
     els.documentSecurityNote.innerHTML = isManager
@@ -1056,6 +1070,35 @@
         }
         closeModal();
         toast("Sous-dossier créé.", "success");
+      } catch (error) { toast(`Création impossible : ${friendlyError(error)}`, "error"); }
+    });
+  }
+  function openDocumentRootFolderDialog() {
+    const chantier = currentChantier();
+    if (!chantier) return toast("Sélectionne d’abord un chantier.", "warning");
+    if (!canManageDocuments()) return toast("Seuls les administrateurs peuvent créer un dossier principal.", "error");
+    openModal({
+      title: "Créer un dossier principal",
+      subtitle: "Ce nouveau menu apparaîtra avec Sécurité, Plans et Documents qualité.",
+      body: `<form id="documentRootFolderForm" class="form-grid one"><p class="form-note"><b>Rubrique libre.</b><br>Exemples : Marchés, Réunions, Matériel, Environnement ou Photos de réception.</p><label class="form-field">Nom du dossier principal *<input name="name" required maxlength="120" placeholder="Ex. Réunions de chantier"></label></form>`,
+      footer: `<button class="secondary-button" id="cancelDocumentRootFolder">Annuler</button><button class="primary-button" id="saveDocumentRootFolder">Créer le dossier</button>`
+    });
+    $("cancelDocumentRootFolder").addEventListener("click", closeModal);
+    $("saveDocumentRootFolder").addEventListener("click", async () => {
+      const form = $("documentRootFolderForm");
+      if (!form.reportValidity()) return;
+      const name = String(new FormData(form).get("name") || "").trim();
+      try {
+        if (isCloudReady()) {
+          const { error } = await app.db.rpc("create_chantier_document_root_folder", { p_chantier_id: chantier.id, p_name: name });
+          if (error) throw error;
+          await refreshCloudCurrent();
+        } else {
+          const newFolder = { id: makeId(), chantier_id: chantier.id, parent_id: null, root_code: "personnalise", name, is_root: true, created_by: ownId(), created_by_name: ownName(), created_at: nowIso(), updated_at: nowIso() };
+          app.local.documentFolders.push(newFolder); app.documentFolders = app.local.documentFolders; saveLocalData(); renderPlans();
+        }
+        closeModal();
+        toast("Dossier principal créé.", "success");
       } catch (error) { toast(`Création impossible : ${friendlyError(error)}`, "error"); }
     });
   }
@@ -1143,26 +1186,86 @@
     }
     return target;
   }
+  function bulkImportSource(file, relativePath = "") { return { file, relativePath: String(relativePath || file?.webkitRelativePath || file?.name || "") }; }
+  function mergeBulkImportSources(current, incoming) {
+    const seen = new Set(current.map(item => `${item.relativePath}|${item.file.size}|${item.file.lastModified}`));
+    return current.concat(incoming.filter(item => {
+      const key = `${item.relativePath}|${item.file.size}|${item.file.lastModified}`;
+      if (seen.has(key)) return false;
+      seen.add(key); return true;
+    }));
+  }
+  function readDroppedDirectoryEntries(reader) {
+    const entries = [];
+    return new Promise((resolve, reject) => {
+      const read = () => reader.readEntries(batch => {
+        if (!batch.length) return resolve(entries);
+        entries.push(...batch); read();
+      }, reject);
+      read();
+    });
+  }
+  async function collectDroppedDocumentSources(dataTransfer) {
+    const entries = [...(dataTransfer?.items || [])].map(item => item.webkitGetAsEntry?.()).filter(Boolean);
+    if (!entries.length) return [...(dataTransfer?.files || [])].map(file => bulkImportSource(file));
+    const sources = [];
+    async function visit(entry, prefix = "") {
+      const relative = `${prefix}${entry.name || ""}`;
+      if (entry.isFile) {
+        const file = await new Promise((resolve, reject) => entry.file(resolve, reject));
+        sources.push(bulkImportSource(file, relative));
+      } else if (entry.isDirectory) {
+        const children = await readDroppedDirectoryEntries(entry.createReader());
+        await Promise.all(children.map(child => visit(child, `${relative}/`)));
+      }
+    }
+    await Promise.all(entries.map(entry => visit(entry)));
+    return sources;
+  }
+  function renderBulkImportSelection(sources) {
+    const count = sources.length;
+    const status = $("bulkDropStatus");
+    if (!status) return;
+    status.innerHTML = count
+      ? `<b>${count} élément${count > 1 ? "s" : ""} prêt${count > 1 ? "s" : ""} à importer</b><span>${escapeHtml(sources.slice(0, 3).map(item => item.file.name).join(" · "))}${count > 3 ? "…" : ""}</span>`
+      : `<b>Dépose les documents ici</b><span>Tu peux déposer des fichiers, plusieurs fichiers ou un dossier complet.</span>`;
+  }
   function openBulkDocumentImportDialog() {
     const parent = currentDocumentFolder();
     if (!parent) return toast("Ouvre d’abord le dossier de destination.", "warning");
     if (!canManageDocuments()) return toast("Seuls les administrateurs peuvent importer des documents.", "error");
     openModal({
       title: "Import groupé de documents", subtitle: `Destination : ${parent.name}`,
-      body: `<form id="bulkDocumentImportForm" class="form-grid one"><p class="form-note"><b>Import intelligent.</b><br>Ajoute autant de fichiers que nécessaire et/ou un dossier complet. L’arborescence du dossier est recréée automatiquement dans la bibliothèque.</p><label class="form-field">Fichiers à importer<input name="files" type="file" multiple></label><label class="form-field">Dossier complet à importer<input name="folderFiles" type="file" multiple webkitdirectory directory></label><label class="form-field">Indice / version commun (facultatif)<input name="version_label" maxlength="80" placeholder="Ex. Indice C"></label><label class="form-field">Description commune (facultative)<textarea name="description" maxlength="1200" placeholder="Ex. Dossier transmis par l’entreprise le 01/09/2026"></textarea></label><div class="setup-result" id="bulkDocumentImportResult" aria-live="polite"></div></form>`,
+      body: `<form id="bulkDocumentImportForm" class="form-grid one"><p class="form-note"><b>Import intelligent.</b><br>L’arborescence du dossier déposé est recréée automatiquement dans la bibliothèque.</p><input id="bulkFilesInput" name="files" type="file" multiple hidden><input id="bulkFolderInput" name="folderFiles" type="file" multiple webkitdirectory directory hidden><div class="document-drop-zone" id="bulkDocumentDropZone" tabindex="0" role="button" aria-label="Déposer des documents ou sélectionner des fichiers"><span class="document-drop-zone-icon">${iconSvg("folder-plan", "drop-zone-svg")}</span><div id="bulkDropStatus"><b>Dépose les documents ici</b><span>Tu peux déposer des fichiers, plusieurs fichiers ou un dossier complet.</span></div><div class="document-drop-zone-actions"><button type="button" class="secondary-button" id="selectBulkFiles">Choisir des fichiers</button><button type="button" class="secondary-button" id="selectBulkFolder">Choisir un dossier</button></div></div><label class="form-field">Indice / version commun (facultatif)<input name="version_label" maxlength="80" placeholder="Ex. Indice C"></label><label class="form-field">Description commune (facultative)<textarea name="description" maxlength="1200" placeholder="Ex. Dossier transmis par l’entreprise le 01/09/2026"></textarea></label><div class="setup-result" id="bulkDocumentImportResult" aria-live="polite"></div></form>`,
       footer: `<button class="secondary-button" id="cancelBulkDocumentImport">Annuler</button><button class="primary-button" id="startBulkDocumentImport">Importer</button>`, wide: true
     });
+    let sources = [];
+    const addSources = incoming => { sources = mergeBulkImportSources(sources, incoming); renderBulkImportSelection(sources); };
+    const filesInput = $("bulkFilesInput"), folderInput = $("bulkFolderInput"), dropZone = $("bulkDocumentDropZone");
     $("cancelBulkDocumentImport").addEventListener("click", closeModal);
+    $("selectBulkFiles").addEventListener("click", () => filesInput.click());
+    $("selectBulkFolder").addEventListener("click", () => folderInput.click());
+    dropZone.addEventListener("click", event => { if (!event.target.closest("button")) filesInput.click(); });
+    dropZone.addEventListener("keydown", event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); filesInput.click(); } });
+    filesInput.addEventListener("change", () => { addSources([...filesInput.files].map(file => bulkImportSource(file))); filesInput.value = ""; });
+    folderInput.addEventListener("change", () => { addSources([...folderInput.files].map(file => bulkImportSource(file))); folderInput.value = ""; });
+    ["dragenter", "dragover"].forEach(type => dropZone.addEventListener(type, event => { event.preventDefault(); dropZone.classList.add("is-dragging"); }));
+    ["dragleave", "drop"].forEach(type => dropZone.addEventListener(type, event => { event.preventDefault(); dropZone.classList.remove("is-dragging"); }));
+    dropZone.addEventListener("drop", async event => {
+      try { addSources(await collectDroppedDocumentSources(event.dataTransfer)); }
+      catch (error) { toast(`Lecture du dépôt impossible : ${friendlyError(error)}`, "error"); }
+    });
     $("startBulkDocumentImport").addEventListener("click", async () => {
       const form = $("bulkDocumentImportForm"), button = $("startBulkDocumentImport"), result = $("bulkDocumentImportResult");
-      const files = [...(form.elements.files.files || []), ...(form.elements.folderFiles.files || [])]; if (!files.length) return toast("Choisis au moins un fichier ou un dossier.", "warning");
+      if (!sources.length) return toast("Dépose ou choisis au moins un fichier ou un dossier.", "warning");
       const values = Object.fromEntries(new FormData(form).entries()); const cache = new Map(); let completed = 0;
       try {
         button.disabled = true;
-        for (const file of files) {
-          const path = String(file.webkitRelativePath || "").split("/").filter(Boolean);
+        for (const source of sources) {
+          const file = source.file;
+          const path = String(source.relativePath || file.webkitRelativePath || file.name || "").split("/").filter(Boolean);
           const target = await importFolderForPath(parent, path.slice(1, -1), cache);
-          result.className = "setup-result"; result.textContent = `Importation ${completed + 1}/${files.length} : ${file.name}`;
+          result.className = "setup-result"; result.textContent = `Importation ${completed + 1}/${sources.length} : ${file.name}`;
           await addDocumentToLibrary(file, { file_name: file.name, description: values.description, version_label: values.version_label }, target);
           completed += 1;
         }
@@ -1206,10 +1309,10 @@
   function openDocumentFolderMenu(folder) {
     if (!canManageDocuments()) return toast("Seuls les administrateurs peuvent gérer les dossiers.", "error");
     if (!folder) return;
-    const rootProtected = Boolean(folder.is_root);
+    const rootProtected = isCoreDocumentRoot(folder);
     openModal({
       title: "Gérer le dossier", subtitle: folder.name,
-      body: rootProtected ? `<div class="form-note">Les dossiers racine Sécurité, Plans et Documents qualité sont protégés. Tu peux y créer autant de sous-dossiers que nécessaire.</div>` : `<div class="menu-list"><button id="renameDocumentFolder">✎ Renommer le sous-dossier</button><button class="danger" id="deleteDocumentFolder">⌫ Supprimer le sous-dossier vide</button></div>`,
+      body: rootProtected ? `<div class="form-note">Les dossiers racine Sécurité, Plans et Documents qualité sont protégés. Tu peux y créer autant de sous-dossiers que nécessaire.</div>` : `<div class="menu-list"><button id="renameDocumentFolder">✎ Renommer ${folder.is_root ? "le dossier principal" : "le sous-dossier"}</button><button class="danger" id="deleteDocumentFolder">⌫ Supprimer ${folder.is_root ? "le dossier principal vide" : "le sous-dossier vide"}</button></div>`,
       footer: `<button class="secondary-button" id="closeDocumentFolderMenu">Fermer</button>`
     });
     $("closeDocumentFolderMenu").addEventListener("click", closeModal);
@@ -1237,8 +1340,9 @@
     });
   }
   async function deleteDocumentFolder(folder) {
-    if (!folder || folder.is_root) return;
-    if (!window.confirm(`Supprimer le sous-dossier « ${folder.name} » ? Il doit être vide.`)) return;
+    if (!folder || isCoreDocumentRoot(folder)) return;
+    const label = folder.is_root ? "dossier principal" : "sous-dossier";
+    if (!window.confirm(`Supprimer le ${label} « ${folder.name} » ? Il doit être vide.`)) return;
     try {
       if (isCloudReady()) {
         const { error } = await app.db.rpc("delete_chantier_document_folder", { p_folder_id: folder.id });
@@ -2431,16 +2535,19 @@
   }
   function openOwnerDestructiveConfirmation(chantier, operation) {
     const deleting = operation === "delete";
-    const confirmationWord = deleting ? "SUPPRIMER" : "RÉINITIALISER";
-    const title = deleting ? "Supprimer définitivement le chantier" : "Réinitialiser le fil du chantier";
+    const resettingActions = operation === "actions";
+    const confirmationWord = deleting ? "SUPPRIMER" : resettingActions ? "ACTIONS" : "RÉINITIALISER";
+    const title = deleting ? "Supprimer définitivement le chantier" : resettingActions ? "Réinitialiser les actions du chantier" : "Réinitialiser le fil du chantier";
     const consequences = deleting
       ? "Cette opération efface le chantier, tous ses membres, messages, photos, documents et actions. Elle est définitive."
-      : "Cette opération efface tous les messages, photos, documents, réactions et accusés de lecture. Le chantier et ses actions restent en place ; les éventuelles preuves liées aux messages sont retirées.";
+      : resettingActions
+        ? "Cette opération supprime toutes les actions de ce chantier, y compris les actions terminées, les responsables, échéances et preuves de clôture. Les messages, photos, documents et journaux quotidiens restent inchangés."
+        : "Cette opération efface tous les messages, photos, documents, réactions et accusés de lecture. Le chantier et ses actions restent en place ; les éventuelles preuves liées aux messages sont retirées.";
     openModal({
       title,
       subtitle: `Chantier concerné : ${chantier.name || "Chantier sans nom"}`,
       body: `<form id="ownerDestructiveForm" class="form-grid one" novalidate><p class="form-note"><b>Action irréversible.</b><br>${escapeHtml(consequences)}</p><label class="form-field">Pour confirmer, écris <b>${confirmationWord}</b><input name="confirmation" required autocapitalize="characters" autocomplete="off" placeholder="${confirmationWord}"></label><label class="form-field">Ton mot de passe propriétaire<input name="password" type="password" required autocomplete="current-password" placeholder="Mot de passe du compte propriétaire"></label></form><div class="setup-result" id="ownerDestructiveResult" aria-live="polite"></div>`,
-      footer: `<button class="secondary-button" id="cancelOwnerDestructive">Annuler</button><button class="danger-button" id="confirmOwnerDestructive">${deleting ? "Supprimer définitivement" : "Réinitialiser le fil"}</button>`,
+      footer: `<button class="secondary-button" id="cancelOwnerDestructive">Annuler</button><button class="danger-button" id="confirmOwnerDestructive">${deleting ? "Supprimer définitivement" : resettingActions ? "Réinitialiser les actions" : "Réinitialiser le fil"}</button>`,
       wide: false
     });
     $("cancelOwnerDestructive").addEventListener("click", openOwnerChantierMaintenanceDialog);
@@ -2459,18 +2566,21 @@
         button.textContent = "Confirmation…";
         await verifyJournalOwnerPassword(form.elements.password.value);
         result.className = "setup-result success";
-        result.textContent = "Mot de passe confirmé. Suppression des fichiers sécurisés…";
-        const paths = await ownerChantierStoragePaths(chantier.id);
-        await removeOwnerChantierFiles(paths);
-        result.textContent = deleting ? "Suppression du chantier…" : "Réinitialisation du fil…";
-        const { error } = await app.db.rpc(deleting ? "delete_journal_chantier" : "reset_journal_chantier_feed", { p_chantier_id: chantier.id });
+        if (deleting || !resettingActions) {
+          result.textContent = "Mot de passe confirmé. Suppression des fichiers sécurisés…";
+          const paths = await ownerChantierStoragePaths(chantier.id);
+          await removeOwnerChantierFiles(paths);
+        }
+        result.textContent = deleting ? "Suppression du chantier…" : resettingActions ? "Réinitialisation des actions…" : "Réinitialisation du fil…";
+        const rpc = deleting ? "delete_journal_chantier" : resettingActions ? "reset_journal_chantier_actions" : "reset_journal_chantier_feed";
+        const { error } = await app.db.rpc(rpc, { p_chantier_id: chantier.id });
         if (error) throw error;
         closeModal(true);
-        await refreshCloudChantiers();
-        toast(deleting ? "Chantier supprimé définitivement." : "Fil du chantier réinitialisé.", "success");
+        if (deleting) await refreshCloudChantiers(); else await refreshCloudCurrent();
+        toast(deleting ? "Chantier supprimé définitivement." : resettingActions ? "Toutes les actions du chantier ont été réinitialisées." : "Fil du chantier réinitialisé.", "success");
       } catch (error) {
         button.disabled = false;
-        button.textContent = deleting ? "Supprimer définitivement" : "Réinitialiser le fil";
+        button.textContent = deleting ? "Supprimer définitivement" : resettingActions ? "Réinitialiser les actions" : "Réinitialiser le fil";
         result.className = "setup-result error";
         result.textContent = friendlyError(error);
       }
@@ -2484,8 +2594,8 @@
     openModal({
       title: "Maintenance d’un chantier",
       subtitle: "Réservée à ton compte propriétaire et protégée par ton mot de passe.",
-      body: `<div class="form-note"><b>À utiliser avec prudence.</b><br>Tu peux optimiser les aperçus des photos déjà publiées, effacer le fil sans supprimer le chantier, ou supprimer définitivement tout le chantier. Les fichiers stockés sont également supprimés.</div><label class="form-field">Chantier concerné<select id="ownerMaintenanceChantier">${options}</select></label><div class="setup-result" id="ownerPhotoRepairResult" aria-live="polite"></div>`,
-      footer: `<button class="secondary-button" id="closeOwnerMaintenance">Fermer</button><button class="secondary-button" id="repairOwnerPhotoPreviews">Optimiser les photos</button><button class="secondary-button" id="resetOwnerChantier">Réinitialiser le fil</button><button class="danger-button" id="deleteOwnerChantier">Supprimer le chantier</button>`,
+      body: `<div class="form-note"><b>À utiliser avec prudence.</b><br>Tu peux optimiser les aperçus des photos, réinitialiser uniquement les actions de la phase bêta, effacer le fil sans supprimer le chantier, ou supprimer définitivement tout le chantier. Les fichiers stockés sont également supprimés lorsque nécessaire.</div><label class="form-field">Chantier concerné<select id="ownerMaintenanceChantier">${options}</select></label><div class="setup-result" id="ownerPhotoRepairResult" aria-live="polite"></div>`,
+      footer: `<button class="secondary-button" id="closeOwnerMaintenance">Fermer</button><button class="secondary-button" id="repairOwnerPhotoPreviews">Optimiser les photos</button><button class="secondary-button" id="resetOwnerActions">Réinitialiser les actions</button><button class="secondary-button" id="resetOwnerChantier">Réinitialiser le fil</button><button class="danger-button" id="deleteOwnerChantier">Supprimer le chantier</button>`,
       wide: false
     });
     $("closeOwnerMaintenance").addEventListener("click", closeModal);
@@ -2511,6 +2621,10 @@
     $("resetOwnerChantier").addEventListener("click", () => {
       const chantier = selectedChantier();
       if (chantier) openOwnerDestructiveConfirmation(chantier, "reset");
+    });
+    $("resetOwnerActions").addEventListener("click", () => {
+      const chantier = selectedChantier();
+      if (chantier) openOwnerDestructiveConfirmation(chantier, "actions");
     });
     $("deleteOwnerChantier").addEventListener("click", () => {
       const chantier = selectedChantier();
@@ -2988,6 +3102,7 @@
     $("siteMenuBtn").addEventListener("click", openSiteInfoDialog);
     $("addPlanBtn").addEventListener("click", openPlanDialog);
     els.bulkImportBtn.addEventListener("click", openBulkDocumentImportDialog);
+    els.addRootFolderBtn.addEventListener("click", openDocumentRootFolderDialog);
     $("addFolderBtn").addEventListener("click", openDocumentFolderDialog);
     $("addActionBtn").addEventListener("click", () => openActionDialog());
     $("addDailyLogBtn").addEventListener("click", openDailyLogDialog);
@@ -3098,7 +3213,7 @@
   async function initialize() {
     wireEvents();
     const callbackError = takeAuthCallbackError();
-    if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("./service-worker-v13.js?v=13.3-docs").catch(error => console.warn("Service worker", error));
+    if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("./service-worker-v13.js?v=13.3.3-admin-docs").catch(error => console.warn("Service worker", error));
     syncFromLocal();
     if (cloudConfigured()) {
       try { await initializeCloud(); }
