@@ -8,20 +8,20 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="icon" href="journal-chantier.svg" type="image/svg+xml">
+  <link rel="icon" href="journal-chantier-logo-v14.png" type="image/png">
   <title>Journal Chantier Connecté</title>
   <!-- Bibliothèque Supabase embarquée : elle ne dépend plus d’un CDN bloqué sur le réseau terrain. -->
-  <script src="supabase.js?v=13.3-docs" defer></script>
+  <script src="supabase.js?v=13.3.1-docs" defer></script>
   <!-- config.js est le seul fichier de configuration public, partagé par tous les appareils. -->
-  <script src="config.js?v=13.3-docs" defer></script>
-  <link rel="stylesheet" href="styles-v13.css?v=13.3-docs">
-  <script src="app-v13.js?v=13.3-docs" defer></script>
+  <script src="config.js?v=13.3.1-docs" defer></script>
+  <link rel="stylesheet" href="styles-v13.css?v=13.3.1-docs">
+  <script src="app-v13.js?v=13.3.1-docs" defer></script>
 </head>
 <body>
   <div class="app-shell" id="appShell">
     <aside class="sidebar" aria-label="Chantiers">
       <div class="brand">
-        <div class="brand-mark" aria-hidden="true">JC</div>
+        <div class="brand-mark" aria-hidden="true"><img src="journal-chantier-logo-v14.png" alt=""></div>
         <div>
           <strong>Journal chantier</strong>
           <small>Connecté</small>
@@ -56,7 +56,7 @@
       <header class="topbar">
         <button class="icon-button hamburger" id="openSidebarBtn" aria-label="Ouvrir les chantiers">☰</button>
         <button class="site-heading" id="siteInfoBtn">
-          <span class="site-avatar" id="siteAvatar">JC</span>
+          <span class="site-avatar" id="siteAvatar"><img src="journal-chantier-logo-v14.png" alt=""></span>
           <span class="site-heading-copy"><b id="siteName">Choisissez un chantier</b><small id="siteMeta">Journal partagé sécurisé</small></span>
         </button>
         <div class="topbar-tools">
@@ -150,6 +150,7 @@
           <div class="library-header documentation-header">
             <div><h2>Documentation du chantier</h2><p>Plans, sécurité et qualité classés dans une bibliothèque sécurisée.</p></div>
             <div class="documentation-header-actions" id="documentHeaderActions" hidden>
+              <button class="secondary-button" id="bulkImportBtn">⇪ Importer</button>
               <button class="secondary-button" id="addFolderBtn">＋ Sous-dossier</button>
               <button class="primary-button" id="addPlanBtn">＋ Ajouter un document</button>
             </div>

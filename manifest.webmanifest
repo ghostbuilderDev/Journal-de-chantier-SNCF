@@ -9,9 +9,9 @@
   "theme_color": "#82005a",
   "icons": [
     {
-      "src": "journal-chantier.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "journal-chantier-logo-v14.png",
+      "sizes": "1280x1280",
+      "type": "image/png",
       "purpose": "any maskable"
     }
   ]

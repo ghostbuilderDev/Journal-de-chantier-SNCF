@@ -63,7 +63,7 @@
     composerMetaBtn: $("composerMetaBtn"), composerToolsBtn: $("composerToolsBtn"), composerToolTray: $("composerToolTray"), messageType: $("messageType"), messageZone: $("messageZone"),
     messageImportant: $("messageImportant"), replyPreview: $("replyPreview"), attachmentPreview: $("attachmentPreview"),
     fileInput: $("fileInput"), cameraInput: $("cameraInput"), messageInput: $("messageInput"), pinnedMessages: $("pinnedMessages"),
-    documentHeaderActions: $("documentHeaderActions"), documentSecurityNote: $("documentSecurityNote"), documentBreadcrumb: $("documentBreadcrumb"),
+    documentHeaderActions: $("documentHeaderActions"), documentSecurityNote: $("documentSecurityNote"), documentBreadcrumb: $("documentBreadcrumb"), bulkImportBtn: $("bulkImportBtn"),
     documentFolderGrid: $("documentFolderGrid"), documentFileGrid: $("documentFileGrid"),
     actionSummary: $("actionSummary"), actionBoard: $("actionBoard"), printCover: $("printCover"),
     pilotageSummary: $("pilotageSummary"), pilotageAlerts: $("pilotageAlerts"), dailyLogList: $("dailyLogList"), riskList: $("riskList"),
@@ -1109,6 +1109,57 @@
         closeModal();
         toast("Document classé dans la bibliothèque.", "success");
       } catch (error) { toast(`Classement impossible : ${friendlyError(error)}`, "error"); }
+    });
+  }
+  async function importFolderForPath(parent, parts, cache) {
+    let target = parent;
+    for (const rawName of parts) {
+      const name = String(rawName || "").trim();
+      if (!name) continue;
+      const key = `${target.id}/${name.toLocaleLowerCase("fr")}`;
+      if (cache.has(key)) { target = cache.get(key); continue; }
+      let child = documentFoldersAt(target.id).find(item => String(item.name || "").localeCompare(name, "fr", { sensitivity: "accent" }) === 0);
+      if (!child) {
+        if (isCloudReady()) {
+          const { data, error } = await app.db.rpc("create_chantier_document_folder", { p_chantier_id: target.chantier_id, p_parent_id: target.id, p_name: name });
+          if (error) throw error;
+          child = Array.isArray(data) ? data[0] : data;
+          if (!child?.id) { await refreshCloudCurrent(); child = documentFoldersAt(target.id).find(item => item.name === name); }
+        } else {
+          child = { id: makeId(), chantier_id: target.chantier_id, parent_id: target.id, root_code: target.root_code, name, is_root: false, created_by: ownId(), created_by_name: ownName(), created_at: nowIso(), updated_at: nowIso() };
+          app.local.documentFolders.push(child); app.documentFolders = app.local.documentFolders; saveLocalData();
+        }
+      }
+      if (!child) throw new Error(`Impossible de créer le sous-dossier « ${name} ».`);
+      cache.set(key, child); target = child;
+    }
+    return target;
+  }
+  function openBulkDocumentImportDialog() {
+    const parent = currentDocumentFolder();
+    if (!parent) return toast("Ouvre d’abord le dossier de destination.", "warning");
+    if (!canManageDocuments()) return toast("Seuls les administrateurs peuvent importer des documents.", "error");
+    openModal({
+      title: "Import groupé de documents", subtitle: `Destination : ${parent.name}`,
+      body: `<form id="bulkDocumentImportForm" class="form-grid one"><p class="form-note"><b>Import intelligent.</b><br>Ajoute autant de fichiers que nécessaire et/ou un dossier complet. L’arborescence du dossier est recréée automatiquement dans la bibliothèque.</p><label class="form-field">Fichiers à importer<input name="files" type="file" multiple></label><label class="form-field">Dossier complet à importer<input name="folderFiles" type="file" multiple webkitdirectory directory></label><label class="form-field">Indice / version commun (facultatif)<input name="version_label" maxlength="80" placeholder="Ex. Indice C"></label><label class="form-field">Description commune (facultative)<textarea name="description" maxlength="1200" placeholder="Ex. Dossier transmis par l’entreprise le 01/09/2026"></textarea></label><div class="setup-result" id="bulkDocumentImportResult" aria-live="polite"></div></form>`,
+      footer: `<button class="secondary-button" id="cancelBulkDocumentImport">Annuler</button><button class="primary-button" id="startBulkDocumentImport">Importer</button>`, wide: true
+    });
+    $("cancelBulkDocumentImport").addEventListener("click", closeModal);
+    $("startBulkDocumentImport").addEventListener("click", async () => {
+      const form = $("bulkDocumentImportForm"), button = $("startBulkDocumentImport"), result = $("bulkDocumentImportResult");
+      const files = [...(form.elements.files.files || []), ...(form.elements.folderFiles.files || [])]; if (!files.length) return toast("Choisis au moins un fichier ou un dossier.", "warning");
+      const values = Object.fromEntries(new FormData(form).entries()); const cache = new Map(); let completed = 0;
+      try {
+        button.disabled = true;
+        for (const file of files) {
+          const path = String(file.webkitRelativePath || "").split("/").filter(Boolean);
+          const target = await importFolderForPath(parent, path.slice(1, -1), cache);
+          result.className = "setup-result"; result.textContent = `Importation ${completed + 1}/${files.length} : ${file.name}`;
+          await addDocumentToLibrary(file, { file_name: file.name, description: values.description, version_label: values.version_label }, target);
+          completed += 1;
+        }
+        closeModal(); await refreshCloudCurrent(); toast(`${completed} document${completed > 1 ? "s" : ""} importé${completed > 1 ? "s" : ""}.`, "success");
+      } catch (error) { button.disabled = false; result.className = "setup-result error"; result.textContent = `Import interrompu après ${completed} document(s) : ${friendlyError(error)}`; }
     });
   }
   async function openDocumentViewer(documentItem) {
@@ -2463,7 +2514,7 @@
     openModal({
       title: "Administration du journal",
       subtitle: "Tableau de bord du propriétaire principal : comptes, statuts et niveaux de droit.",
-      body: `<div class="form-note"><b>${accounts.length} compte(s)</b> · ${counts.pending} en attente · ${counts.accepted} validé(s) · ${counts.refused} refusé(s).<br>Les droits enregistrés ici sont appliqués immédiatement dans Supabase.</div><div class="dialog-list" style="margin-top:14px">${cards}</div>`,
+      body: `<section class="admin-dashboard-summary"><div><b>${accounts.length}</b><span>comptes</span></div><div class="pending"><b>${counts.pending}</b><span>en attente</span></div><div class="accepted"><b>${counts.accepted}</b><span>validés</span></div></section><div class="form-note"><b>Centre d’administration</b><br>Les droits enregistrés ici sont appliqués immédiatement. Les administrateurs peuvent gérer les documents ; les comptes « Lecture seule » restent en consultation.</div><div class="dialog-list admin-account-list">${cards}</div>`,
       footer: `<button class="secondary-button" id="dashboardPendingBtn">Demandes en attente</button>${app.chantiers.length ? `<button class="secondary-button" id="dashboardMaintenanceBtn">Maintenance chantier</button>` : ""}<button class="primary-button" id="closeAdminDashboard">Fermer</button>`,
       wide: true
     });
@@ -2908,6 +2959,7 @@
     $("exportBtn").addEventListener("click", openExportDialog);
     $("siteMenuBtn").addEventListener("click", openSiteInfoDialog);
     $("addPlanBtn").addEventListener("click", openPlanDialog);
+    els.bulkImportBtn.addEventListener("click", openBulkDocumentImportDialog);
     $("addFolderBtn").addEventListener("click", openDocumentFolderDialog);
     $("addActionBtn").addEventListener("click", () => openActionDialog());
     $("addDailyLogBtn").addEventListener("click", openDailyLogDialog);

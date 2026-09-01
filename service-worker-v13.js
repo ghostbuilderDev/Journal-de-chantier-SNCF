@@ -1,13 +1,13 @@
-const CACHE_NAME = "journal-chantier-connecte-v13.3-docs";
+const CACHE_NAME = "journal-chantier-connecte-v13.3.1-docs";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./styles-v13.css?v=13.3-docs",
-  "./app-v13.js?v=13.3-docs",
-  "./supabase.js?v=13.3-docs",
-  "./config.js?v=13.3-docs",
+  "./styles-v13.css?v=13.3.1-docs",
+  "./app-v13.js?v=13.3.1-docs",
+  "./supabase.js?v=13.3.1-docs",
+  "./config.js?v=13.3.1-docs",
   "./manifest.webmanifest",
-  "./journal-chantier.svg"
+  "./journal-chantier-logo-v14.png"
 ];
 
 self.addEventListener("install", event => {
