@@ -35,16 +35,43 @@ jobs:
           test -n "$SUPABASE_ACCESS_TOKEN" || { echo "Le secret SUPABASE_ACCESS_TOKEN est absent."; exit 1; }
           test -n "$SUPABASE_PROJECT_ID" || { echo "Le secret SUPABASE_PROJECT_ID est absent."; exit 1; }
 
-      - name: Appliquer la migration documentaire
+      - name: Appliquer les migrations non encore installees
         shell: bash
         run: |
           set -euo pipefail
-          migration="supabase/migrations/20260901000100_documentation_securisee.sql"
-          test -f "$migration" || { echo "Migration documentaire introuvable."; exit 1; }
-          payload="$(jq -n --rawfile query "$migration" '{query: $query}')"
-          curl --fail-with-body --silent --show-error \
-            --request POST \
-            --url "https://api.supabase.com/v1/projects/${SUPABASE_PROJECT_ID}/database/query" \
-            --header "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
-            --header "Content-Type: application/json" \
-            --data "$payload"
+          query() {
+            local sql="$1"
+            local payload
+            payload="$(jq -n --arg query "$sql" '{query: $query}')"
+            curl --fail-with-body --silent --show-error \
+              --request POST \
+              --url "https://api.supabase.com/v1/projects/${SUPABASE_PROJECT_ID}/database/query" \
+              --header "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+              --header "Content-Type: application/json" \
+              --data "$payload"
+          }
+
+          query "create table if not exists public.journal_sql_migrations (migration_name text primary key, applied_at timestamptz not null default now()); alter table public.journal_sql_migrations enable row level security; revoke all on public.journal_sql_migrations from anon, authenticated;" >/dev/null
+
+          mapfile -t migrations < <(find supabase/migrations -maxdepth 1 -type f -name '*.sql' -print | sort)
+          test "${#migrations[@]}" -gt 0 || { echo "Aucune migration SQL trouvee."; exit 1; }
+
+          for migration in "${migrations[@]}"; do
+            name="$(basename "$migration")"
+            status="$(query "select exists (select 1 from public.journal_sql_migrations where migration_name = '$name') as applied;")"
+            applied="$(jq -r 'if type == "array" then (.[0].applied // false) elif .result then (.result[0].applied // false) else (.applied // false) end' <<<"$status")"
+            if [ "$applied" = "true" ]; then
+              echo "Deja appliquee : $name"
+              continue
+            fi
+            echo "Application : $name"
+            payload="$(jq -n --rawfile query "$migration" '{query: $query}')"
+            curl --fail-with-body --silent --show-error \
+              --request POST \
+              --url "https://api.supabase.com/v1/projects/${SUPABASE_PROJECT_ID}/database/query" \
+              --header "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+              --header "Content-Type: application/json" \
+              --data "$payload" >/dev/null
+            query "insert into public.journal_sql_migrations (migration_name) values ('$name') on conflict (migration_name) do nothing;" >/dev/null
+            echo "Terminee : $name"
+          done
