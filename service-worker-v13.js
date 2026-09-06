@@ -1,39 +1,28 @@
-const CACHE_NAME = "journal-chantier-connecte-v14.1-fiche-simple";
+const CACHE_NAME = "journal-chantier-connecte-v14.2-collaborateurs";
 const APP_SHELL = [
-  "./",
-  "./index.html",
-  "./styles-v13.css?v=14.1-fiche-simple",
-  "./app-v13.js?v=14.1-fiche-simple",
-  "./supabase.js?v=14.1-fiche-simple",
-  "./config.js?v=14.1-fiche-simple",
-  "./manifest.webmanifest",
-  "./journal-chantier-logo-v14.png"
+  "./", "./index.html", "./styles-v13.css?v=14.2-collaborateurs",
+  "./app-v13.js?v=14.2-collaborateurs", "./supabase.js?v=14.2-collaborateurs",
+  "./config.js?v=14.2-collaborateurs", "./manifest.webmanifest", "./journal-chantier-logo-v14.png"
 ];
-
 self.addEventListener("install", event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL)));
-  self.skipWaiting();
+  // Activate at the next close/reopen, so an in-progress form is not replaced.
 });
-
 self.addEventListener("activate", event => {
-  event.waitUntil(
-    caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))))
-  );
-  self.clients.claim();
+  event.waitUntil(caches.keys().then(keys => Promise.all(keys
+    .filter(key => key.startsWith("journal-chantier-connecte-") && key !== CACHE_NAME)
+    .map(key => caches.delete(key)))));
 });
-
 self.addEventListener("fetch", event => {
   if (event.request.method !== "GET") return;
-  const request = event.request;
-  event.respondWith(
-    fetch(request)
-      .then(response => {
-        if (response && response.ok && new URL(request.url).origin === self.location.origin) {
-          caches.open(CACHE_NAME).then(cache => cache.put(request, response.clone()));
-        }
-        return response;
-      })
-      .catch(() => caches.match(request))
-      .then(response => response || new Response("Hors ligne", { status: 503, statusText: "Service Unavailable" }))
-  );
+  const request = event.request, url = new URL(request.url);
+  // Auth and Storage requests are handled directly by the browser, never cached.
+  if (url.origin !== self.location.origin) return;
+  event.respondWith(fetch(request).then(response => {
+    if (response?.ok) {
+      const clone = response.clone();
+      event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.put(request, clone)));
+    }
+    return response;
+  }).catch(async () => (await caches.match(request)) || new Response("Hors ligne", { status: 503 })));
 });

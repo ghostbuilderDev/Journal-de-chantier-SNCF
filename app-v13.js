@@ -45,6 +45,7 @@
     documentFolders: [], documents: [], documentViewFolderId: null,
     documentLibrary: { available: false, canManage: false, migrationError: "" }, documentUrlCache: new Map(),
     portalApps: [], portal: { available: false, migrationError: "" }, coverUrlCache: new Map(), local: null,
+    sessionVersion: 0, sendingMessage: false, composerRetry: null, composerDrafts: new Map(), cloudRefreshSequence: 0, renderedChantierId: null, feedAtBottom: true,
     pendingFiles: [], replyTo: null, typeFilter: "", search: "", onlyImportant: false, isDictating: false,
     advancedFilters: { from: "", to: "", zone: "", author: "", attachment: false }, lastOperationalAlertSignature: "",
     imageRecoveryInFlight: new Set(), imagePreviewRepairInFlight: new Set(), imagePreviewRepairTried: new Set(),
@@ -149,6 +150,7 @@
     if (/chantier_daily_logs|chantier_risks|daily_logs|chantier.*risks/i.test(message)) return "Le pilotage V13 n’est pas encore installé dans Supabase. Exécute le fichier supabase-v13-pilotage.sql dans l’éditeur SQL.";
     if (/chantier_document|journal_can_manage_chantier_documents|create_chantier_document/i.test(message)) return "La bibliothèque documentaire n’est pas encore installée dans Supabase. Vérifie l’action GitHub « Deployer les migrations Supabase ».";
     if (/participating_companies|track|journal_portal_apps|journal_cover_path|chantier-cover-images|create_journal_portal_app/i.test(message)) return "La mise à jour V14.1 n’est pas encore installée dans Supabase. Vérifie l’action GitHub « Deployer les migrations Supabase ».";
+    if (/journal_v142_|list_journal_user_directory|assignee_user_id|due_mode|action_id/i.test(message)) return "La mise à jour V14.2 doit être installée. Vérifie le résultat du déploiement Supabase dans GitHub Actions.";
     if (/relation .* does not exist|schema cache/i.test(message)) return "Le schéma Supabase n’est pas installé : exécute supabase-schema.sql dans l’éditeur SQL.";
     if (/get_journal_administration_dashboard|set_journal_user_access|revoke_journal_user_access/i.test(message)) return "La mise à jour d’administration n’est pas encore installée dans Supabase. Exécute le fichier supabase-administration-v11.sql.";
     if (/reset_journal_chantier_feed|delete_journal_chantier|list_journal_chantier_storage_paths/i.test(message)) return "La maintenance propriétaire n’est pas encore installée dans Supabase. Exécute le fichier supabase-v12.1-owner-maintenance.sql.";
@@ -467,12 +469,13 @@
   }
 
   async function ensureCloudProfile(user) {
-    const profile = { id: user.id, email: user.email || "", full_name: app.profile.full_name || user.user_metadata?.full_name || user.email?.split("@")[0] || "", company: app.profile.company || user.user_metadata?.company || "", updated_at: nowIso() };
-    const { error } = await app.db.from("profiles").upsert(profile);
-    if (error) throw error;
-    const { data, error: readError } = await app.db.from("profiles").select("*").eq("id", user.id).single();
+    const { data: existing, error: readError } = await app.db.from("profiles").select("*").eq("id", user.id).maybeSingle();
     if (readError) throw readError;
-    app.profile = data || profile;
+    if (existing) { if (app.user?.id === user.id) app.profile = existing; return; }
+    const profile = { id: user.id, email: user.email || "", full_name: user.user_metadata?.full_name || user.email?.split("@")[0] || "", company: user.user_metadata?.company || "", updated_at: nowIso() };
+    const { error } = await app.db.from("profiles").upsert(profile, { onConflict: "id", ignoreDuplicates: true });
+    if (error) throw error;
+    if (app.user?.id === user.id) app.profile = profile;
   }
 
   async function signedCloudAttachmentUrl(storagePath, { force = false } = {}) {
@@ -519,24 +522,62 @@
     }));
   }
 
+  async function loadCloudMessages(chantierId) {
+    const rows = [];
+    let snapshot = null;
+    // Range progresses by actual returned rows, including servers with a lower row cap.
+    for (let offset = 0; ; ) {
+      let query = app.db.from("chantier_messages").select("*").eq("chantier_id", chantierId);
+      if (snapshot) query = query.lte("created_at", snapshot);
+      const response = await query.order("created_at", { ascending: false }).order("id", { ascending: false }).range(offset, offset + 499);
+      if (response.error) return response;
+      if (!response.data?.length) break;
+      // Use the actual newest row, even if a phone's clock was ahead.
+      if (!snapshot) snapshot = response.data[0].created_at;
+      rows.push(...response.data); offset += response.data.length;
+    }
+    return { data: rows.reverse(), error: null };
+  }
+  async function loadCloudActions(chantierId) {
+    const rows = [];
+    let snapshot = null;
+    for (let offset = 0; ; ) {
+      let query = app.db.from("action_items").select("*").eq("chantier_id", chantierId);
+      if (snapshot) query = query.lte("created_at", snapshot);
+      const response = await query.order("created_at", { ascending: false }).order("id", { ascending: false }).range(offset, offset + 499);
+      if (response.error) return response;
+      if (!response.data?.length) break;
+      if (!snapshot) snapshot = response.data[0].created_at;
+      rows.push(...response.data); offset += response.data.length;
+    }
+    return { data: rows, error: null };
+  }
   async function hydrateCloudAttachments(messages) {
-    const ids = messages.map(message => message.id);
-    if (!ids.length) return messages.map(message => ({ ...message, attachments: [] }));
-    const { data, error } = await app.db.from("chantier_attachments").select("*").in("message_id", ids).order("created_at");
-    if (error) throw error;
-    // Même parcours que la version qui fonctionnait : un seul lien signé vers
-    // le fichier original. Les miniatures restent éventuellement stockées, mais
-    // elles ne participent plus au chargement du fil sur Android.
-    const rows = await Promise.all((data || []).map(async attachment => {
-      const originalUrl = await signedCloudAttachmentUrl(attachment.storage_path);
-      return { ...attachment, signed_url: originalUrl, full_signed_url: originalUrl };
-    }));
+    const ids = messages.map(message => message.id), data = [];
+    for (let start = 0; start < ids.length; start += 100) {
+      for (let offset = 0; ; ) {
+        const response = await app.db.from("chantier_attachments").select("*").in("message_id", ids.slice(start, start + 100))
+          .order("created_at").order("id").range(offset, offset + 499);
+        if (response.error) throw response.error;
+        if (!response.data?.length) break;
+        data.push(...response.data); offset += response.data.length;
+      }
+    }
+    const rows = [];
+    // Limit simultaneous signed URL requests on mobile connections.
+    for (let start = 0; start < data.length; start += 12) {
+      rows.push(...await Promise.all(data.slice(start, start + 12).map(async attachment => {
+        const originalUrl = await signedCloudAttachmentUrl(attachment.storage_path);
+        return { ...attachment, signed_url: originalUrl, full_signed_url: originalUrl };
+      })));
+    }
     const byMessage = new Map();
     rows.forEach(attachment => { const list = byMessage.get(attachment.message_id) || []; list.push(attachment); byMessage.set(attachment.message_id, list); });
     return messages.map(message => ({ ...message, attachments: byMessage.get(message.id) || [] }));
   }
 
   async function refreshCloudCurrent() {
+    const sequence = ++app.cloudRefreshSequence, chantierId = app.currentId, userId = app.user?.id;
     if (!isCloudReady() || !app.currentId) {
       app.messages = []; app.actions = []; app.dailyLogs = []; app.risks = []; app.reactions = []; app.readStates = [];
       app.documentFolders = []; app.documents = []; app.documentViewFolderId = null;
@@ -546,8 +587,8 @@
       return;
     }
     const [messageResponse, actionResponse, dailyLogResponse, riskResponse, reactionResponse, readResponse, folderResponse, documentResponse, documentPermissionResponse] = await Promise.all([
-      app.db.from("chantier_messages").select("*").eq("chantier_id", app.currentId).order("created_at").limit(1500),
-      app.db.from("action_items").select("*").eq("chantier_id", app.currentId).order("created_at", { ascending: false }),
+      loadCloudMessages(chantierId),
+      loadCloudActions(chantierId),
       app.db.from("chantier_daily_logs").select("*").eq("chantier_id", app.currentId).order("log_date", { ascending: false }).order("created_at", { ascending: false }).limit(180),
       app.db.from("chantier_risks").select("*").eq("chantier_id", app.currentId).order("status").order("created_at", { ascending: false }).limit(300),
       app.db.from("chantier_message_reactions").select("*").eq("chantier_id", app.currentId).order("created_at"),
@@ -558,7 +599,9 @@
     ]);
     if (messageResponse.error) throw messageResponse.error;
     if (actionResponse.error) throw actionResponse.error;
-    app.messages = await hydrateCloudAttachments(messageResponse.data || []);
+    const hydratedMessages = await hydrateCloudAttachments(messageResponse.data || []);
+    if (sequence !== app.cloudRefreshSequence || chantierId !== app.currentId || userId !== app.user?.id || !isCloudReady()) return;
+    app.messages = hydratedMessages;
     app.actions = actionResponse.data || [];
     // Les tables V13 sont optionnelles tant que la migration n'est pas installée :
     // le fil, les plans et les actions restent pleinement utilisables.
@@ -645,9 +688,12 @@
     app.realtimeChannel = channel.subscribe();
   }
   async function refreshCloudChantiers() {
+    const userId = app.user?.id;
     const { data, error } = await app.db.from("chantiers").select("*").order("updated_at", { ascending: false });
     if (error) throw error;
-    app.chantiers = await hydrateChantierCovers(data || []);
+    const chantiers = await hydrateChantierCovers(data || []);
+    if (!isCloudReady() || userId !== app.user?.id) return;
+    app.chantiers = chantiers;
     if (!app.currentId || !app.chantiers.some(item => String(item.id) === String(app.currentId))) app.currentId = app.chantiers[0]?.id || null;
     await refreshCloudCurrent();
     await refreshCloudPortalApps();
@@ -689,6 +735,41 @@
       pendingRequests: Number(data?.pending_requests || 0)
     };
   }
+  function clearSessionPrivateState() {
+    app.sessionVersion = (app.sessionVersion || 0) + 1;
+    app.sendingMessage = false;
+    ++app.cloudRefreshSequence;
+    clearTimeout(app.refreshTimer);
+    app.composerDrafts.forEach(draft => (draft.files || []).forEach(item => item.preview_url && URL.revokeObjectURL(item.preview_url)));
+    app.composerDrafts.clear();
+    clearComposer();
+    app.profile = { id: "", full_name: "", company: "", email: "" };
+    app.authDraft = { email: "", password: "", confirmPassword: "", fullName: "", company: "" };
+    app.currentId = null; app.renderedChantierId = null; app.feedAtBottom = true;
+    app.members = []; app.reactions = []; app.readStates = [];
+    app.attachmentUrlCache.clear(); app.documentUrlCache.clear(); app.coverUrlCache.clear();
+    app.imageRecoveryInFlight.clear(); app.imagePreviewRepairInFlight.clear(); app.imagePreviewRepairTried.clear();
+    closePhotoViewer();
+    closeModal(true);
+    setComposerSendingState();
+  }
+  async function recheckCloudAccess() {
+    if (!isCloudReady() || document.visibilityState === "hidden" || app.sendingMessage) return;
+    try {
+      const previousChantier = app.currentId;
+      await refreshAccessContext();
+      await refreshCloudChantiers();
+      if (previousChantier && !app.chantiers.some(item => String(item.id) === String(previousChantier))) {
+        const draft = app.composerDrafts.get(String(previousChantier));
+        (draft?.files || []).forEach(item => item.preview_url && URL.revokeObjectURL(item.preview_url));
+        app.composerDrafts.delete(String(previousChantier));
+        clearComposer();
+        closeModal(true); closePhotoViewer();
+        app.attachmentUrlCache.clear(); app.documentUrlCache.clear(); app.coverUrlCache.clear();
+      }
+      renderAll({ keepPosition: true });
+    } catch (error) { console.warn("Actualisation des accès indisponible", error); }
+  }
   async function initializeCloud() {
     app.db = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
     app.db.auth.onAuthStateChange((event, session) => {
@@ -709,6 +790,7 @@
       }, 0);
       if (event === "SIGNED_OUT") {
         if (app.realtimeChannel) app.db.removeChannel(app.realtimeChannel);
+        clearSessionPrivateState();
         app.mode = "cloud-guest"; app.user = null; app.chantiers = []; app.messages = []; app.actions = []; app.dailyLogs = []; app.risks = []; app.documentFolders = []; app.documents = []; app.documentViewFolderId = null;
         app.documentLibrary = { available: false, canManage: false, migrationError: "" };
         app.portalApps = []; app.portal = { available: false, migrationError: "" };
@@ -969,9 +1051,13 @@
     const attachments = deleted ? [] : (message.attachments || []);
     const images = attachments.filter(fileIsImage), documents = attachments.filter(item => !fileIsImage(item));
     if (message.message_type === "Système") return `<article class="message-row system"><div class="message-bubble">${escapeHtml(message.body || "")}</div></article>`;
-    return `<article class="message-row ${mine ? "mine" : ""}" data-message-row="${message.id}"><span class="message-avatar">${escapeHtml(initial(message.author_name))}</span><div class="message-bubble ${deleted ? "deleted" : ""}"><button class="message-menu" data-action="message-menu" data-message-id="${message.id}" aria-label="Options">⋮</button><div class="message-head"><span class="author-name">${escapeHtml(message.author_name || "Intervenant")}</span>${message.message_type ? `<span class="message-tag ${typeClass(message.message_type)}">${escapeHtml(message.message_type)}</span>` : ""}${message.zone ? `<span class="zone-tag">${escapeHtml(message.zone)}</span>` : ""}${message.is_important ? `<span class="important-star">★</span>` : ""}</div>${parent ? `<button class="reply-quote" data-action="jump-message" data-message-id="${parent.id}"><b>${escapeHtml(parent.author_name || "Intervenant")}</b>${escapeHtml(truncate(parent.body || "Pièce jointe", 90))}</button>` : ""}${deleted ? `<div class="message-text">Message supprimé.</div>` : ""}${!deleted && images.length ? `<div class="attachment-grid ${images.length === 1 ? "one" : ""}">${images.map(renderAttachment).join("")}</div>` : ""}${!deleted ? documents.map(renderAttachment).join("") : ""}${!deleted && message.body ? `<div class="message-text">${renderRichText(message.body)}</div>` : ""}${!deleted ? renderReactionBar(message) : ""}<div class="message-footer"><span>${formatTime(message.created_at)}</span>${mine ? `<span class="message-status" title="${messageReadBySomeoneElse(message) ? "Lu par un interlocuteur" : "Envoyé"}">${messageReadBySomeoneElse(message) ? "✓✓" : "✓"}</span>` : ""}</div>${!deleted ? `<div class="message-actions"><button data-action="reply" data-message-id="${message.id}">↩ Répondre</button><button data-action="open-reactions" data-message-id="${message.id}">☺ Réagir</button><button data-action="make-action" data-message-id="${message.id}">✓ Action</button>${mine ? `<button data-action="toggle-important" data-message-id="${message.id}">${message.is_important ? "★ Désépingler" : "☆ Épingler"}</button>` : ""}</div>` : ""}</div></article>`;
+    return `<article class="message-row ${mine ? "mine" : ""}" data-message-row="${message.id}"><span class="message-avatar">${escapeHtml(initial(message.author_name))}</span><div class="message-bubble ${deleted ? "deleted" : ""}"><button class="message-menu" data-action="message-menu" data-message-id="${message.id}" aria-label="Options">⋮</button><div class="message-head"><span class="author-name">${escapeHtml(message.author_name || "Intervenant")}</span>${message.message_type ? `<span class="message-tag ${typeClass(message.message_type)}">${escapeHtml(message.message_type)}</span>` : ""}${message.zone ? `<span class="zone-tag">${escapeHtml(message.zone)}</span>` : ""}${message.is_important ? `<span class="important-star">★</span>` : ""}</div>${parent ? `<button class="reply-quote" data-action="jump-message" data-message-id="${parent.id}"><b>${escapeHtml(parent.author_name || "Intervenant")}</b>${escapeHtml(truncate(parent.body || "Pièce jointe", 90))}</button>` : ""}${deleted ? `<div class="message-text">Message supprimé.</div>` : ""}${!deleted && images.length ? `<div class="attachment-grid ${images.length === 1 ? "one" : ""}">${images.map(renderAttachment).join("")}</div>` : ""}${!deleted ? documents.map(renderAttachment).join("") : ""}${!deleted && message.body ? `<div class="message-text">${renderRichText(message.body)}</div>` : ""}${!deleted ? renderMessageActionLinks(message) : ""}${!deleted ? renderReactionBar(message) : ""}<div class="message-footer"><span>${formatTime(message.created_at)}</span>${mine ? `<span class="message-status" title="${messageReadBySomeoneElse(message) ? "Lu par un interlocuteur" : "Envoyé"}">${messageReadBySomeoneElse(message) ? "✓✓" : "✓"}</span>` : ""}</div>${!deleted ? `<div class="message-actions"><button data-action="reply" data-message-id="${message.id}">↩ Répondre</button><button data-action="open-reactions" data-message-id="${message.id}">☺ Réagir</button><button data-action="make-action" data-message-id="${message.id}">✓ Action</button>${mine ? `<button data-action="toggle-important" data-message-id="${message.id}">${message.is_important ? "★ Désépingler" : "☆ Épingler"}</button>` : ""}</div>` : ""}</div></article>`;
   }
-  function scrollMessagesToBottom() { els.messageFeed.scrollTop = els.messageFeed.scrollHeight; els.jumpBottomBtn.hidden = true; }
+  function scrollMessagesToBottom() {
+    app.feedAtBottom = true;
+    els.messageFeed.scrollTop = els.messageFeed.scrollHeight;
+    els.jumpBottomBtn.hidden = true;
+  }
   function renderMessages({ keepPosition = false } = {}) {
     const chantier = currentChantier();
     if (!chantier) {
@@ -981,6 +1067,9 @@
       return;
     }
     els.composerShell.hidden = false;
+    const changedChantier = String(app.renderedChantierId) !== String(chantier.id);
+    const followBottom = changedChantier || !keepPosition || app.feedAtBottom;
+    app.renderedChantierId = chantier.id;
     const oldPosition = els.messageFeed.scrollTop, list = filteredMessages();
     const hasAdvancedFilters = Object.values(app.advancedFilters).some(value => Boolean(value));
     els.advancedSearchBtn.classList.toggle("is-active", hasAdvancedFilters);
@@ -997,7 +1086,8 @@
       html += renderMessage(message);
     });
     els.messageFeed.innerHTML = html;
-    if (keepPosition) els.messageFeed.scrollTop = oldPosition;
+    app.feedAtBottom = followBottom;
+    if (!followBottom) els.messageFeed.scrollTop = oldPosition;
     else requestAnimationFrame(scrollMessagesToBottom);
   }
   function allCurrentAttachments() { return currentMessages().flatMap(message => (message.attachments || []).map(file => ({ ...file, message }))); }
@@ -1509,21 +1599,47 @@
       closeModal(); toast("Document supprimé.", "success");
     } catch (error) { toast(`Suppression impossible : ${friendlyError(error)}`, "error"); }
   }
-  function actionIsLate(action) { return action.due_date && action.status !== "terminee" && new Date(`${action.due_date}T23:59:59`) < new Date(); }
+  function actionIsLate(action) {
+    if (action.status === "terminee") return false;
+    if (action.due_mode === "immediate") return true;
+    return Boolean(action.due_date && new Date(`${action.due_date}T23:59:59.999`) < new Date());
+  }
   function actionStatusLabel(status) { return ({ a_faire: "À faire", en_cours: "En cours", terminee: "Terminée" })[status] || "À faire"; }
   function actionPriorityLabel(priority) { return ({ basse: "Basse", normale: "Normale", haute: "Haute", critique: "Critique" })[priority] || "Normale"; }
+  function actionDeadlineLabel(action) { return action.due_mode === "immediate" ? "Immédiate — à traiter maintenant" : action.due_date ? `Échéance ${formatSimpleDate(action.due_date)}` : "Sans échéance"; }
+  function canEditAction(action) {
+    if (!action || app.mode === "cloud-guest" || String(action.chantier_id) !== String(app.currentId)) return false;
+    return Boolean(ownId() && (String(action.created_by || "") === String(ownId()) || String(action.assignee_user_id || "") === String(ownId()) || isJournalAdmin() || canManageDocuments()));
+  }
+  function actionLinksForMessage(message) {
+    const actions = activeActionsFor(message.chantier_id);
+    const linked = actions.filter(action => (message.action_id && String(action.id) === String(message.action_id)) || [action.message_id, action.proof_message_id].some(id => id && String(id) === String(message.id)));
+    if (linked.length || message.message_type !== "Action") return linked;
+    // Anciennes annonces : ne rattacher que si le titre, l'auteur et l'heure
+    // désignent une seule action. Une correspondance ambiguë reste sans lien.
+    const legacy = actions.filter(action => {
+      const prefix = `Action créée : ${action.title}`, body = String(message.body || "");
+      return String(action.created_by) === String(message.author_id) && Math.abs(new Date(message.created_at) - new Date(action.created_at)) < 120000 && (body === prefix || body.startsWith(`${prefix} — attribuée à `) || body.startsWith(`${prefix} · Priorité `));
+    });
+    return legacy.length === 1 ? legacy : [];
+  }
+  function renderMessageActionLinks(message) {
+    return actionLinksForMessage(message).map(action => `<button class="message-action-link" data-action="open-action" data-action-id="${escapeHtml(action.id)}"><b>✓ ${escapeHtml(action.title)}</b><span>${escapeHtml(actionStatusLabel(action.status))} · ${escapeHtml(action.assignee || "Sans pilote")} · ${escapeHtml(actionDeadlineLabel(action))}</span><small>Ouvrir l’action ›</small></button>`).join("");
+  }
   function renderActions() {
     const chantier = currentChantier();
     if (!chantier) { showEmpty(els.actionBoard, "Aucune action à suivre", "Crée un chantier et ajoute les premières actions.", "✓"); els.actionSummary.innerHTML = ""; els.actionCount.textContent = "0"; return; }
     const actions = activeActionsFor(chantier.id), outstanding = actions.filter(action => action.status !== "terminee"), late = outstanding.filter(actionIsLate);
     els.actionCount.textContent = outstanding.length;
-    els.actionSummary.innerHTML = [["À traiter", outstanding.length], ["En retard", late.length], ["Terminées", actions.filter(action => action.status === "terminee").length]].map(([label, count]) => `<div class="summary-card"><b>${count}</b><span>${label}</span></div>`).join("");
+    els.actionSummary.innerHTML = [["À traiter", outstanding.length], ["En retard / immédiates", late.length], ["Terminées", actions.filter(action => action.status === "terminee").length]].map(([label, count]) => `<div class="summary-card"><b>${count}</b><span>${label}</span></div>`).join("");
     const columns = [["a_faire", "À faire"], ["en_cours", "En cours"], ["terminee", "Terminées"]];
     els.actionBoard.innerHTML = columns.map(([status, title]) => {
-      const items = actions.filter(action => action.status === status).sort((a, b) => String(a.due_date || "9999").localeCompare(String(b.due_date || "9999")));
-      return `<section class="action-column"><h3>${title}<span>${items.length}</span></h3>${items.map(action => `<article class="action-card"><button class="action-menu" data-action="action-menu" data-action-id="${action.id}" aria-label="Gérer">⋮</button><span class="action-priority priority-${escapeHtml(action.priority || "normale")}">${escapeHtml(actionPriorityLabel(action.priority))}</span><h4>${escapeHtml(action.title)}</h4>${action.description ? `<p>${escapeHtml(action.description)}</p>` : ""}${action.close_note ? `<p class="action-proof">✓ ${escapeHtml(truncate(action.close_note, 100))}</p>` : ""}<div class="action-card-foot"><span>${escapeHtml(action.assignee || "Non attribuée")}</span><span class="${actionIsLate(action) ? "due-late" : ""}">${action.due_date ? `Échéance ${new Intl.DateTimeFormat("fr-FR").format(new Date(`${action.due_date}T12:00:00`))}` : "Sans échéance"}</span></div></article>`).join("") || `<p style="margin:16px 3px;color:#687982;font-size:11px">Aucune action</p>`}</section>`;
+      const key = action => action.due_mode === "immediate" ? "0000" : String(action.due_date || "9999");
+      const items = actions.filter(action => action.status === status).sort((a, b) => key(a).localeCompare(key(b)));
+      return `<section class="action-column"><h3>${title}<span>${items.length}</span></h3>${items.map(action => `<article class="action-card"><button class="action-menu" data-action="action-menu" data-action-id="${escapeHtml(action.id)}" aria-label="Ouvrir l’action">⋮</button><span class="action-priority priority-${escapeHtml(action.priority || "normale")}">${escapeHtml(actionPriorityLabel(action.priority))}</span><h4><button class="action-title-link" data-action="open-action" data-action-id="${escapeHtml(action.id)}">${escapeHtml(action.title)}</button></h4>${action.description ? `<p>${escapeHtml(action.description)}</p>` : ""}${action.close_note ? `<p class="action-proof">✓ ${escapeHtml(truncate(action.close_note, 100))}</p>` : ""}<div class="action-card-foot"><span>${escapeHtml(action.assignee || "Sans pilote")}</span><span class="${actionIsLate(action) ? "due-late" : ""}">${escapeHtml(actionDeadlineLabel(action))}</span></div></article>`).join("") || `<p style="margin:16px 3px;color:#687982;font-size:11px">Aucune action</p>`}</section>`;
     }).join("");
   }
+
   function riskSeverityLabel(value) { return ({ faible: "Faible", moderee: "Modérée", elevee: "Élevée", critique: "Critique" })[value] || "Modérée"; }
   function riskStatusLabel(value) { return ({ ouvert: "Ouvert", en_suivi: "En suivi", traite: "Traité" })[value] || "Ouvert"; }
   function formatSimpleDate(value) { return value ? new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(`${String(value).slice(0, 10)}T12:00:00`)) : ""; }
@@ -1739,6 +1855,8 @@
   }
   function renderAccessControls() {
     const hasGlobalRights = !isCloudReady() || isJournalAdmin();
+    $("userDirectoryBtn").hidden = !isCloudReady();
+    $("mobileUserDirectoryBtn").hidden = !isCloudReady();
     els.newChantierBtn.hidden = !hasGlobalRights;
     els.inviteBtn.hidden = !hasGlobalRights;
     els.adminDashboardBtn.hidden = !isJournalOwner();
@@ -1766,7 +1884,14 @@
   }
   async function selectChantier(id) {
     if (String(id) === String(app.currentId)) { els.appShell.classList.remove("sidebar-open"); return; }
+    if (app.sendingMessage) return toast("L’envoi est en cours. Attends sa fin avant de changer de chantier.", "warning");
+    rememberComposerDraft();
     app.currentId = id;
+    restoreComposerDraft();
+    app.search = ""; app.typeFilter = ""; app.onlyImportant = false;
+    app.advancedFilters = { from: "", to: "", zone: "", author: "", attachment: false };
+    els.messageSearch.value = ""; els.typeFilter.value = "";
+    els.importantFilterBtn.setAttribute("aria-pressed", "false");
     app.documentViewFolderId = null;
     if (isCloudReady()) { await refreshCloudCurrent(); subscribeCurrentChantier(); }
     else { saveLocalData(); renderAll(); }
@@ -1974,10 +2099,13 @@
       plan_category: metadata.plan_category || null, plan_status: metadata.plan_status || null, revision: metadata.revision || null, zone: metadata.zone || null
     };
     const { data, error } = await app.db.from("chantier_attachments").insert(attachment).select().single();
-    if (error) throw error;
+    if (error) {
+      await bucket.remove([path]).catch(() => {});
+      throw error;
+    }
     return data;
   }
-  async function addMessage(payload, files = [], attachmentMetadata = {}) {
+  async function addMessage(payload, files = [], attachmentMetadata = {}, resumeMessage = null) {
     const chantier = currentChantier();
     if (!chantier) throw new Error("Crée ou sélectionne un chantier avant d’écrire.");
     if (!isCloudReady() && !app.profile.full_name.trim()) {
@@ -1987,18 +2115,27 @@
     const base = {
       chantier_id: chantier.id, author_id: ownId(), author_name: ownName(), body: payload.body?.trim() || "",
       message_type: payload.message_type || "Info", zone: payload.zone?.trim() || "", reply_to: payload.reply_to || null,
-      is_important: Boolean(payload.is_important), created_at: nowIso()
+      is_important: Boolean(payload.is_important), created_at: nowIso(),
+      ...(payload.action_id ? { action_id: payload.action_id } : {})
     };
     if (!base.body && !files.length) throw new Error("Ajoute un message ou au moins un fichier.");
     if (isCloudReady()) {
-      const { data: message, error } = await app.db.from("chantier_messages").insert(base).select().single();
+      if (resumeMessage && (resumeMessage.chantier_id !== chantier.id || resumeMessage.author_id !== ownId())) throw new Error("Cet envoi appartient à un autre chantier ou compte.");
+      const { data: message, error } = resumeMessage ? { data: resumeMessage, error: null } : await app.db.from("chantier_messages").insert(base).select().single();
       if (error) throw error;
-      const attachments = [];
+      const attachments = [], failedFiles = [];
       for (const item of files) {
         try { attachments.push(await uploadCloudAttachment(item.file || item, message, attachmentMetadata)); }
-        catch (error) { toast(`Fichier non envoyé : ${item.file?.name || item.name} (${error.message})`, "error"); }
+        catch (error) { failedFiles.push(item); toast(`Fichier non envoyé : ${item.file?.name || item.name} (${error.message})`, "error"); }
       }
-      await refreshCloudCurrent();
+      // A refresh failure cannot turn an already persisted send into a new send.
+      try { await refreshCloudCurrent(); }
+      catch (error) { toast("L’envoi est enregistré, mais le fil n’a pas pu être actualisé. Actualise la discussion.", "warning"); }
+      if (failedFiles.length) {
+        const failure = new Error(`${failedFiles.length} fichier(s) restent à envoyer. Appuie sur Réessayer.`);
+        failure.sentMessage = message; failure.failedFiles = failedFiles;
+        throw failure;
+      }
       return { ...message, attachments };
     }
     const attachments = [];
@@ -2020,17 +2157,55 @@
     renderAll();
     return message;
   }
+  function setComposerSendingState() {
+    const busy = app.sendingMessage, retry = Boolean(app.composerRetry);
+    const button = $("sendBtn");
+    button.disabled = busy;
+    button.title = busy ? "Envoi en cours…" : retry ? "Réessayer les fichiers restants" : "Envoyer";
+    button.setAttribute("aria-label", button.title);
+    button.textContent = busy ? "…" : retry ? "↻" : "➤";
+    els.messageInput.readOnly = busy || retry;
+    [els.messageType, els.messageZone, els.messageImportant].forEach(field => { field.disabled = busy || retry; });
+  }
   async function sendComposerMessage() {
-    const files = [...app.pendingFiles];
+    if (app.sendingMessage) return;
+    const files = [...app.pendingFiles], senderId = ownId(), sendingChantierId = app.currentId, sessionVersion = app.sessionVersion || 0;
+    if (!files.length && !els.messageInput.value.trim()) return toast("Ajoute un message ou une photo.", "warning");
+    app.sendingMessage = true;
+    setComposerSendingState();
     try {
-      if (files.length && !els.messageInput.value.trim()) throw new Error("Ajoute un descriptif avec la photo ou le fichier avant l’envoi.");
       await addMessage({
         body: els.messageInput.value, message_type: els.messageType.value, zone: els.messageZone.value,
         reply_to: app.replyTo?.id || null, is_important: els.messageImportant.checked
-      }, files);
+      }, files, {}, app.composerRetry);
+      if ((app.sessionVersion || 0) !== sessionVersion || ownId() !== senderId || app.currentId !== sendingChantierId) return;
       clearComposer();
-      toast(files.length ? "Message et pièces jointes envoyés." : "Message envoyé.", "success");
-    } catch (error) { toast(error.message, "error"); }
+      requestAnimationFrame(scrollMessagesToBottom);
+      toast(files.length ? "Pièces jointes envoyées." : "Message envoyé.", "success");
+    } catch (error) {
+      if ((app.sessionVersion || 0) !== sessionVersion || ownId() !== senderId || app.currentId !== sendingChantierId) return;
+      if (error.sentMessage) {
+        app.composerRetry = error.sentMessage;
+        files.filter(item => !error.failedFiles.includes(item)).forEach(item => item.preview_url && URL.revokeObjectURL(item.preview_url));
+        app.pendingFiles = error.failedFiles;
+        renderPendingFiles();
+      }
+      toast(error.message, "error");
+    } finally { if ((app.sessionVersion || 0) === sessionVersion) { app.sendingMessage = false; setComposerSendingState(); } }
+  }
+  function rememberComposerDraft() {
+    if (!app.currentId) return;
+    app.composerDrafts.set(String(app.currentId), { body: els.messageInput.value, type: els.messageType.value,
+      zone: els.messageZone.value, important: els.messageImportant.checked, files: app.pendingFiles,
+      replyTo: app.replyTo, retry: app.composerRetry });
+  }
+  function restoreComposerDraft() {
+    const draft = app.composerDrafts.get(String(app.currentId)) || {};
+    els.messageInput.value = draft.body || ""; els.messageInput.style.height = "";
+    els.messageType.value = draft.type || "Info"; els.messageZone.value = draft.zone || "";
+    els.messageImportant.checked = Boolean(draft.important);
+    app.pendingFiles = draft.files || []; app.replyTo = draft.replyTo || null; app.composerRetry = draft.retry || null;
+    renderPendingFiles(); renderReplyPreview(); setComposerSendingState();
   }
   function clearPendingFiles() {
     app.pendingFiles.forEach(item => item.preview_url && URL.revokeObjectURL(item.preview_url));
@@ -2038,6 +2213,8 @@
     renderPendingFiles();
   }
   function clearComposer() {
+    app.composerRetry = null;
+    app.composerDrafts.delete(String(app.currentId));
     els.messageInput.value = "";
     els.messageInput.style.height = "";
     els.messageZone.value = "";
@@ -2055,6 +2232,7 @@
     els.attachmentPreview.innerHTML = app.pendingFiles.map((item, index) => `<div class="pending-file">${fileIsImage(item.file) ? `<img src="${escapeHtml(item.preview_url)}" alt=""><button class="annotate-pending" data-action="annotate-pending" data-index="${index}" title="Annoter la photo" aria-label="Annoter la photo">✎</button>` : `<div class="pending-doc">${escapeHtml(fileIcon(item.file))}<br>${escapeHtml(truncate(item.file.name, 14))}</div>`}<button data-action="remove-pending" data-index="${index}" aria-label="Retirer">×</button></div>`).join("");
   }
   function queueFiles(files) {
+    if (app.sendingMessage || app.composerRetry) return toast("Termine l’envoi en cours avant d’ajouter d’autres fichiers.", "warning");
     const limit = isCloudReady() ? MAX_CLOUD_FILE_BYTES : MAX_LOCAL_FILE_BYTES;
     files.forEach(file => {
       if (file.size > limit) toast(`${file.name} dépasse ${formatBytes(limit)}.`, "error");
@@ -2063,6 +2241,7 @@
     renderPendingFiles();
   }
   function openImageAnnotationDialog(index) {
+    if (app.sendingMessage || app.composerRetry) return;
     const item = app.pendingFiles[Number(index)];
     if (!item || !fileIsImage(item.file)) return;
     openModal({
@@ -2240,25 +2419,35 @@
     } catch (error) { toast(`Mise à jour impossible : ${error.message}`, "error"); }
   }
   async function editMessage(message) {
+    const sessionVersion = app.sessionVersion || 0;
+    const hasAttachments = Boolean(message.attachments?.length);
     openModal({
       title: "Modifier le message", subtitle: "La modification est visible dans le journal.",
-      body: `<form id="editMessageForm" class="form-grid one"><label class="form-field">Message<textarea name="body" required>${escapeHtml(message.body || "")}</textarea></label><label class="form-field">Type<select name="message_type">${["Info", "Journal", "Sécurité", "Incident", "Avancement", "Aléa", "Coactivité", "Décision", "Document", "Action"].map(type => `<option ${message.message_type === type ? "selected" : ""}>${type}</option>`).join("")}</select></label><label class="form-field">Zone / PK<input name="zone" value="${escapeHtml(message.zone || "")}"></label></form>`,
+      body: `<form id="editMessageForm" class="form-grid one"><label class="form-field">${hasAttachments ? "Commentaire (facultatif)" : "Message"}<textarea name="body" ${hasAttachments ? "" : "required"}>${escapeHtml(message.body || "")}</textarea></label><label class="form-field">Type<select name="message_type">${["Info", "Journal", "Sécurité", "Incident", "Avancement", "Aléa", "Coactivité", "Décision", "Document", "Action"].map(type => `<option ${message.message_type === type ? "selected" : ""}>${type}</option>`).join("")}</select></label><label class="form-field">Zone / PK<input name="zone" value="${escapeHtml(message.zone || "")}"></label></form>`,
       footer: `<button class="secondary-button" id="cancelEditMessage">Annuler</button><button class="primary-button" id="saveEditMessage">Enregistrer</button>`
     });
     $("cancelEditMessage").addEventListener("click", closeModal);
     $("saveEditMessage").addEventListener("click", async () => {
-      const form = $("editMessageForm");
-      if (!form.reportValidity()) return;
+      const form = $("editMessageForm"), button = $("saveEditMessage");
+      if (!form.reportValidity() || button.disabled || (app.sessionVersion || 0) !== sessionVersion) return;
       const values = Object.fromEntries(new FormData(form).entries());
+      values.body = String(values.body || "").trim();
+      if (!values.body && !hasAttachments) return toast("Conserve un texte ou supprime le message.", "warning");
+      button.disabled = true;
       try {
+        let refreshFailed = false;
         if (isCloudReady()) {
-          const { error } = await app.db.from("chantier_messages").update({ ...values, edited_at: nowIso() }).eq("id", message.id);
+          const { data, error } = await app.db.from("chantier_messages").update({ ...values, edited_at: nowIso() }).eq("id", message.id).select("id").single();
           if (error) throw error;
-          await refreshCloudCurrent();
+          if (!data) throw new Error("Tes droits sur ce message ont changé. Actualise le chantier.");
+          if ((app.sessionVersion || 0) !== sessionVersion) return;
+          try { await refreshCloudCurrent(); }
+          catch { refreshFailed = true; }
         } else { Object.assign(message, values, { edited_at: nowIso() }); saveLocalData(); renderAll({ keepPosition: true }); }
+        if ((app.sessionVersion || 0) !== sessionVersion) return;
         closeModal();
-        toast("Message modifié.", "success");
-      } catch (error) { toast(`Modification impossible : ${error.message}`, "error"); }
+        toast(refreshFailed ? "Message modifié. Actualise le chantier pour voir la mise à jour." : "Message modifié.", refreshFailed ? "warning" : "success");
+      } catch (error) { button.disabled = false; if ((app.sessionVersion || 0) === sessionVersion) toast(`Modification impossible : ${friendlyError(error)}`, "error"); }
     });
   }
   async function softDeleteMessage(message) {
@@ -2272,32 +2461,73 @@
       toast("Message supprimé.", "success");
     } catch (error) { toast(`Suppression impossible : ${error.message}`, "error"); }
   }
+  function localActionDate(offset = 0) {
+    const date = new Date(); date.setDate(date.getDate() + offset);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  }
+  function actionFormValues(values, directory = []) {
+    const choice = String(values.pilot || "");
+    const pilot = directory.find(person => String(person.id) === choice && person.can_assign !== false);
+    if (choice && choice !== "legacy" && !pilot) throw new Error("Ce pilote n’a pas accès à ce chantier. Demande à un administrateur de lui donner un accès contributeur.");
+    const deadline = String(values.deadline || (values.due_date ? "date" : "none"));
+    const dueDate = deadline === "today" ? localActionDate() : deadline === "tomorrow" ? localActionDate(1) : deadline === "week" ? localActionDate(7) : deadline === "date" ? String(values.due_date || "") : null;
+    if (deadline === "date" && (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate) || Number.isNaN(Date.parse(`${dueDate}T12:00:00`)))) throw new Error("Choisis une date d’échéance valide.");
+    const result = { title: String(values.title || "").trim(), description: String(values.description || "").trim(), assignee: pilot ? String(pilot.full_name || "Intervenant") : choice === "legacy" ? String(values.assignee || "").trim() : "", assignee_user_id: pilot?.id || null, due_mode: deadline === "immediate" ? "immediate" : dueDate ? "date" : "none", due_date: dueDate, priority: values.priority || "normale" };
+    if (!result.title) throw new Error("Le libellé de l’action est obligatoire.");
+    if (!["basse", "normale", "haute", "critique"].includes(result.priority)) throw new Error("Priorité invalide.");
+    return result;
+  }
   async function addAction(values, sourceMessage = null) {
     const chantier = currentChantier();
-    const action = { chantier_id: chantier.id, message_id: sourceMessage?.id || null, title: values.title.trim(), description: values.description.trim(), assignee: values.assignee.trim(), due_date: values.due_date || null, priority: values.priority || "normale", status: values.status || "a_faire", created_by: ownId(), created_at: nowIso() };
+    if (!chantier) throw new Error("Sélectionne un chantier avant de créer une action.");
+    const action = { ...values, chantier_id: chantier.id, message_id: sourceMessage?.id || null, status: "a_faire", created_by: ownId(), created_at: nowIso() };
     if (!action.title) throw new Error("Le libellé de l’action est obligatoire.");
     if (isCloudReady()) {
-      const { error } = await app.db.from("action_items").insert(action);
+      const { data, error } = await app.db.from("action_items").insert(action).select().single();
       if (error) throw error;
-      await refreshCloudCurrent();
-    } else { action.id = makeId(); app.local.actions.push(action); app.actions = app.local.actions; saveLocalData(); renderAll(); }
-    await addMessage({ body: `Action créée : ${action.title}${action.assignee ? ` — attribuée à ${action.assignee}` : ""} · Priorité ${actionPriorityLabel(action.priority)}`, message_type: "Action", zone: sourceMessage?.zone || "", reply_to: sourceMessage?.id || null });
+      Object.assign(action, data);
+    } else { action.id = makeId(); app.local.actions.push(action); app.actions = app.local.actions; saveLocalData(); }
+    // L'action est déjà enregistrée : un incident de publication ne doit pas
+    // inviter à la recréer et produire un doublon.
+    let announcementFailed = false;
+    try { await addMessage({ body: `Action créée : ${action.title}${action.assignee ? ` — attribuée à ${action.assignee}` : ""} · Priorité ${actionPriorityLabel(action.priority)}`, action_id: action.id, message_type: "Action", zone: sourceMessage?.zone || "", reply_to: sourceMessage?.id || null }); }
+    catch (error) { announcementFailed = true; console.warn("Action enregistrée, annonce non publiée", error); }
+    if (isCloudReady()) {
+      try { await refreshCloudCurrent(); }
+      catch (error) { console.warn("Action enregistrée ; actualisation différée", error); announcementFailed = true; }
+    } else renderAll();
+    return { action, announcementFailed };
+  }
+  async function updateActionDetails(action, values) {
+    if (!canEditAction(action)) throw new Error("Seuls le créateur, le pilote ou un administrateur peuvent modifier cette action.");
+    const update = { ...values, updated_at: nowIso() };
+    if (isCloudReady()) {
+      const { data, error } = await app.db.from("action_items").update(update).eq("id", action.id).select("id").single();
+      if (error) throw error;
+      if (!data) throw new Error("Tes droits sur cette action ont changé. Actualise le chantier.");
+      try { await refreshCloudCurrent(); }
+      catch (error) { console.warn("Action modifiée ; actualisation différée", error); return { refreshFailed: true }; }
+    } else { Object.assign(action, update); saveLocalData(); renderAll({ keepPosition: true }); }
+    return { refreshFailed: false };
   }
   async function setActionStatus(action, status, completion = null) {
-    if (status === "terminee" && !completion && !action.closed_at) {
-      openActionCompletionDialog(action);
-      return;
-    }
+    if (!canEditAction(action)) { toast("Tu peux consulter cette action, mais seul son créateur, son pilote ou un administrateur peut la modifier.", "warning"); return false; }
+    if (!["a_faire", "en_cours", "terminee"].includes(status)) return false;
+    if (status === "terminee" && !completion && !action.closed_at) { openActionCompletionDialog(action); return false; }
     try {
       const update = { status, updated_at: nowIso() };
       if (completion) Object.assign(update, { close_note: completion.note, proof_message_id: completion.messageId || null, closed_at: nowIso(), closed_by: ownId() });
+      if (status !== "terminee") Object.assign(update, { closed_at: null, closed_by: null });
       if (isCloudReady()) {
-        const { error } = await app.db.from("action_items").update(update).eq("id", action.id);
+        const { data, error } = await app.db.from("action_items").update(update).eq("id", action.id).select("id").single();
         if (error) throw error;
-        await refreshCloudCurrent();
+        if (!data) throw new Error("Tes droits sur cette action ont changé. Actualise le chantier.");
+        try { await refreshCloudCurrent(); }
+        catch (error) { toast("L’avancement est enregistré. Actualise le chantier pour voir la mise à jour.", "warning"); return true; }
       } else { Object.assign(action, update); saveLocalData(); renderAll(); }
       toast(`Action déplacée dans « ${actionStatusLabel(status)} ».`, "success");
-    } catch (error) { toast(`Mise à jour impossible : ${error.message}`, "error"); }
+      return true;
+    } catch (error) { toast(`Mise à jour impossible : ${friendlyError(error)}`, "error"); return false; }
   }
 
   function dailyLogById(id) { return activeDailyLogsFor(app.currentId).find(item => String(item.id) === String(id)); }
@@ -2697,8 +2927,8 @@
 
     const creating = view === "create";
     const formFields = creating
-      ? `<label class="form-field">Adresse e-mail<input name="email" type="email" required inputmode="email" autocapitalize="none" spellcheck="false" autocomplete="username" value="${escapeHtml(draft.email)}" placeholder="prenom.nom@exemple.fr"></label><label class="form-field">Mot de passe <small>8 caractères minimum</small><input name="password" type="password" required minlength="8" autocomplete="new-password" value="${escapeHtml(draft.password)}" placeholder="8 caractères minimum"></label><label class="form-field">Confirmer le mot de passe<input name="confirm_password" type="password" required minlength="8" autocomplete="new-password" value="${escapeHtml(draft.confirmPassword)}" placeholder="Ressaisis le mot de passe"></label><label class="form-field">Nom et prénom<input name="full_name" required autocomplete="name" value="${escapeHtml(draft.fullName)}" placeholder="Ex. Yoann PETIT"></label><label class="form-field">Entreprise / équipe <small>(facultatif)</small><input name="company" autocomplete="organization" value="${escapeHtml(draft.company)}" placeholder="Ex. UO Travaux – SNCF Réseau"></label>`
-      : `<label class="form-field">Adresse e-mail<input name="email" type="email" required inputmode="email" autocapitalize="none" spellcheck="false" autocomplete="username" value="${escapeHtml(draft.email)}" placeholder="prenom.nom@exemple.fr"></label><label class="form-field">Mot de passe<input name="password" type="password" required minlength="8" autocomplete="current-password" value="${escapeHtml(draft.password)}" placeholder="Ton mot de passe"></label>`;
+      ? `<label class="form-field">Adresse e-mail<input name="email" type="email" required inputmode="email" autocapitalize="none" spellcheck="false" autocomplete="username" value="${escapeHtml(draft.email)}" placeholder="prenom.nom@exemple.fr"></label><label class="form-field">Mot de passe <small>8 caractères minimum</small><input name="password" type="password" required minlength="8" autocomplete="new-password" value="" placeholder="8 caractères minimum"></label><label class="form-field">Confirmer le mot de passe<input name="confirm_password" type="password" required minlength="8" autocomplete="new-password" value="" placeholder="Ressaisis le mot de passe"></label><label class="form-field">Nom et prénom<input name="full_name" required autocomplete="name" value="${escapeHtml(draft.fullName)}" placeholder="Ex. Yoann PETIT"></label><label class="form-field">Entreprise / équipe <small>(facultatif)</small><input name="company" autocomplete="organization" value="${escapeHtml(draft.company)}" placeholder="Ex. UO Travaux – SNCF Réseau"></label>`
+      : `<label class="form-field">Adresse e-mail<input name="email" type="email" required inputmode="email" autocapitalize="none" spellcheck="false" autocomplete="username" value="${escapeHtml(draft.email)}" placeholder="prenom.nom@exemple.fr"></label><label class="form-field">Mot de passe<input name="password" type="password" required minlength="8" autocomplete="current-password" value="" placeholder="Ton mot de passe"></label>`;
     openModal({
       title: creating ? "Créer mon accès" : "Se connecter",
       subtitle: "Aucun code e-mail n’est demandé.",
@@ -2711,10 +2941,10 @@
     const rememberDraft = () => {
       const values = new FormData(form);
       app.authDraft = {
-        email: String(values.get("email") || "").trim(), password: String(values.get("password") || ""),
-        confirmPassword: String(values.get("confirm_password") || ""), fullName: String(values.get("full_name") || "").trim(), company: String(values.get("company") || "").trim()
+        email: String(values.get("email") || "").trim(), password: "", confirmPassword: "",
+        fullName: String(values.get("full_name") || "").trim(), company: String(values.get("company") || "").trim()
       };
-      return app.authDraft;
+      return { ...app.authDraft, password: String(values.get("password") || ""), confirmPassword: String(values.get("confirm_password") || "") };
     };
     const credentials = () => {
       const values = rememberDraft();
@@ -2871,6 +3101,7 @@
   }
 
   function dashboardStatusLabel(account) {
+    if (account.access_revoked) return "Tous les accès retirés";
     if (account.global_role === "proprietaire") return "Propriétaire principal";
     if (account.global_role === "administrateur_general") return "Administrateur général";
     if (account.request_status === "en_attente") return "En attente de validation";
@@ -2878,10 +3109,115 @@
     return requestStatusLabel(account.request_status) || "Accès validé";
   }
   function dashboardChantiers(account) {
+    if (account.access_revoked) return "Aucun accès — compte suspendu";
     const list = Array.isArray(account.chantiers) ? account.chantiers : [];
     if (account.global_role === "administrateur_general") return "Tous les chantiers";
     if (!list.length) return account.granted_chantier_name || "Aucun chantier attribué";
     return list.map(item => `${item.name || "Chantier"} — ${roleLabel(item.role) || item.role || "membre"}`).join(" · ");
+  }
+  function directorySearchText(value) {
+    return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("fr-FR").trim();
+  }
+  function filterDirectoryPeople(people, query) {
+    const terms = directorySearchText(query).split(/\s+/).filter(Boolean);
+    return people.filter(person => {
+      const identity = directorySearchText(`${person.full_name || ""} ${person.company || ""}`);
+      return terms.every(term => identity.includes(term));
+    }).sort((a, b) => String(a.full_name || "").localeCompare(String(b.full_name || ""), "fr"));
+  }
+  async function openUserDirectoryDialog() {
+    if (!isCloudReady()) return openProfileDialog();
+    const sessionVersion = app.sessionVersion || 0, people = [];
+    for (let offset = 0; ; ) {
+      const { data, error } = await app.db.rpc("list_journal_user_directory", { p_chantier_id: null }).range(offset, offset + 499);
+      if (error) throw error;
+      if ((app.sessionVersion || 0) !== sessionVersion || !isCloudReady()) return;
+      if (!Array.isArray(data) || !data.length) break;
+      people.push(...data); offset += data.length;
+    }
+    openModal({
+      title: "Annuaire des personnes",
+      subtitle: "Les noms et prénoms des personnes inscrites sur l’application.",
+      body: `<label class="form-field">Rechercher une personne<input id="directorySearch" type="search" placeholder="Nom, prénom ou entreprise" autocomplete="off"></label><p id="directoryCount" class="directory-count" aria-live="polite"></p><div id="directoryPeople" class="dialog-list"></div>`,
+      footer: `<button class="primary-button" id="closeUserDirectory">Fermer</button>`
+    });
+    const renderPeople = () => {
+      const filtered = filterDirectoryPeople(people, $("directorySearch").value);
+      $("directoryCount").textContent = `${filtered.length} personne${filtered.length > 1 ? "s" : ""} sur ${people.length}`;
+      $("directoryPeople").innerHTML = filtered.map(person => `<div class="dialog-item"><span class="mini-avatar">${escapeHtml(initial(person.full_name))}</span><span><b>${escapeHtml(person.full_name || "Nom et prénom non renseignés")}</b>${person.company ? `<small>${escapeHtml(person.company)}</small>` : ""}</span></div>`).join("") || `<p class="directory-count">Aucune personne trouvée.</p>`;
+    };
+    $("closeUserDirectory").addEventListener("click", closeModal);
+    $("directorySearch").addEventListener("input", renderPeople);
+    renderPeople();
+  }
+  function accountMemberships(account) {
+    const memberships = Array.isArray(account.chantiers) ? account.chantiers : [];
+    return memberships.map(item => ({ chantier_id: String(item.chantier_id || item.id || ""), role: item.role || "membre" })).filter(item => item.chantier_id);
+  }
+  function dashboardMembershipMarkup(account) {
+    const memberships = accountMemberships(account);
+    const chantiers = [...app.chantiers];
+    // Keep an existing grant visible even if the chantier list changes during editing.
+    for (const membership of memberships) {
+      if (!chantiers.some(chantier => String(chantier.id) === membership.chantier_id)) {
+        const original = account.chantiers.find(item => String(item.chantier_id || item.id) === membership.chantier_id);
+        chantiers.push({ id: membership.chantier_id, name: original?.name || "Chantier attribué" });
+      }
+    }
+    return chantiers.map(chantier => {
+      const membership = memberships.find(item => item.chantier_id === String(chantier.id));
+      const name = `${chantier.name || "Chantier sans nom"}${chantier.code ? ` — ${chantier.code}` : ""}`;
+      return `<div class="admin-membership-row" data-dashboard-membership="${escapeHtml(chantier.id)}"><label class="admin-membership-check"><input type="checkbox" data-dashboard-enabled ${membership ? "checked" : ""}><span>${escapeHtml(name)}</span></label><label class="form-field"><span class="visually-hidden">Rôle sur ${escapeHtml(name)}</span><select data-dashboard-membership-role ${membership ? "" : "disabled"}>${["membre", "lecture", "administrateur"].map(role => `<option value="${role}" ${membership?.role === role ? "selected" : ""}>${escapeHtml(roleLabel(role))}</option>`).join("")}</select></label></div>`;
+    }).join("") || `<p class="directory-count">Crée d’abord un chantier pour y attribuer des droits.</p>`;
+  }
+  function readDashboardAccess(card) {
+    const globalRole = card.querySelector("[data-dashboard-global-role]").value;
+    const memberships = [...card.querySelectorAll("[data-dashboard-membership]")].filter(row => row.querySelector("[data-dashboard-enabled]").checked).map(row => ({
+      chantier_id: row.dataset.dashboardMembership,
+      role: row.querySelector("[data-dashboard-membership-role]").value
+    }));
+    if (!["", "administrateur_general"].includes(globalRole)) throw new Error("Le niveau de droit est invalide.");
+    if (memberships.some(item => !item.chantier_id || !["membre", "lecture", "administrateur"].includes(item.role))) throw new Error("Le rôle d’un chantier est invalide.");
+    if (!globalRole && !memberships.length) throw new Error("Coche au moins un chantier, ou utilise « Retirer tous les accès ».");
+    return { p_user_id: card.dataset.dashboardUserId, p_global_role: globalRole, p_memberships: memberships };
+  }
+  async function invokeAccountDeletion(userId, confirmation) {
+    if (!isJournalOwner()) throw new Error("La suppression est réservée au propriétaire principal.");
+    if (String(confirmation || "").trim() !== "SUPPRIMER") throw new Error("Écris exactement « SUPPRIMER » pour confirmer.");
+    const { data, error } = await app.db.functions.invoke("journal-delete-user", { body: { user_id: userId, confirmation: "SUPPRIMER" } });
+    if (error) {
+      let detail = "";
+      try { detail = (await error.context?.json())?.error || ""; } catch { /* Preserve the invocation error if its response is unreadable. */ }
+      throw new Error(detail || "La suppression du compte a échoué. Vérifie le déploiement de la fonction journal-delete-user.");
+    }
+    if (!data?.success) throw new Error(data?.error || "La suppression n’a pas été confirmée par le serveur.");
+  }
+  function openDeleteJournalUserDialog(account) {
+    if (!isJournalOwner()) return toast("La suppression est réservée au propriétaire principal.", "warning");
+    const identity = account.full_name || account.email || "Compte sans nom";
+    openModal({
+      title: "Supprimer cette personne de l’application",
+      subtitle: identity,
+      body: `<p class="form-note">Le compte de <b>${escapeHtml(identity)}</b> et ses accès seront supprimés définitivement. Cette personne ne pourra plus se connecter avec ce compte. L’historique des chantiers et ses contributions restent conservés.</p><label class="form-field">Pour confirmer, écris SUPPRIMER<input id="deleteUserConfirmation" autocomplete="off" autocapitalize="characters" placeholder="SUPPRIMER"></label><div id="deleteUserResult" class="setup-result" aria-live="polite"></div>`,
+      footer: `<button class="secondary-button" id="cancelDeleteUser">Annuler</button><button class="danger-button" id="confirmDeleteUser">Supprimer définitivement</button>`
+    });
+    $("cancelDeleteUser").addEventListener("click", () => openAdminDashboardDialog().catch(error => toast(friendlyError(error), "error")));
+    $("confirmDeleteUser").addEventListener("click", async () => {
+      const button = $("confirmDeleteUser");
+      const result = $("deleteUserResult");
+      try {
+        button.disabled = true;
+        await invokeAccountDeletion(account.user_id || account.id, $("deleteUserConfirmation").value);
+        closeModal();
+        toast("Compte supprimé. L’historique des chantiers est conservé.", "success");
+        await refreshAccessContext();
+        await openAdminDashboardDialog();
+      } catch (error) {
+        result.className = "setup-result error";
+        result.textContent = friendlyError(error);
+        button.disabled = false;
+      }
+    });
   }
   async function verifyJournalOwnerPassword(password) {
     if (!isJournalOwner()) throw new Error("Cette opération est réservée au propriétaire principal.");
@@ -3020,60 +3356,69 @@
     });
   }
   async function openAdminDashboardDialog() {
-    if (!isJournalOwner()) {
-      toast("Ce tableau de bord est réservé au propriétaire principal.", "warning");
-      return;
-    }
-    const { data, error } = await app.db.rpc("get_journal_administration_dashboard");
+    if (!isJournalOwner()) return toast("Ce tableau de bord est réservé au propriétaire principal.", "warning");
+    const sessionVersion = app.sessionVersion || 0;
+    const { data, error } = await app.db.rpc("journal_v142_administration_dashboard");
     if (error) throw error;
-    const accounts = data || [];
+    if ((app.sessionVersion || 0) !== sessionVersion || !isJournalOwner()) return;
+    const accounts = (Array.isArray(data) ? data : []).sort((a, b) => String(a.full_name || a.email || "").localeCompare(String(b.full_name || b.email || ""), "fr"));
     const counts = {
-      pending: accounts.filter(item => item.request_status === "en_attente").length,
-      accepted: accounts.filter(item => item.request_status === "acceptee").length,
-      refused: accounts.filter(item => item.request_status === "refusee").length
+      pending: accounts.filter(item => item.request_status === "en_attente" && !item.access_revoked).length,
+      accepted: accounts.filter(item => !item.access_revoked && (item.global_role || accountMemberships(item).length)).length
     };
-    const chantierOptions = `<option value="">Choisir un chantier…</option>${app.chantiers.map(chantier => `<option value="${escapeHtml(chantier.id)}">${escapeHtml(chantier.name)}${chantier.code ? ` — ${escapeHtml(chantier.code)}` : ""}</option>`).join("")}`;
     const cards = accounts.map(account => {
-      const isOwner = account.global_role === "proprietaire";
-      const selectedRole = account.global_role || account.granted_role || "membre";
-      const selectedChantier = account.granted_chantier_id || "";
+      const isOwner = account.global_role === "proprietaire" || String(account.user_id || account.id) === String(ownId());
       const identity = account.full_name || account.email || "Compte sans nom";
-      if (isOwner) return `<section class="dialog-item access-request" style="display:block"><div style="display:flex;gap:10px;align-items:center"><span class="mini-avatar">${escapeHtml(initial(identity))}</span><span><b>${escapeHtml(identity)}</b><small>${escapeHtml(account.email || "")} · ${escapeHtml(dashboardStatusLabel(account))}</small></span></div><p style="margin:12px 0 0;font-size:13px;color:var(--muted)">Compte protégé : propriétaire principal de l’application.</p></section>`;
-      return `<section class="dialog-item access-request" data-dashboard-user-id="${escapeHtml(account.user_id)}" style="display:block"><div style="display:flex;gap:10px;align-items:center"><span class="mini-avatar">${escapeHtml(initial(identity))}</span><span><b>${escapeHtml(identity)}</b><small>${escapeHtml(account.email || "")} · ${escapeHtml(dashboardStatusLabel(account))}</small></span></div><p style="margin:10px 0 0;font-size:12px;color:var(--muted)">Accès actuel : ${escapeHtml(dashboardChantiers(account))}</p><div class="form-grid" style="margin-top:12px"><label class="form-field">Niveau de droit<select data-dashboard-role><option value="membre" ${selectedRole === "membre" ? "selected" : ""}>Contributeur — lire et écrire dans le journal</option><option value="lecture" ${selectedRole === "lecture" ? "selected" : ""}>Lecture seule — journal et documents en consultation</option><option value="administrateur" ${selectedRole === "administrateur" ? "selected" : ""}>Administrateur du chantier</option><option value="administrateur_general" ${selectedRole === "administrateur_general" ? "selected" : ""}>Administrateur général — tous les chantiers</option></select></label><label class="form-field">Chantier<select data-dashboard-chantier ${selectedRole === "administrateur_general" ? "disabled" : ""}>${chantierOptions.replace(`value="${escapeHtml(selectedChantier)}"`, `value="${escapeHtml(selectedChantier)}" selected`)}</select></label></div><div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px"><button class="secondary-button" data-dashboard-revoke>Retirer l’accès</button><button class="primary-button" data-dashboard-save>Enregistrer les droits</button></div></section>`;
-    }).join("") || `<div class="empty-state"><div class="empty-icon">♙</div><h3>Aucun compte recensé</h3><p>Les comptes apparaîtront ici après leur première connexion.</p></div>`;
+      const header = `<div class="admin-account-identity"><span class="mini-avatar">${escapeHtml(initial(identity))}</span><span><b>${escapeHtml(identity)}</b><small>${escapeHtml(account.email || "")}${account.company ? ` · ${escapeHtml(account.company)}` : ""}</small><small>${escapeHtml(dashboardStatusLabel(account))}</small></span></div>`;
+      const search = escapeHtml(directorySearchText(`${identity} ${account.email || ""} ${account.company || ""}`));
+      if (isOwner) return `<section class="dialog-item access-request admin-account-card" data-dashboard-search="${search}">${header}<p class="directory-count">Compte protégé : propriétaire principal de l’application.</p></section>`;
+      return `<section class="dialog-item access-request admin-account-card" data-dashboard-user-id="${escapeHtml(account.user_id || account.id)}" data-dashboard-search="${search}">${header}<p class="directory-count">Accès actuel : ${escapeHtml(dashboardChantiers(account))}</p><label class="form-field">Périmètre des droits<select data-dashboard-global-role><option value="" ${account.global_role === "administrateur_general" ? "" : "selected"}>Choisir les droits chantier par chantier</option><option value="administrateur_general" ${account.global_role === "administrateur_general" ? "selected" : ""}>Administrateur général — tous les chantiers</option></select></label><fieldset class="admin-membership-list" data-dashboard-memberships ${account.global_role === "administrateur_general" ? "hidden" : ""}><legend>Chantiers autorisés et rôle sur chaque chantier</legend>${dashboardMembershipMarkup(account)}</fieldset><p class="directory-count" data-dashboard-global-note ${account.global_role === "administrateur_general" ? "" : "hidden"}>Ce rôle donne accès à tous les chantiers. Les sélections ci-dessous sont conservées si tu reviens aux droits par chantier.</p><div class="admin-account-actions"><button class="danger-button" data-dashboard-delete>Supprimer le compte</button><button class="secondary-button" data-dashboard-revoke>Retirer tous les accès</button><button class="primary-button" data-dashboard-save>Enregistrer les droits</button></div></section>`;
+    }).join("") || `<p class="directory-count">Aucun compte recensé.</p>`;
     openModal({
       title: "Administration du journal",
-      subtitle: "Tableau de bord du propriétaire principal : comptes, statuts et niveaux de droit.",
-      body: `<section class="admin-dashboard-summary"><div><b>${accounts.length}</b><span>comptes</span></div><div class="pending"><b>${counts.pending}</b><span>en attente</span></div><div class="accepted"><b>${counts.accepted}</b><span>validés</span></div></section><div class="form-note"><b>Centre d’administration</b><br>Les droits enregistrés ici sont appliqués immédiatement. Les administrateurs peuvent gérer les documents ; les comptes « Lecture seule » restent en consultation.</div><div class="dialog-list admin-account-list">${cards}</div>`,
+      subtitle: "Comptes, accès et rôles sur plusieurs chantiers.",
+      body: `<section class="admin-dashboard-summary"><div><b>${accounts.length}</b><span>comptes</span></div><div class="pending"><b>${counts.pending}</b><span>en attente</span></div><div class="accepted"><b>${counts.accepted}</b><span>autorisés</span></div></section><p class="form-note">Coche tous les chantiers à attribuer à chaque personne et choisis son rôle sur chacun. Une personne peut administrer plusieurs chantiers.</p><label class="form-field">Rechercher un compte<input id="dashboardSearch" type="search" placeholder="Nom, prénom, entreprise ou e-mail" autocomplete="off"></label><p id="dashboardSearchCount" class="directory-count" aria-live="polite"></p><div class="dialog-list admin-account-list">${cards}</div>`,
       footer: `<button class="secondary-button" id="dashboardPendingBtn">Demandes en attente</button>${app.chantiers.length ? `<button class="secondary-button" id="dashboardMaintenanceBtn">Maintenance chantier</button>` : ""}<button class="primary-button" id="closeAdminDashboard">Fermer</button>`,
       wide: true
     });
     $("closeAdminDashboard").addEventListener("click", closeModal);
-    $("dashboardPendingBtn").addEventListener("click", () => { closeModal(); openAccessManagementDialog().catch(error => toast(friendlyError(error), "error")); });
+    $("dashboardPendingBtn").addEventListener("click", () => openAccessManagementDialog().catch(error => toast(friendlyError(error), "error")));
     $("dashboardMaintenanceBtn")?.addEventListener("click", openOwnerChantierMaintenanceDialog);
-    $$('[data-dashboard-role]').forEach(select => select.addEventListener("change", () => {
+    const filterAccounts = () => {
+      const terms = directorySearchText($("dashboardSearch").value).split(/\s+/).filter(Boolean);
+      let visible = 0;
+      $$('[data-dashboard-search]').forEach(card => {
+        card.hidden = !terms.every(term => card.dataset.dashboardSearch.includes(term));
+        if (!card.hidden) visible += 1;
+      });
+      $("dashboardSearchCount").textContent = `${visible} compte${visible > 1 ? "s" : ""} sur ${accounts.length}`;
+    };
+    $("dashboardSearch").addEventListener("input", filterAccounts);
+    filterAccounts();
+    $$('[data-dashboard-global-role]').forEach(select => select.addEventListener("change", () => {
       const card = select.closest("[data-dashboard-user-id]");
-      const chantier = card.querySelector("[data-dashboard-chantier]");
-      chantier.disabled = select.value === "administrateur_general";
+      const global = select.value === "administrateur_general";
+      card.querySelector("[data-dashboard-memberships]").hidden = global;
+      card.querySelector("[data-dashboard-global-note]").hidden = !global;
     }));
+    $$('[data-dashboard-enabled]').forEach(checkbox => checkbox.addEventListener("change", () => {
+      checkbox.closest("[data-dashboard-membership]").querySelector("[data-dashboard-membership-role]").disabled = !checkbox.checked;
+    }));
+    const reloadDashboard = async () => {
+      await refreshAccessContext();
+      await refreshCloudChantiers();
+      await openAdminDashboardDialog();
+    };
     $$('[data-dashboard-save]').forEach(button => button.addEventListener("click", async () => {
       const card = button.closest("[data-dashboard-user-id]");
-      const role = card.querySelector("[data-dashboard-role]").value;
-      const chantierId = card.querySelector("[data-dashboard-chantier]").value || null;
-      if (role !== "administrateur_general" && !chantierId) {
-        toast("Choisis un chantier pour cet utilisateur.", "warning");
-        return;
-      }
       try {
+        const values = readDashboardAccess(card);
         button.disabled = true;
         button.textContent = "Enregistrement…";
-        const { error: saveError } = await app.db.rpc("set_journal_user_access", { p_user_id: card.dataset.dashboardUserId, p_role: role, p_chantier_id: chantierId });
+        const { error: saveError } = await app.db.rpc("journal_v142_set_user_access", values);
         if (saveError) throw saveError;
-        toast("Droits mis à jour.", "success");
-        await refreshAccessContext();
-        await refreshCloudChantiers();
-        closeModal();
-        await openAdminDashboardDialog();
+        toast("Droits enregistrés sur les chantiers sélectionnés.", "success");
+        await reloadDashboard();
       } catch (error) {
         button.disabled = false;
         button.textContent = "Enregistrer les droits";
@@ -3082,18 +3427,23 @@
     }));
     $$('[data-dashboard-revoke]').forEach(button => button.addEventListener("click", async () => {
       const card = button.closest("[data-dashboard-user-id]");
-      if (!window.confirm("Retirer tous les accès de ce compte ?")) return;
+      const account = accounts.find(item => String(item.user_id || item.id) === card.dataset.dashboardUserId);
+      if (!window.confirm(`Retirer tous les accès de ${account?.full_name || account?.email || "ce compte"} ? La personne restera inscrite mais ne pourra plus consulter ni modifier les chantiers.`)) return;
       try {
         button.disabled = true;
-        const { error: revokeError } = await app.db.rpc("revoke_journal_user_access", { p_user_id: card.dataset.dashboardUserId });
+        const { error: revokeError } = await app.db.rpc("journal_v142_revoke_user_access", { p_user_id: card.dataset.dashboardUserId });
         if (revokeError) throw revokeError;
-        toast("Accès retiré.", "success");
-        closeModal();
-        await openAdminDashboardDialog();
+        toast("Tous les accès ont été retirés.", "success");
+        await reloadDashboard();
       } catch (error) {
         button.disabled = false;
         toast(`Retrait impossible : ${friendlyError(error)}`, "error");
       }
+    }));
+    $$('[data-dashboard-delete]').forEach(button => button.addEventListener("click", () => {
+      const card = button.closest("[data-dashboard-user-id]");
+      const account = accounts.find(item => String(item.user_id || item.id) === card.dataset.dashboardUserId);
+      if (account) openDeleteJournalUserDialog(account);
     }));
   }
 
@@ -3190,24 +3540,94 @@
     });
   }
 
-  function openActionDialog(sourceMessage = null) {
+  async function loadActionDirectory(chantierId) {
+    if (isCloudReady()) {
+      const people = [], pageSize = 500;
+      let offset = 0;
+      while (true) {
+        const { data, error } = await app.db.rpc("list_journal_user_directory", { p_chantier_id: chantierId }).range(offset, offset + pageSize - 1);
+        if (error) throw error;
+        const page = data || [];
+        if (!page.length) return people;
+        people.push(...page);
+        // Le serveur peut imposer un plafond inférieur à la taille demandée.
+        // Continuer jusqu'à une page vide, en avançant du nombre reçu.
+        offset += page.length;
+      }
+    }
+    const people = new Map();
+    [app.profile, ...(app.members || [])].forEach(person => {
+      const id = person.user_id || person.id;
+      if (id && person.full_name && (!person.chantier_id || String(person.chantier_id) === String(chantierId))) people.set(String(id), { ...person, id, can_assign: person.role !== "lecture" });
+    });
+    return [...people.values()].sort((a, b) => a.full_name.localeCompare(b.full_name, "fr"));
+  }
+  async function openActionDialog(sourceMessage = null, existingAction = null) {
     if (!currentChantier()) return openNewChantierDialog();
     if (app.mode === "cloud-guest") return openProfileDialog();
+    if (existingAction && !canEditAction(existingAction)) return openActionDetails(existingAction);
+    const chantierId = app.currentId, userId = ownId();
+    let directory;
+    try { directory = await loadActionDirectory(chantierId); }
+    catch (error) { toast(`Annuaire indisponible : ${friendlyError(error)}. Vérifie la migration V14.2.`, "error"); return; }
+    if (String(app.currentId) !== String(chantierId) || String(ownId()) !== String(userId)) return;
+    const ownDirectoryEntry = directory.find(person => String(person.id) === String(userId));
+    if (ownDirectoryEntry?.can_assign === false) { toast("Ton accès à ce chantier est en lecture seule.", "warning"); return existingAction ? openActionDetails(existingAction, true) : undefined; }
+    const record = existingAction || {};
+    const unavailablePilot = record.assignee_user_id && !directory.some(person => String(person.id) === String(record.assignee_user_id) && person.can_assign !== false);
+    const selectedPilot = unavailablePilot ? "legacy" : record.assignee_user_id || (record.assignee ? "legacy" : "");
+    const options = directory.map(person => `<option value="${escapeHtml(person.id)}" ${String(person.id) === String(selectedPilot) ? "selected" : ""} ${person.can_assign === false ? "disabled" : ""}>${escapeHtml(person.full_name || "Nom non renseigné")}${person.company ? ` · ${escapeHtml(person.company)}` : ""}${person.can_assign === false ? " — accès chantier requis" : ""}</option>`).join("");
+    const deadline = record.due_mode === "immediate" ? "immediate" : record.due_date ? "date" : "none";
+    const selectOption = (value, label) => `<option value="${value}" ${deadline === value ? "selected" : ""}>${label}</option>`;
     openModal({
-      title: sourceMessage ? "Créer une action depuis le message" : "Nouvelle action",
-      subtitle: "L’action sera visible dans le suivi et tracée dans le journal.",
-      body: `<form id="actionForm" class="form-grid"><label class="form-field span-2">Action à réaliser *<input name="title" required value="${escapeHtml(sourceMessage ? truncate(sourceMessage.body || "", 150) : "")}" placeholder="Ex. Faire valider le plan d’exécution"></label><label class="form-field span-2">Détail / contexte<textarea name="description">${escapeHtml(sourceMessage ? `Issue du message de ${sourceMessage.author_name} du ${formatDateTime(sourceMessage.created_at)}.` : "")}</textarea></label><label class="form-field">Attribuée à<input name="assignee" placeholder="Nom / entreprise"></label><label class="form-field">Échéance<input name="due_date" type="date"></label><label class="form-field">Priorité<select name="priority"><option value="normale">Normale</option><option value="haute">Haute</option><option value="critique">Critique</option><option value="basse">Basse</option></select></label></form>`,
-      footer: `<button class="secondary-button" id="cancelAction">Annuler</button><button class="primary-button" id="saveAction">Créer l’action</button>`
+      title: existingAction ? "Modifier l’action" : sourceMessage ? "Créer une action depuis le message" : "Nouvelle action",
+      subtitle: "Le pilote est choisi parmi les personnes disposant d’un accès contributeur au chantier.",
+      body: `<form id="actionForm" class="form-grid"><label class="form-field span-2">Action à réaliser *<input name="title" required maxlength="500" value="${escapeHtml(record.title || (sourceMessage ? truncate(sourceMessage.body || "", 150) : ""))}" placeholder="Ex. Faire valider le plan d’exécution"></label><label class="form-field span-2">Détail / contexte<textarea name="description">${escapeHtml(record.description ?? (sourceMessage ? `Issue du message de ${sourceMessage.author_name} du ${formatDateTime(sourceMessage.created_at)}.` : ""))}</textarea></label><label class="form-field span-2">Pilote de l’action<select name="pilot" id="actionPilot"><option value="" ${!selectedPilot ? "selected" : ""}>Sans pilote</option><option value="legacy" ${selectedPilot === "legacy" ? "selected" : ""}>Saisie libre / entreprise</option>${options}</select><small>Les noms grisés nécessitent un accès au chantier attribué par un administrateur.</small></label>${unavailablePilot ? '<p class="form-note span-2">L’ancien pilote n’est plus disponible. Son nom est conservé en saisie libre ; choisis une personne pour lui attribuer le suivi.</p>' : ""}<label class="form-field span-2" id="actionLegacyAssignee" ${selectedPilot !== "legacy" ? "hidden" : ""}>Nom / entreprise (sans compte lié)<input name="assignee" value="${escapeHtml(record.assignee || "")}" placeholder="Nom / entreprise"></label><label class="form-field">Échéance<select name="deadline" id="actionDeadline">${selectOption("none", "Sans échéance")}${selectOption("immediate", "Immédiate — maintenant")}${selectOption("today", "Aujourd’hui")}${selectOption("tomorrow", "Demain")}${selectOption("week", "Dans une semaine")}${selectOption("date", "Choisir une date")}</select></label><label class="form-field" id="actionCustomDate" ${deadline !== "date" ? "hidden" : ""}>Date d’échéance<input name="due_date" type="date" value="${escapeHtml(record.due_date || localActionDate())}" ${deadline === "date" ? "required" : ""}></label><label class="form-field">Priorité<select name="priority">${["normale", "haute", "critique", "basse"].map(priority => `<option value="${priority}" ${priority === (record.priority || "normale") ? "selected" : ""}>${actionPriorityLabel(priority)}</option>`).join("")}</select></label></form>`,
+      footer: `<button class="secondary-button" id="cancelAction">Annuler</button><button class="primary-button" id="saveAction">${existingAction ? "Enregistrer" : "Créer l’action"}</button>`
     });
+    $("actionPilot").addEventListener("change", event => { $("actionLegacyAssignee").hidden = event.target.value !== "legacy"; });
+    $("actionDeadline").addEventListener("change", event => { const custom = event.target.value === "date"; $("actionCustomDate").hidden = !custom; $("actionForm").elements.due_date.required = custom; });
     $("cancelAction").addEventListener("click", closeModal);
     $("saveAction").addEventListener("click", async () => {
-      const form = $("actionForm");
-      if (!form.reportValidity()) return;
-      try { await addAction(Object.fromEntries(new FormData(form).entries()), sourceMessage); closeModal(); setActiveTab("actions"); toast("Action créée.", "success"); }
-      catch (error) { toast(`Création impossible : ${error.message}`, "error"); }
+      const form = $("actionForm"), button = $("saveAction");
+      if (!form.reportValidity() || button.disabled) return;
+      if (String(app.currentId) !== String(chantierId) || String(ownId()) !== String(userId)) { toast("Le chantier ou le compte a changé. Rouvre l’action.", "warning"); closeModal(); return; }
+      button.disabled = true;
+      try {
+        const values = actionFormValues(Object.fromEntries(new FormData(form).entries()), directory);
+        const result = existingAction ? await updateActionDetails(existingAction, values) : await addAction(values, sourceMessage);
+        closeModal();
+        if (!existingAction) setActiveTab("actions");
+        toast(result?.refreshFailed ? "Action modifiée. Actualise le chantier pour voir la mise à jour." : result?.announcementFailed ? "Action créée. Vérifie son annonce dans la discussion après actualisation." : existingAction ? "Action modifiée." : "Action créée.", result?.announcementFailed || result?.refreshFailed ? "warning" : "success");
+      } catch (error) { button.disabled = false; toast(`Enregistrement impossible : ${friendlyError(error)}`, "error"); }
     });
   }
+  async function openActionDetails(action, forceReadOnly = false) {
+    const chantierId = app.currentId, userId = ownId();
+    let editable = !forceReadOnly && canEditAction(action);
+    if (editable && isCloudReady()) {
+      try {
+        const { data, error } = await app.db.rpc("journal_v142_can_write", { p_chantier_id: chantierId });
+        if (error) throw error;
+        editable = Boolean(data);
+      } catch (error) { editable = false; toast("Les droits ne peuvent pas être vérifiés : ouverture en consultation.", "warning"); }
+    }
+    if (String(app.currentId) !== String(chantierId) || String(ownId()) !== String(userId)) return;
+    openModal({
+      title: action.title,
+      subtitle: `${actionStatusLabel(action.status)} · Priorité ${actionPriorityLabel(action.priority)}`,
+      body: `<div class="action-details"><p><b>Pilote :</b> ${escapeHtml(action.assignee || "Sans pilote")}</p><p class="${actionIsLate(action) ? "due-late" : ""}"><b>Échéance :</b> ${escapeHtml(actionDeadlineLabel(action))}</p><p class="action-description">${escapeHtml(action.description || "Aucun détail renseigné.")}</p>${action.close_note ? `<p class="action-proof"><b>Clôture :</b> ${escapeHtml(action.close_note)}</p>` : ""}${editable ? '<p class="form-note">Tu peux modifier le contenu, le pilote, l’échéance et l’avancement.</p>' : '<p class="form-note">Consultation seule. Le créateur, le pilote ou un administrateur disposant d’un accès en écriture peut modifier cette action.</p>'}</div>${editable ? `<div class="menu-list">${["a_faire", "en_cours", "terminee"].filter(status => status !== action.status).map(status => `<button data-action-detail-status="${status}">Passer à « ${actionStatusLabel(status)} »</button>`).join("")}</div>` : ""}`,
+      footer: `<button class="secondary-button" id="closeActionDetails">Fermer</button>${editable ? '<button class="primary-button" id="editActionDetails">Modifier l’action</button>' : ""}`
+    });
+    $("closeActionDetails").addEventListener("click", closeModal);
+    $("editActionDetails")?.addEventListener("click", () => openActionDialog(null, action));
+    $$("[data-action-detail-status]", els.modalBody).forEach(button => button.addEventListener("click", async () => { if (button.disabled) return; button.disabled = true; const saved = await setActionStatus(action, button.dataset.actionDetailStatus); if (saved) closeModal(); else button.disabled = false; }));
+  }
+
   function openActionCompletionDialog(action) {
+    if (!canEditAction(action)) return openActionDetails(action);
+    const chantierId = app.currentId, userId = ownId();
+    let proofMessage = null, proofRetry = null;
     openModal({
       title: "Clôturer l’action",
       subtitle: "Une preuve ou un commentaire de clôture reste tracé dans le journal.",
@@ -3220,13 +3640,27 @@
       if (!form.reportValidity()) return;
       const note = String(form.elements.note.value || "").trim();
       const proof = form.elements.proof.files[0];
+      if (String(app.currentId) !== String(chantierId) || String(ownId()) !== String(userId)) { closeModal(); return; }
+      const button = $("saveActionCompletion");
+      if (button.disabled) return;
+      button.disabled = true;
       try {
-        let proofMessage = null;
-        if (proof) proofMessage = await addMessage({ body: `Preuve de clôture — ${action.title}\n${note}`, message_type: "Action", zone: "", reply_to: action.message_id || null, is_important: true }, [{ file: proof }], { category: "action_proof" });
-        else proofMessage = await addMessage({ body: `Clôture d’action — ${action.title}\n${note}`, message_type: "Action", zone: "", reply_to: action.message_id || null, is_important: true });
-        closeModal();
-        await setActionStatus(action, "terminee", { note, messageId: proofMessage?.id || null });
-      } catch (error) { toast(`Clôture impossible : ${error.message}`, "error"); }
+        if (!proofMessage) {
+          const payload = { body: `${proof ? "Preuve de clôture" : "Clôture d’action"} — ${action.title}\n${note}`, action_id: action.id, message_type: "Action", zone: "", reply_to: action.message_id || null, is_important: true };
+          proofMessage = await addMessage(payload, proofRetry?.failedFiles || (proof ? [{ file: proof }] : []), { category: "action_proof" }, proofRetry?.sentMessage || null);
+        }
+        // Une preuve publiée reste réutilisable si l'écriture du statut échoue.
+        form.elements.note.readOnly = true; form.elements.proof.disabled = true;
+        const completed = await setActionStatus(action, "terminee", { note, messageId: proofMessage?.id || null });
+        if (completed) closeModal(); else button.disabled = false;
+      } catch (error) {
+        if (error.sentMessage) {
+          proofRetry = { sentMessage: error.sentMessage, failedFiles: error.failedFiles };
+          form.elements.note.readOnly = true; form.elements.proof.disabled = true;
+          button.textContent = "Réessayer la clôture";
+        }
+        button.disabled = false; toast(`Clôture impossible : ${error.message}`, "error");
+      }
     });
   }
   function openQuickAddDialog() {
@@ -3235,19 +3669,29 @@
     openModal({
       title: "Ajout rapide terrain",
       subtitle: "Consigne une information, une alerte ou une photo sans quitter le chantier.",
-      body: `<div class="quick-add-intro"><span>${iconSvg("terrain-note")}</span><div><b>Consignation terrain</b><p>Un fait, une alerte ou une photo est ajouté au fil du chantier avec sa zone et sa date.</p></div></div><form id="quickAddForm" class="form-grid"><label class="form-field">Type<select name="message_type"><option value="Info">Information</option><option value="Journal">Journal / poste</option><option value="Sécurité">Sécurité</option><option value="Incident">Incident / vigilance</option><option value="Avancement">Avancement</option><option value="Aléa">Aléa</option><option value="Coactivité">Coactivité</option><option value="Décision">Décision</option></select></label><label class="form-field">Zone / voie / PK<input name="zone" placeholder="Ex. V2M – PK 80,190"></label><label class="form-field span-2">Information *<textarea name="body" required placeholder="Décris le fait constaté, l’action menée ou la consigne."></textarea></label><label class="form-field span-2">Photo / fichier (facultatif)<input name="file" type="file" accept="image/*,application/pdf,.pdf,.doc,.docx" capture="environment"><small>Une photo prise depuis le téléphone s’ouvre directement ici.</small></label><label class="form-field span-2"><span><input name="is_important" type="checkbox"> Épingler comme information permanente</span></label></form>`,
+      body: `<div class="quick-add-intro"><span>${iconSvg("terrain-note")}</span><div><b>Consignation terrain</b><p>Un fait, une alerte ou une photo est ajouté au fil du chantier avec sa zone et sa date.</p></div></div><form id="quickAddForm" class="form-grid"><label class="form-field">Type<select name="message_type"><option value="Info">Information</option><option value="Journal">Journal / poste</option><option value="Sécurité">Sécurité</option><option value="Incident">Incident / vigilance</option><option value="Avancement">Avancement</option><option value="Aléa">Aléa</option><option value="Coactivité">Coactivité</option><option value="Décision">Décision</option></select></label><label class="form-field">Zone / voie / PK<input name="zone" placeholder="Ex. V2M – PK 80,190"></label><label class="form-field span-2">Information (facultative avec une photo)<textarea name="body" placeholder="Décris le fait constaté, ou ajoute seulement une photo."></textarea></label><label class="form-field span-2">Photo / fichier (facultatif)<input name="file" type="file" accept="image/*,application/pdf,.pdf,.doc,.docx" capture="environment"><small>Une photo prise depuis le téléphone s’ouvre directement ici.</small></label><label class="form-field span-2"><span><input name="is_important" type="checkbox"> Épingler comme information permanente</span></label></form>`,
       footer: `<button class="secondary-button" id="cancelQuickAdd">Annuler</button><button class="primary-button" id="saveQuickAdd">Ajouter au journal</button>`
     });
+    let resumeMessage = null;
     $("cancelQuickAdd").addEventListener("click", closeModal);
     $("saveQuickAdd").addEventListener("click", async () => {
-      const form = $("quickAddForm");
+      const form = $("quickAddForm"), button = $("saveQuickAdd");
+      if (button.disabled) return;
       if (!form.reportValidity()) return;
       const values = Object.fromEntries(new FormData(form).entries());
       const file = form.elements.file.files[0];
       try {
-        await addMessage({ body: values.body, message_type: values.message_type, zone: values.zone, is_important: form.elements.is_important.checked }, file ? [{ file }] : []);
+        button.disabled = true;
+        await addMessage({ body: resumeMessage?.body ?? values.body, message_type: resumeMessage?.message_type ?? values.message_type, zone: resumeMessage?.zone ?? values.zone, is_important: resumeMessage?.is_important ?? form.elements.is_important.checked }, file ? [{ file }] : [], {}, resumeMessage);
         closeModal(); setActiveTab("chat"); toast("Information terrain ajoutée au journal.", "success");
-      } catch (error) { toast(`Ajout impossible : ${error.message}`, "error"); }
+      } catch (error) {
+        if (error.sentMessage) {
+          resumeMessage = error.sentMessage;
+          [...form.elements].forEach(field => { field.disabled = true; });
+          button.textContent = "Réessayer la pièce jointe";
+        }
+        toast(`Ajout impossible : ${error.message}`, "error");
+      } finally { button.disabled = false; }
     });
   }
   function openExportDialog() {
@@ -3373,15 +3817,7 @@
     $("menuEdit")?.addEventListener("click", () => { closeModal(); editMessage(message); });
     $("menuDelete")?.addEventListener("click", () => { closeModal(); softDeleteMessage(message); });
   }
-  function openActionMenu(action) {
-    openModal({
-      title: "Gérer l’action", subtitle: action.title,
-      body: `<div class="menu-list"><button data-status="a_faire">◷ À faire</button><button data-status="en_cours">◔ En cours</button><button data-status="terminee">✓ Terminée</button></div>`,
-      footer: `<button class="secondary-button" id="closeActionMenu">Fermer</button>`
-    });
-    $("closeActionMenu").addEventListener("click", closeModal);
-    $$("[data-status]", els.modalBody).forEach(button => button.addEventListener("click", async () => { closeModal(); await setActionStatus(action, button.dataset.status); }));
-  }
+  function openActionMenu(action) { openActionDetails(action); }
 
   function jumpToMessage(id) {
     const node = document.querySelector(`[data-message-row="${String(id)}"]`);
@@ -3402,6 +3838,7 @@
     if (!element) return;
     const action = element.dataset.action;
     if (action === "remove-pending") {
+      if (app.sendingMessage || app.composerRetry) return toast("Réessaie l’envoi pour conserver les fichiers sur ce message.", "warning");
       const [removed] = app.pendingFiles.splice(Number(element.dataset.index), 1);
       if (removed?.preview_url) URL.revokeObjectURL(removed.preview_url);
       renderPendingFiles();
@@ -3458,7 +3895,7 @@
       event.stopPropagation();
       const documentItem = (app.documents || []).find(item => String(item.id) === String(element.dataset.documentId));
       if (documentItem) openDocumentMenu(documentItem);
-    } else if (action === "action-menu") {
+    } else if (action === "action-menu" || action === "open-action") {
       const item = activeActionsFor(app.currentId).find(actionItem => String(actionItem.id) === String(element.dataset.actionId));
       if (item) openActionMenu(item);
     } else if (action === "open-daily-log") {
@@ -3483,8 +3920,15 @@
     }
   }
   function wireEvents() {
+    document.addEventListener("visibilitychange", recheckCloudAccess);
+    window.addEventListener("online", recheckCloudAccess);
+    setInterval(recheckCloudAccess, 60_000);
     $("newChantierBtn").addEventListener("click", openNewChantierDialog);
     $("profileBtn").addEventListener("click", openProfileDialog);
+    [$("userDirectoryBtn"), $("mobileUserDirectoryBtn")].forEach(button => button.addEventListener("click", () => {
+      els.appShell.classList.remove("sidebar-open");
+      openUserDirectoryDialog().catch(error => toast(`Annuaire indisponible : ${friendlyError(error)}`, "error"));
+    }));
     els.adminDashboardBtn.addEventListener("click", () => openAdminDashboardDialog().catch(error => toast(`Administration indisponible : ${friendlyError(error)}`, "error")));
     els.mobileAdminDashboardBtn.addEventListener("click", () => {
       els.appShell.classList.remove("sidebar-open");
@@ -3549,9 +3993,11 @@
       const image = event.target;
       if (!(image instanceof HTMLImageElement) || !image.classList.contains("attachment-image")) return;
       image.closest("[data-action='open-image']")?.classList.remove("is-retrying", "is-unavailable");
+      if (app.feedAtBottom && app.activeTab === "chat") requestAnimationFrame(scrollMessagesToBottom);
     }, true);
     els.messageFeed.addEventListener("scroll", () => {
-      els.jumpBottomBtn.hidden = els.messageFeed.scrollHeight - els.messageFeed.scrollTop - els.messageFeed.clientHeight < 100;
+      app.feedAtBottom = els.messageFeed.scrollHeight - els.messageFeed.scrollTop - els.messageFeed.clientHeight < 100;
+      els.jumpBottomBtn.hidden = app.feedAtBottom;
     });
     els.jumpBottomBtn.addEventListener("click", scrollMessagesToBottom);
     $$(".filter-pill").forEach(button => button.addEventListener("click", () => {
@@ -3610,7 +4056,7 @@
   async function initialize() {
     wireEvents();
     const callbackError = takeAuthCallbackError();
-    if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("./service-worker-v13.js?v=14.1-fiche-simple").catch(error => console.warn("Service worker", error));
+    if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("./service-worker-v13.js?v=14.2-collaborateurs").catch(error => console.warn("Service worker", error));
     syncFromLocal();
     if (cloudConfigured()) {
       try { await initializeCloud(); }

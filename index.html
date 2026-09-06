@@ -11,11 +11,11 @@
   <link rel="icon" href="journal-chantier-logo-v14.png" type="image/png">
   <title>Journal Chantier Connecté</title>
   <!-- Bibliothèque Supabase embarquée : elle ne dépend plus d’un CDN bloqué sur le réseau terrain. -->
-  <script src="supabase.js?v=14.1-fiche-simple" defer></script>
+  <script src="supabase.js?v=14.2-collaborateurs" defer></script>
   <!-- config.js est le seul fichier de configuration public, partagé par tous les appareils. -->
-  <script src="config.js?v=14.1-fiche-simple" defer></script>
-  <link rel="stylesheet" href="styles-v13.css?v=14.1-fiche-simple">
-  <script src="app-v13.js?v=14.1-fiche-simple" defer></script>
+  <script src="config.js?v=14.2-collaborateurs" defer></script>
+  <link rel="stylesheet" href="styles-v13.css?v=14.2-collaborateurs">
+  <script src="app-v13.js?v=14.2-collaborateurs" defer></script>
 </head>
 <body>
   <div class="app-shell" id="appShell">
@@ -40,6 +40,7 @@
       <nav class="chantier-list" id="chantierList" aria-label="Liste des chantiers"></nav>
 
       <div class="sidebar-bottom">
+        <button class="sidebar-directory-button" id="mobileUserDirectoryBtn" hidden>♙ Annuaire des personnes</button>
         <button class="profile-card" id="profileBtn">
           <span class="profile-avatar" id="profileAvatar">?</span>
           <span class="profile-copy"><b id="profileName">Votre identité</b><small id="profileCompany">À renseigner</small></span>
@@ -60,6 +61,7 @@
           <span class="site-heading-copy"><b id="siteName">Choisissez un chantier</b><small id="siteMeta">Journal partagé sécurisé</small></span>
         </button>
         <div class="topbar-tools">
+          <button class="tool-button hide-small" id="userDirectoryBtn" title="Consulter les personnes inscrites" hidden><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3.5 20c.7-3.5 2.5-5.2 5.5-5.2s4.8 1.7 5.5 5.2M17 5a3 3 0 0 1 0 6M17 15c2.5 0 4 1.5 4 4"/></svg><span>Annuaire</span></button>
           <button class="tool-button hide-small" id="adminDashboardBtn" title="Administrer les comptes" hidden><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6v5.2c0 4.5 3.1 8.6 7.5 9.8 4.4-1.2 7.5-5.3 7.5-9.8V6L12 3Z"/><path d="m8.8 12 2.1 2.1 4.4-4.4"/></svg><span>Administration</span></button>
           <button class="tool-button hide-small" id="inviteBtn" title="Inviter un interlocuteur"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3.5 20c.7-3.5 2.5-5.2 5.5-5.2s4.8 1.7 5.5 5.2M18 8v6M15 11h6"/></svg><span>Inviter</span></button>
           <button class="tool-button hide-small" id="notificationBtn" title="Activer les notifications"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg><span>Alertes</span></button>
@@ -141,7 +143,7 @@
               <button class="icon-button attach-toggle" id="composerToolsBtn" title="Photo, fichier, dictée et mention" aria-expanded="false">＋</button>
               <input id="fileInput" type="file" multiple hidden accept="image/*,application/pdf,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.dwg,.dxf">
               <input id="cameraInput" type="file" hidden accept="image/*" capture="environment">
-              <textarea id="messageInput" rows="1" placeholder="Écrire un message…"></textarea>
+              <textarea id="messageInput" rows="1" placeholder="Message ou photo sans commentaire…"></textarea>
               <button class="send-button" id="sendBtn" title="Envoyer">➤</button>
             </div>
           </section>
