@@ -2,10 +2,14 @@ name: Deployer les migrations Supabase
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
     paths:
       - "supabase/migrations/**/*.sql"
+      - "supabase/release-migrations.txt"
+      - "supabase/tests/**"
+      - "supabase/functions/journal-delete-user/**"
+      - "supabase/config.toml"
+      - "scripts/deploy-supabase-release.py"
       - ".github/workflows/deploy-supabase-migrations.yml"
   workflow_dispatch:
 
@@ -18,12 +22,27 @@ concurrency:
 
 jobs:
   deploy:
-    name: Appliquer les migrations SQL
+    if: github.ref == 'refs/heads/main'
+    name: Appliquer SQL et suppression securisee des comptes
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: journal-ci-only
+          POSTGRES_DB: journal_release_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d journal_release_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
-
     steps:
       - name: Recuperer le depot
         uses: actions/checkout@v4
@@ -32,46 +51,45 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -n "$SUPABASE_ACCESS_TOKEN" || { echo "Le secret SUPABASE_ACCESS_TOKEN est absent."; exit 1; }
-          test -n "$SUPABASE_PROJECT_ID" || { echo "Le secret SUPABASE_PROJECT_ID est absent."; exit 1; }
+          test -n "$SUPABASE_ACCESS_TOKEN" || { echo "Secret SUPABASE_ACCESS_TOKEN absent."; exit 1; }
+          test "$SUPABASE_PROJECT_ID" = "eqfwdcttvnnrakyaacjm" || { echo "Secret SUPABASE_PROJECT_ID absent ou projet inattendu."; exit 1; }
 
-      - name: Appliquer les migrations non encore installees
+      - name: Installer Node pour les tests de la fonction
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Tester les droits SQL sur une base jetable
         shell: bash
         run: |
           set -euo pipefail
-          query() {
-            local sql="$1"
-            local payload
-            payload="$(jq -n --arg query "$sql" '{query: $query}')"
-            curl --fail-with-body --silent --show-error \
-              --request POST \
-              --url "https://api.supabase.com/v1/projects/${SUPABASE_PROJECT_ID}/database/query" \
-              --header "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
-              --header "Content-Type: application/json" \
-              --data "$payload"
-          }
+          test_container="${{ job.services.postgres.id }}"
+          docker exec -i "$test_container" psql -U postgres -d journal_release_test -v ON_ERROR_STOP=1 < supabase/tests/backend-fixture.sql
+          docker exec -i "$test_container" psql -U postgres -d journal_release_test -v ON_ERROR_STOP=1 < supabase/migrations/20260906000100_v14_2_collaborateurs_actions.sql
+          docker exec -i "$test_container" psql -U postgres -d journal_release_test -v ON_ERROR_STOP=1 < supabase/tests/backend-assertions.sql
 
-          query "create table if not exists public.journal_sql_migrations (migration_name text primary key, applied_at timestamptz not null default now()); alter table public.journal_sql_migrations enable row level security; revoke all on public.journal_sql_migrations from anon, authenticated;" >/dev/null
+      - name: Tester la suppression de compte et ses refus d'acces
+        run: node supabase/tests/edge-delete-user.test.cjs
 
-          mapfile -t migrations < <(find supabase/migrations -maxdepth 1 -type f -name '*.sql' -print | sort)
-          test "${#migrations[@]}" -gt 0 || { echo "Aucune migration SQL trouvee."; exit 1; }
+      - name: Installer la CLI Supabase
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.116.0
 
-          for migration in "${migrations[@]}"; do
-            name="$(basename "$migration")"
-            status="$(query "select exists (select 1 from public.journal_sql_migrations where migration_name = '$name') as applied;")"
-            applied="$(jq -r 'if type == "array" then (.[0].applied // false) elif .result then (.result[0].applied // false) else (.applied // false) end' <<<"$status")"
-            if [ "$applied" = "true" ]; then
-              echo "Deja appliquee : $name"
-              continue
-            fi
-            echo "Application : $name"
-            payload="$(jq -n --rawfile query "$migration" '{query: $query}')"
-            curl --fail-with-body --silent --show-error \
-              --request POST \
-              --url "https://api.supabase.com/v1/projects/${SUPABASE_PROJECT_ID}/database/query" \
-              --header "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
-              --header "Content-Type: application/json" \
-              --data "$payload" >/dev/null
-            query "insert into public.journal_sql_migrations (migration_name) values ('$name') on conflict (migration_name) do nothing;" >/dev/null
-            echo "Terminee : $name"
-          done
+      - name: Appliquer uniquement les migrations de cette version
+        run: python3 scripts/deploy-supabase-release.py
+
+      - name: Deployer la suppression reservee a l'administrateur principal
+        # The function validates the bearer token through auth.getUser itself.
+        # Legacy gateway JWT validation does not accept all current Auth keys.
+        run: supabase functions deploy journal-delete-user --project-ref "$SUPABASE_PROJECT_ID" --no-verify-jwt --use-api
+
+      - name: Verifier que la suppression anonyme est refusee
+        shell: bash
+        run: |
+          set -euo pipefail
+          status="$(curl --silent --show-error --retry 3 --retry-delay 2 --max-time 30 \
+            --output /tmp/journal-delete-user-check.json --write-out '%{http_code}' \
+            --request POST --header 'Content-Type: application/json' --data '{}' \
+            "https://${SUPABASE_PROJECT_ID}.supabase.co/functions/v1/journal-delete-user")"
+          test "$status" = "401" || { echo "La fonction ne renvoie pas le refus attendu (HTTP $status)."; exit 1; }

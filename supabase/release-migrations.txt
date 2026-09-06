@@ -1,0 +1,2 @@
+# V14.2 : liste explicite. Ne pas ajouter les anciennes migrations pour les rejouer.
+20260906000100_v14_2_collaborateurs_actions.sql
