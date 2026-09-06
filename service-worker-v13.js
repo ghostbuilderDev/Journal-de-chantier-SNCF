@@ -1,6 +1,7 @@
-const CACHE_NAME = "journal-chantier-connecte-v14.2-collaborateurs";
+const CACHE_NAME = "journal-chantier-connecte-v14.3-design";
 const APP_SHELL = [
   "./", "./index.html", "./styles-v13.css?v=14.2-collaborateurs",
+  "./styles-v14.3.css?v=14.3-design",
   "./app-v13.js?v=14.2-collaborateurs", "./supabase.js?v=14.2-collaborateurs",
   "./config.js?v=14.2-collaborateurs", "./manifest.webmanifest", "./journal-chantier-logo-v14.png"
 ];

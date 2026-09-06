@@ -15,6 +15,7 @@
   <!-- config.js est le seul fichier de configuration public, partagé par tous les appareils. -->
   <script src="config.js?v=14.2-collaborateurs" defer></script>
   <link rel="stylesheet" href="styles-v13.css?v=14.2-collaborateurs">
+  <link rel="stylesheet" href="styles-v14.3.css?v=14.3-design" media="screen">
   <script src="app-v13.js?v=14.2-collaborateurs" defer></script>
 </head>
 <body>
@@ -32,7 +33,7 @@
         <button class="primary-button new-site-button" id="newChantierBtn"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg> Nouveau chantier</button>
 
       <div class="sidebar-search">
-        <span aria-hidden="true">⌕</span>
+        <span aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/></svg></span>
         <input id="chantierSearch" type="search" placeholder="Rechercher un chantier">
       </div>
 
@@ -40,7 +41,7 @@
       <nav class="chantier-list" id="chantierList" aria-label="Liste des chantiers"></nav>
 
       <div class="sidebar-bottom">
-        <button class="sidebar-directory-button" id="mobileUserDirectoryBtn" hidden>♙ Annuaire des personnes</button>
+        <button class="sidebar-directory-button" id="mobileUserDirectoryBtn" hidden><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3.5 20c.7-3.5 2.5-5.2 5.5-5.2s4.8 1.7 5.5 5.2M17 5a3 3 0 0 1 0 6M17 15c2.5 0 4 1.5 4 4"/></svg> Annuaire des personnes</button>
         <button class="profile-card" id="profileBtn">
           <span class="profile-avatar" id="profileAvatar">?</span>
           <span class="profile-copy"><b id="profileName">Votre identité</b><small id="profileCompany">À renseigner</small></span>
@@ -55,7 +56,7 @@
 
     <main class="workspace">
       <header class="topbar">
-        <button class="icon-button hamburger" id="openSidebarBtn" aria-label="Ouvrir les chantiers">☰</button>
+        <button class="icon-button hamburger" id="openSidebarBtn" aria-label="Ouvrir les chantiers"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
         <button class="site-heading" id="siteInfoBtn">
           <span class="site-avatar" id="siteAvatar"><img src="journal-chantier-logo-v14.png" alt=""></span>
           <span class="site-heading-copy"><b id="siteName">Choisissez un chantier</b><small id="siteMeta">Journal partagé sécurisé</small></span>
@@ -87,7 +88,7 @@
       <section class="content-area">
         <section class="chat-view view active" data-view="chat">
           <div class="filter-bar">
-            <div class="filter-search"><span aria-hidden="true">⌕</span><input id="messageSearch" type="search" placeholder="Rechercher dans la discussion, un PK, un auteur…"></div>
+            <div class="filter-search"><span aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/></svg></span><input id="messageSearch" type="search" placeholder="Rechercher dans la discussion, un PK, un auteur…"></div>
             <select id="typeFilter" aria-label="Filtrer les messages par type">
               <option value="">Tous les événements</option>
               <option value="Info">Info</option>
@@ -138,13 +139,13 @@
               <button class="composer-tool-action" id="cameraBtn" type="button"><span>▣</span> Photo</button>
             </div>
             <div class="composer-row">
-              <button class="icon-button attach-toggle" id="composerMetaBtn" title="Détails du message">☷</button>
-              <button class="icon-button attach-toggle" id="emojiBtn" title="Ajouter un émoji">☺</button>
-              <button class="icon-button attach-toggle" id="composerToolsBtn" title="Photo, fichier, dictée et mention" aria-expanded="false">＋</button>
+              <button class="icon-button attach-toggle" id="composerMetaBtn" title="Détails du message"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="2" fill="currentColor" stroke="none"/><circle cx="15" cy="17" r="2" fill="currentColor" stroke="none"/></svg></button>
+              <button class="icon-button attach-toggle" id="emojiBtn" title="Ajouter un émoji"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M8 14.5a4.5 4.5 0 0 0 8 0M8.5 9h.01M15.5 9h.01"/></svg></button>
+              <button class="icon-button attach-toggle" id="composerToolsBtn" title="Photo, fichier, dictée et mention" aria-expanded="false"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
               <input id="fileInput" type="file" multiple hidden accept="image/*,application/pdf,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.dwg,.dxf">
               <input id="cameraInput" type="file" hidden accept="image/*" capture="environment">
               <textarea id="messageInput" rows="1" placeholder="Message ou photo sans commentaire…"></textarea>
-              <button class="send-button" id="sendBtn" title="Envoyer">➤</button>
+              <button class="send-button" id="sendBtn" title="Envoyer"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m21 3-7 18-4-7-7-4 18-7ZM10 14 21 3"/></svg></button>
             </div>
           </section>
         </section>
