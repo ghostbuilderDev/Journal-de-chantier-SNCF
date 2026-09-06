@@ -15,9 +15,9 @@ BACKEND = [
     'supabase/config.toml', 'supabase/functions/journal-mode-push/index.ts', 'supabase/functions/journal-mode-push/handler.mjs',
     'supabase/tests/mode-backend-assertions.sql', 'supabase/tests/mode-backend-pglite.cjs',
     'supabase/tests/mode-push.test.cjs', 'supabase/tests/mode-push-crypto.test.cjs',
-    'scripts/prepare-mode-update.py', 'scripts/update-mode-termux.sh', 'scripts/configure-mode-chantier.py',
+    'scripts/prepare-mode-update.py', 'scripts/update-mode-termux.sh', 'scripts/wait-mode-workflow.py', 'scripts/configure-mode-chantier.py',
     'scripts/deploy-mode-release.py', 'scripts/mode-base-sha256.json',
-    'tests/mode-deploy.test.py', 'tests/mode-deploy-config.test.py',
+    'tests/mode-deploy.test.py', 'tests/mode-deploy-config.test.py', 'tests/mode-workflow.test.py',
 ]
 FRONTEND = ['app-v13.js', 'index.html', 'service-worker-v13.js', 'styles-v14.3.css',
             'mode-chantier.js', 'mode-chantier.css', 'MODE_CHANTIER_V14_4.md', 'tests/mode-worker.test.cjs', 'tests/mode-frontend.test.cjs']

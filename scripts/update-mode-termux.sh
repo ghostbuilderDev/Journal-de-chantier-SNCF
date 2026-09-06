@@ -9,6 +9,7 @@ PHASE='verification'
 fail() { echo "ERREUR : $*" >&2; [[ -z "$BACKUP_DIR" ]] || echo "Sauvegarde : $BACKUP_DIR" >&2; exit 1; }
 on_error() {
   local status=$?
+  (( BASH_SUBSHELL == 0 )) || exit "$status"
   echo "Mise a jour interrompue pendant : $PHASE." >&2
   [[ -z "$BACKUP_DIR" ]] || echo "Sauvegarde : $BACKUP_DIR" >&2
   echo 'Relancez la meme commande pour reprendre ; les cles push existantes sont conservees.' >&2
@@ -66,41 +67,18 @@ mapfile -t frontend_files < <(prepare list-frontend)
 PHASE='publication du serveur du mode chantier'
 prepare backend
 git add -- "${backend_files[@]}"
-previous_run_id=''
+wait_options=()
 if ! git diff --cached --quiet; then
   git commit -m 'Journal Chantier V14.4 - serveur du mode chantier'
   git_remote push origin main
   backend_sha="$(git rev-parse HEAD)"
 else
   backend_sha="$(git rev-parse HEAD)"
-  previous_run_id="$(gh run list --repo "${REPOSITORY,,}" --workflow "$WORKFLOW" --commit "$backend_sha" --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
-  gh workflow run "$WORKFLOW" --repo "${REPOSITORY,,}" --ref main
+  wait_options=(--resume)
 fi
 PHASE='validation des notifications avant publication de l interface'
 echo 'Attente : tests SQL, migration V14.4, configuration automatique des cles et fonction push...'
-run_id=''
-for ((attempt=0; attempt<36; attempt++)); do
-  run_id="$(gh run list --repo "${REPOSITORY,,}" --workflow "$WORKFLOW" --commit "$backend_sha" --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
-  [[ -n "$run_id" && "$run_id" != "$previous_run_id" ]] && break
-  run_id=''
-  sleep 5
-done
-[[ -n "$run_id" ]] || fail "Workflow non demarre ; interface conservee. Consultez https://github.com/${REPOSITORY,,}/actions"
-for ((attempt=0; attempt<240; attempt++)); do
-  result="$(gh run view "$run_id" --repo "${REPOSITORY,,}" --json status,conclusion --jq '.status + " " + (.conclusion // "")')"
-  read -r status conclusion <<<"$result"
-  if [[ "$status" == completed ]]; then
-    if [[ "$conclusion" != success ]]; then
-      echo 'Detail du blocage :'
-      gh run view "$run_id" --repo "${REPOSITORY,,}" --log-failed 2>/dev/null | tail -n 80 || true
-      fail "Mode chantier : $conclusion. Interface conservee ; relancez apres correction."
-    fi
-    break
-  fi
-  if (( attempt % 6 == 0 )); then echo "Mode chantier : $status..."; fi
-  sleep 5
-done
-[[ "${conclusion:-}" == success ]] || fail "Delai depasse ; voir https://github.com/${REPOSITORY,,}/actions/runs/$run_id"
+python -u "$RELEASE_ROOT/scripts/wait-mode-workflow.py" "$backend_sha" "${wait_options[@]}"
 PHASE='publication de l interface'
 git_remote fetch origin main
 [[ "$(git rev-parse HEAD)" == "$(git rev-parse origin/main)" ]] || fail 'Le depot distant a change ; relancez pour reverifier.'

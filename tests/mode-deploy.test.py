@@ -18,8 +18,10 @@ sys.dont_write_bytecode = True
 parser = argparse.ArgumentParser(add_help=False)
 parser.add_argument('--baseline-v142', type=Path, required=True)
 parser.add_argument('--baseline-v143', type=Path, required=True)
+parser.add_argument('--baseline-v144', type=Path)
 options, remaining = parser.parse_known_args()
 V142, V143 = options.baseline_v142.resolve(), options.baseline_v143.resolve()
+V144 = options.baseline_v144.resolve() if options.baseline_v144 else None
 GIT = shutil.which('git')
 spec=importlib.util.spec_from_file_location('prepare_mode_test', SOURCE/'scripts/prepare-mode-update.py')
 prepare=importlib.util.module_from_spec(spec)
@@ -81,6 +83,23 @@ elif a[:2]==['run','list']:print(state.read_text() if state.exists() else '1')
 elif a[:2]==['run','view']:
  if '--log-failed' in a:print('DIAGNOSTIC AUTOMATIQUE : fixture migration refusal')
  else:print('completed '+('failure' if os.environ.get('MODE_BACKEND_FAIL')=='1' else 'success'))
+elif a[:1]==['api']:
+ method=a[a.index('--method')+1];route=a[a.index('--method')+2]
+ head=__import__('subprocess').check_output(['''+repr(GIT)+''','rev-parse','HEAD'],text=True).strip()
+ ident=int(state.read_text() if state.exists() else '1')
+ record={'id':ident,'head_sha':head,'head_branch':'main','event':'push','path':'.github/workflows/deploy-mode-chantier.yml@main','status':'completed','conclusion':'failure' if os.environ.get('MODE_BACKEND_FAIL')=='1' else 'success'}
+ if route.endswith('/actions/runs'):
+  counter=Path(str(state)+'.lists');n=int(counter.read_text()) if counter.exists() else 0;counter.write_text(str(n+1))
+  print(json.dumps({'workflow_runs':[] if n<int(os.environ.get('MODE_DELAY_LISTS','0')) else [record]}))
+ elif '/actions/runs/' in route:print(json.dumps(record))
+ elif route.endswith('/dispatches'):
+  state.write_text(str(ident+1));print('{}')
+ elif '/actions/workflows/' in route:
+  if os.environ.get('MODE_FORBID_NAME_LOOKUP')=='1':raise SystemExit('HTTP 404: workflow not found on the default branch')
+  print(json.dumps({'id':7,'state':'active'}))
+ elif route.endswith('/git/ref/heads/main'):print(json.dumps({'object':{'sha':head}}))
+ elif '/contents/' in route:print(json.dumps({'path':'.github/workflows/deploy-mode-chantier.yml'}))
+ else:print(json.dumps({'default_branch':'main'}))
 else:raise SystemExit('unexpected gh '+repr(a))
 ''')
         for path in mocks.iterdir():path.chmod(0o755)
@@ -124,6 +143,30 @@ else:raise SystemExit('unexpected gh '+repr(a))
             shutil.copyfile(V143/name,self.repo/name)
         self.git('add','.');self.git('commit','-m','Validated design V14.3');self.git('push','origin','main')
         self.install()
+        self.preserved()
+
+    @unittest.skipUnless(V144, 'Original V14.4 baseline is required for this recovery test')
+    def test_original_v144_published_backend_is_accepted_and_recovered(self):
+        previous=(self.repo/'index.html').read_bytes()
+        for name in prepare.BACKEND:
+            source=V144/name
+            if not source.exists():continue
+            target=self.repo/name;target.parent.mkdir(parents=True,exist_ok=True)
+            target.write_bytes(source.read_bytes())
+        self.git('add','.');self.git('commit','-m','Journal Chantier V14.4 - serveur du mode chantier')
+        self.git('push','origin','main')
+        old_backend=self.git('rev-parse','HEAD')
+        self.assertEqual((self.repo/'index.html').read_bytes(),previous)
+        self.install(MODE_FORBID_NAME_LOOKUP='1')
+        self.assertIn(old_backend,self.git('rev-list','HEAD').splitlines())
+        self.assertEqual((self.repo/'index.html').read_bytes(),(self.payload/'index.html').read_bytes())
+        self.preserved()
+
+    def test_delayed_run_appears_without_workflow_name_lookup(self):
+        output=self.install(MODE_DELAY_LISTS='1',MODE_FORBID_NAME_LOOKUP='1')
+        self.assertIn('Attente de l execution',output)
+        calls=[json.loads(line) for line in (self.base/'gh-calls').read_text().splitlines()]
+        self.assertFalse(any('--workflow' in call for call in calls))
         self.preserved()
 
     def test_backend_failure_keeps_previous_interface_and_prints_diagnostic(self):
