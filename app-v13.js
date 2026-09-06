@@ -45,7 +45,7 @@
     documentFolders: [], documents: [], documentViewFolderId: null,
     documentLibrary: { available: false, canManage: false, migrationError: "" }, documentUrlCache: new Map(),
     portalApps: [], portal: { available: false, migrationError: "" }, coverUrlCache: new Map(), local: null,
-    sessionVersion: 0, sendingMessage: false, composerRetry: null, composerDrafts: new Map(), cloudRefreshSequence: 0, renderedChantierId: null, feedAtBottom: true,
+    sessionVersion: 0, authEventVersion: 0, sendingMessage: false, composerRetry: null, composerDrafts: new Map(), cloudRefreshSequence: 0, renderedChantierId: null, feedAtBottom: true,
     pendingFiles: [], replyTo: null, typeFilter: "", search: "", onlyImportant: false, isDictating: false,
     advancedFilters: { from: "", to: "", zone: "", author: "", attachment: false }, lastOperationalAlertSignature: "",
     imageRecoveryInFlight: new Set(), imagePreviewRepairInFlight: new Set(), imagePreviewRepairTried: new Set(),
@@ -82,6 +82,40 @@
     photoViewer: $("photoViewer"), photoViewerTitle: $("photoViewerTitle"), photoViewerSubtitle: $("photoViewerSubtitle"),
     photoViewerImage: $("photoViewerImage"), photoViewerStatus: $("photoViewerStatus"), photoViewerClose: $("photoViewerClose"), photoViewerOpen: $("photoViewerOpen")
   };
+
+  const modeChantier = window.JournalModeChantier?.create({
+    getContext: () => ({ ready: isCloudReady(), userId: app.user?.id || null, db: app.db,
+      currentId: app.currentId, chantiers: app.chantiers, tab: app.activeTab }),
+    toast, openModal, closeModal,
+    isOverlayOpen: () => !els.modalBackdrop.hidden || !els.photoViewer.hidden,
+    async navigate({ chantierId, messageId, actionId }) {
+      if (!isCloudReady() || !app.chantiers.some(item => String(item.id) === chantierId)) return false;
+      if (app.sendingMessage) { toast("Attends la fin de l’envoi avant d’ouvrir cet événement.", "warning"); return false; }
+      const userId = app.user.id;
+      await selectChantier(chantierId);
+      if (userId !== app.user?.id || app.currentId !== chantierId) return false;
+      setActiveTab("chat");
+      if (messageId || actionId) {
+        // Remove search filters so that a linked event can actually be seen.
+        app.search = ""; app.typeFilter = ""; app.onlyImportant = false;
+        app.advancedFilters = { from: "", to: "", zone: "", author: "", attachment: false };
+        els.messageSearch.value = ""; els.typeFilter.value = ""; els.importantFilterBtn.setAttribute("aria-pressed", "false");
+        await refreshCloudCurrent();
+        if (userId !== app.user?.id || app.currentId !== chantierId) return false;
+        await new Promise(resolve => setTimeout(resolve, 90));
+        if (userId !== app.user?.id || app.currentId !== chantierId) return false;
+        if (actionId) {
+          const action = app.actions.find(item => String(item.id) === actionId);
+          if (action) await openActionDetails(action);
+          else toast("Cette action n’est plus accessible. Le fil du chantier reste ouvert.", "warning");
+        } else if (messageId) {
+          if (app.messages.some(item => String(item.id) === messageId)) jumpToMessage(messageId);
+          else toast("Ce message n’est plus accessible. Le fil du chantier reste ouvert.", "warning");
+        }
+      }
+      return true;
+    }
+  });
 
   function defaultLocalData() {
     return { profile: { id: `local-${makeId()}`, full_name: "", company: "", email: "" }, chantiers: [], messages: [], actions: [], dailyLogs: [], risks: [], members: [], reactions: [], readStates: [], documentFolders: [], documents: [], portalApps: [], currentId: null };
@@ -736,6 +770,7 @@
     };
   }
   function clearSessionPrivateState() {
+    if (typeof modeChantier !== "undefined") void modeChantier?.clear();
     app.sessionVersion = (app.sessionVersion || 0) + 1;
     app.sendingMessage = false;
     ++app.cloudRefreshSequence;
@@ -773,17 +808,24 @@
   async function initializeCloud() {
     app.db = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
     app.db.auth.onAuthStateChange((event, session) => {
+      const authEventVersion = ++app.authEventVersion;
       if (event === "PASSWORD_RECOVERY" && session?.user) {
         setTimeout(() => beginPasswordRecovery(session.user), 0);
         return;
       }
       if (event === "SIGNED_IN" && session?.user) setTimeout(async () => {
+        if (authEventVersion !== app.authEventVersion) return;
         if (hasRecoveryLink() && !app.recoveryHandled) return beginPasswordRecovery(session.user);
         try {
+          if (app.user?.id && app.user.id !== session.user.id) clearSessionPrivateState();
           app.mode = "cloud"; app.user = session.user;
+          modeChantier?.contextChanged();
           await ensureCloudProfile(session.user);
+          if (authEventVersion !== app.authEventVersion) return;
           await refreshAccessContext();
+          if (authEventVersion !== app.authEventVersion) return;
           await refreshCloudChantiers();
+          if (authEventVersion !== app.authEventVersion) return;
           closeModal();
           toast("Connexion réussie. Les chantiers se synchronisent.", "success");
         } catch (error) { toast(`Connexion impossible : ${friendlyError(error)}`, "error"); }
@@ -806,6 +848,7 @@
         return;
       }
       app.mode = "cloud"; app.user = data.session.user;
+      modeChantier?.contextChanged();
       await ensureCloudProfile(app.user);
       await refreshAccessContext();
       await refreshCloudChantiers();
@@ -1687,10 +1730,8 @@
     if (isCloudReady() && (lateActions.length || dueSoon.length || criticalRisks.length) && signature !== app.lastOperationalAlertSignature) {
       app.lastOperationalAlertSignature = signature;
       const text = `${lateActions.length + dueSoon.length} action(s) à suivre · ${criticalRisks.length} vigilance(s) élevée(s)`;
-      setTimeout(() => toast(`Pilotage : ${text}.`, "warning"), 120);
-      try {
-        if ("Notification" in window && Notification.permission === "granted") new Notification("Journal chantier — alertes", { body: text });
-      } catch (error) { console.info("Notification non affichée", error); }
+      if (document.visibilityState === "visible" && app.activeTab === "pilotage") setTimeout(() => toast(`Pilotage : ${text}.`, "warning"), 120);
+      // Phone alerts are sent only by the server during a personal Mode chantier session.
     }
   }
   function canManagePortalApps() { return !isCloudReady() ? app.mode === "local" || app.mode === "demo" : isJournalOwner(); }
@@ -1871,12 +1912,13 @@
       els.inviteBtn.innerHTML = `${iconSvg("user-plus")}<span>Inviter</span>`;
     }
   }
-  function renderAll(options) { renderProfile(); renderConnection(); renderAccessControls(); renderSidebar(); renderHeader(); renderPinnedMessages(); renderMessages(options); renderPlans(); renderActions(); renderPilotage(); renderApps(); renderPrintCover(); }
+  function renderAll(options) { renderProfile(); renderConnection(); renderAccessControls(); renderSidebar(); renderHeader(); renderPinnedMessages(); renderMessages(options); renderPlans(); renderActions(); renderPilotage(); renderApps(); renderPrintCover(); if (typeof modeChantier !== "undefined") modeChantier?.contextChanged(); }
   function setActiveTab(tab) {
     app.activeTab = tab;
     $$(".tab").forEach(button => button.classList.toggle("active", button.dataset.tab === tab));
     $$(".view").forEach(view => view.classList.toggle("active", view.dataset.view === tab));
     if (tab === "chat") setTimeout(scrollMessagesToBottom, 30);
+    if (typeof modeChantier !== "undefined") modeChantier?.contextChanged();
   }
 
   function readAsDataUrl(file) {
@@ -2699,10 +2741,10 @@
     openModal({
       title: "Alertes opérationnelles", subtitle: "Les relances sont recalculées à chaque ouverture du journal.",
       body: blocks.length ? `<div class="dialog-list">${blocks.join("")}</div>` : `<div class="form-note">Aucune action en retard, échéance sous 24 h ou vigilance élevée pour ce chantier.</div>`,
-      footer: `<button class="secondary-button" id="enableNotificationsBtn">Activer les alertes navigateur</button><button class="primary-button" id="closeAlertCenter">Fermer</button>`
+      footer: `<button class="secondary-button" id="enableNotificationsBtn">Mode chantier · alertes pendant mon poste</button><button class="primary-button" id="closeAlertCenter">Fermer</button>`
     });
     $("closeAlertCenter").addEventListener("click", closeModal);
-    $("enableNotificationsBtn").addEventListener("click", ensureNotificationPermission);
+    $("enableNotificationsBtn").addEventListener("click", () => modeChantier?.openDialog());
   }
 
   function chantierFormMarkup(formId, chantier = null) {
@@ -3010,7 +3052,7 @@
     });
     if (signedIn) {
       $("changePasswordBtn").addEventListener("click", openChangePasswordDialog);
-      $("signOutBtn").addEventListener("click", async () => { await app.db.auth.signOut(); closeModal(); });
+      $("signOutBtn").addEventListener("click", async () => { await modeChantier?.beforeLogout(); await app.db.auth.signOut(); closeModal(); });
     }
     else $("closeProfileBtn").addEventListener("click", closeModal);
   }
@@ -3829,10 +3871,6 @@
       { boxShadow: "0 0 0 0 rgba(130,0,90,0)" }
     ], { duration: 1100 });
   }
-  function ensureNotificationPermission() {
-    if (!("Notification" in window)) { toast("Les notifications ne sont pas disponibles dans ce navigateur.", "warning"); return; }
-    Notification.requestPermission().then(permission => toast(permission === "granted" ? "Alertes activées pour cette application." : "Les alertes n’ont pas été autorisées.", permission === "granted" ? "success" : "warning"));
-  }
   async function handleDynamicClick(event) {
     const element = event.target.closest("[data-action]");
     if (!element) return;
@@ -4056,7 +4094,7 @@
   async function initialize() {
     wireEvents();
     const callbackError = takeAuthCallbackError();
-    if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("./service-worker-v13.js?v=14.2-collaborateurs").catch(error => console.warn("Service worker", error));
+    if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("./service-worker-v13.js?v=14.4-mode-chantier").catch(error => console.warn("Service worker", error));
     syncFromLocal();
     if (cloudConfigured()) {
       try { await initializeCloud(); }
@@ -4064,7 +4102,7 @@
     }
     renderAll();
     if (callbackError) toast(callbackError, "warning");
-    if (app.currentId) setTimeout(scrollMessagesToBottom, 50);
+    if (app.currentId && !new URL(location.href).searchParams.has("message")) setTimeout(scrollMessagesToBottom, 50);
   }
   initialize().catch(error => { console.error(error); toast(`Le journal n’a pas pu démarrer : ${error.message}`, "error"); });
 })();

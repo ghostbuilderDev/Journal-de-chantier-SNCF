@@ -16,7 +16,9 @@
   <script src="config.js?v=14.2-collaborateurs" defer></script>
   <link rel="stylesheet" href="styles-v13.css?v=14.2-collaborateurs">
   <link rel="stylesheet" href="styles-v14.3.css?v=14.3-design" media="screen">
-  <script src="app-v13.js?v=14.2-collaborateurs" defer></script>
+  <link rel="stylesheet" href="mode-chantier.css?v=14.4-mode-chantier" media="screen">
+  <script src="mode-chantier.js?v=14.4-mode-chantier" defer></script>
+  <script src="app-v13.js?v=14.4-mode-chantier" defer></script>
 </head>
 <body>
   <div class="app-shell" id="appShell">
@@ -41,6 +43,7 @@
       <nav class="chantier-list" id="chantierList" aria-label="Liste des chantiers"></nav>
 
       <div class="sidebar-bottom">
+        <button class="sidebar-directory-button mode-sidebar-button" id="sidebarModeChantierBtn"><span aria-hidden="true">◉</span> Mode chantier</button>
         <button class="sidebar-directory-button" id="mobileUserDirectoryBtn" hidden><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3.5 20c.7-3.5 2.5-5.2 5.5-5.2s4.8 1.7 5.5 5.2M17 5a3 3 0 0 1 0 6M17 15c2.5 0 4 1.5 4 4"/></svg> Annuaire des personnes</button>
         <button class="profile-card" id="profileBtn">
           <span class="profile-avatar" id="profileAvatar">?</span>
@@ -65,6 +68,7 @@
           <button class="tool-button hide-small" id="userDirectoryBtn" title="Consulter les personnes inscrites" hidden><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3.5 20c.7-3.5 2.5-5.2 5.5-5.2s4.8 1.7 5.5 5.2M17 5a3 3 0 0 1 0 6M17 15c2.5 0 4 1.5 4 4"/></svg><span>Annuaire</span></button>
           <button class="tool-button hide-small" id="adminDashboardBtn" title="Administrer les comptes" hidden><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6v5.2c0 4.5 3.1 8.6 7.5 9.8 4.4-1.2 7.5-5.3 7.5-9.8V6L12 3Z"/><path d="m8.8 12 2.1 2.1 4.4-4.4"/></svg><span>Administration</span></button>
           <button class="tool-button hide-small" id="inviteBtn" title="Inviter un interlocuteur"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3.5 20c.7-3.5 2.5-5.2 5.5-5.2s4.8 1.7 5.5 5.2M18 8v6M15 11h6"/></svg><span>Inviter</span></button>
+          <button class="tool-button mode-start-tool" id="modeChantierBtn" title="Démarrer le mode chantier"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6M12 3v3"/><circle cx="12" cy="14" r="8"/><path d="M12 10v4l3 2"/></svg><span>Mode chantier</span></button>
           <button class="tool-button hide-small" id="notificationBtn" title="Activer les notifications"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg><span>Alertes</span></button>
           <button class="tool-button quick-add-tool" id="quickAddBtn" title="Ajouter une information terrain"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="14" height="16" rx="3"/><path d="M8.5 9h6M8.5 13h4M14.8 17.2l3.3-3.3 1.3 1.3-3.3 3.3-2.1.8.8-2.1Z"/></svg><span>Terrain</span></button>
           <button class="tool-button primary-tool" id="exportBtn" title="Créer le carnet PDF du chantier"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5c2.7-1.1 5.8-.5 8 1.7v12.1c-2.2-2.1-5.3-2.7-8-1.6V5.5Z"/><path d="M20 5.5c-2.7-1.1-5.8-.5-8 1.7v12.1c2.2-2.1 5.3-2.7 8-1.6V5.5Z"/><path d="M8 10h2M14 10h2M8 13h2M14 13h2"/></svg><span>Exporter</span></button>
@@ -72,6 +76,16 @@
         </div>
       </header>
 
+      <section class="mode-banner" id="journalModeBanner" hidden aria-label="Poste en cours">
+        <span class="mode-dot" aria-hidden="true"></span><div class="mode-banner-copy"><b id="journalModeStatus">Mode chantier actif</b><span id="journalModeDetail"></span></div>
+        <div class="mode-banner-controls"><button id="journalModeOpenFeed" type="button">Ouvrir le fil</button><button id="journalModePause" type="button">Pause</button><button id="journalModeExtend" type="button" title="Prolonger d’une heure">+ 1 h</button><button id="journalModeStop" type="button">Terminer</button></div>
+      </section>
+      <section class="mode-feed-header" id="journalModeFeedHeader" hidden>
+        <button class="secondary-button" id="journalModeReturn" type="button">← Application</button>
+        <div><small>FIL CHANTIER</small><b id="journalModeFeedTitle"></b></div>
+        <label class="mode-wake-label"><input id="journalModeWake" type="checkbox"> Écran allumé</label>
+        <button class="secondary-button" id="journalModeFeedSettings" type="button">Mon poste</button>
+      </section>
       <section class="connection-banner" id="connectionBanner" hidden>
         <div><b>Connexion sécurisée</b><span>Connecte-toi pour accéder au journal partagé.</span></div>
         <button class="secondary-button" id="openSetupBtn">Réessayer</button>
