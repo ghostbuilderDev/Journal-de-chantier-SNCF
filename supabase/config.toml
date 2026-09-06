@@ -3,3 +3,7 @@ project_id = "journal-chantier"
 [functions.journal-delete-user]
 # The handler validates every bearer token with Auth.getUser, including ES256.
 verify_jwt = false
+
+[functions.journal-mode-push]
+# The internal dispatcher authenticates its own x-journal-dispatch-secret.
+verify_jwt = false

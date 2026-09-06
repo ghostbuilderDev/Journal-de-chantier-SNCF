@@ -4,16 +4,16 @@ on:
   push:
     branches: [main]
     paths:
-      - "supabase/migrations/**/*.sql"
+      - "supabase/migrations/20260906000300_v14_2_contraintes_reelles.sql"
       - "supabase/release-migrations.txt"
-      - "supabase/tests/**"
+      - "supabase/tests/backend-*.sql"
+      - "supabase/tests/edge-delete-user.test.cjs"
+      - "supabase/tests/run-backend-pglite.cjs"
       - "supabase/functions/journal-delete-user/**"
-      - "supabase/config.toml"
       - "scripts/deploy-supabase-release.py"
       - "tests/deploy-transport.test.py"
       - "tests/configure-db.test.py"
       - "scripts/configure-supabase-db.py"
-      - ".github/workflows/deploy-supabase-migrations.yml"
   workflow_dispatch:
 
 permissions:

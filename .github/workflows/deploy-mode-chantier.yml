@@ -1,0 +1,105 @@
+name: Deployer le mode chantier V14.4
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/20260906000400_v14_4_mode_chantier.sql'
+      - 'supabase/mode-release-migrations.txt'
+      - 'supabase/functions/journal-mode-push/**'
+      - 'supabase/tests/mode-*'
+      - 'supabase/config.toml'
+      - 'scripts/configure-mode-chantier.py'
+      - 'scripts/deploy-mode-release.py'
+      - 'tests/mode-deploy-config.test.py'
+      - '.github/workflows/deploy-mode-chantier.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    name: Tester et activer les notifications pendant les postes
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: journal-ci-only
+          POSTGRES_DB: journal_mode_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d journal_mode_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - name: Recuperer le depot
+        uses: actions/checkout@v4
+
+      - name: Installer Node pour les tests et les cles VAPID
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Tester les sessions et droits sur PostgreSQL 17 jetable
+        shell: bash
+        run: |
+          set -euo pipefail
+          test_container="${{ job.services.postgres.id }}"
+          docker exec -i "$test_container" psql -U postgres -d journal_mode_test -v ON_ERROR_STOP=1 < supabase/tests/backend-fixture.sql
+          docker exec -i "$test_container" psql -U postgres -d journal_mode_test -v ON_ERROR_STOP=1 < supabase/tests/backend-production-shape.sql
+          docker exec -i "$test_container" psql -U postgres -d journal_mode_test -v ON_ERROR_STOP=1 < supabase/migrations/20260906000300_v14_2_contraintes_reelles.sql
+          docker exec -i "$test_container" psql -U postgres -d journal_mode_test -v ON_ERROR_STOP=1 < supabase/migrations/20260906000400_v14_4_mode_chantier.sql
+          docker exec -i "$test_container" psql -U postgres -d journal_mode_test -v ON_ERROR_STOP=1 < supabase/tests/mode-backend-assertions.sql
+
+      - name: Tester le dispatcher sans envoi de notification
+        run: node --test supabase/tests/mode-push.test.cjs
+
+      - name: Verifier le chiffrement Web Push sans reseau de livraison
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --ignore-scripts --no-audit --no-fund --prefix "$RUNNER_TEMP/journal-mode-crypto" web-push@3.6.7
+          WEB_PUSH_MODULE="$RUNNER_TEMP/journal-mode-crypto/node_modules/web-push" node --test supabase/tests/mode-push-crypto.test.cjs
+
+      - name: Tester la configuration et la reprise des secrets sans reseau
+        run: python3 tests/mode-deploy-config.test.py
+
+      - name: Installer la CLI Supabase
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.116.0
+
+      - name: Installer le client PostgreSQL
+        shell: bash
+        run: |
+          if ! command -v psql >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y postgresql-client
+          fi
+
+      - name: Deployer le serveur avant autorisation de publication de l interface
+        shell: bash
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          test -n "$SUPABASE_ACCESS_TOKEN" || { echo 'Secret SUPABASE_ACCESS_TOKEN absent.'; exit 1; }
+          test "$SUPABASE_PROJECT_ID" = 'eqfwdcttvnnrakyaacjm' || { echo 'Projet inattendu.'; exit 1; }
+          test -n "$SUPABASE_DB_URL" || { echo 'Secret SUPABASE_DB_URL absent.'; exit 1; }
+          python3 scripts/deploy-mode-release.py
+          python3 scripts/configure-mode-chantier.py prepare
+          supabase functions deploy journal-mode-push --project-ref "$SUPABASE_PROJECT_ID" --no-verify-jwt --use-api
+          python3 scripts/configure-mode-chantier.py activate
