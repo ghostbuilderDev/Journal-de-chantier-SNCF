@@ -112,7 +112,9 @@ select public.test_require((select count(*)=2 from chantiers),'deletion preserve
 select public.test_require((select created_by is null from chantiers where id='aaaaaaaa-0000-4000-8000-000000000001'),'site creator FK detached');
 select public.test_require((select assignee_user_id is null and assignee='Personne 3' from action_items where id='11111111-0000-4000-8000-000000000001'),'pilot account removed with historical label retained');
 select public.test_require((select count(*)=1 from chantier_messages where body='Historique conservé' and author_id is null and author_name='Personne 3'),'message and attribution preserved');
-select public.test_require((select count(*)=1 from chantier_documents where created_by is null),'documents retained');
+-- Some historical installations have no author FK on documents: retaining the
+-- original author UUID is valid there. The record and recorded name must survive.
+select public.test_require((select count(*)=1 from chantier_documents where created_by_name='Personne 3'),'documents retained');
 select public.test_require((select count(*)=1 from storage.objects where owner_id='00000000-0000-4000-8000-000000000001'),'stored photo retained and reassigned');
 set role service_role;
 select journal_v142_finish_user_deletion('00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000003');

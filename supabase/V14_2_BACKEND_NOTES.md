@@ -18,6 +18,8 @@ Cette migration complète une base existante. Les SQL historiques V7/V11/V12/V13
 
 Les contraintes connues d’attribution des contributions sont converties en `ON DELETE SET NULL`, avec colonne d’identité nullable. Les messages, chantiers, actions, documents et noms historiquement consignés restent conservés. Les lignes de comptes, droits, demandes d’accès, réactions et accusés de lecture de la personne supprimée sont retirées. Les métadonnées de propriété des objets Storage sont transférées au propriétaire principal ; les fichiers ne sont pas supprimés.
 
+Le diagnostic réel confirme que `chantier_invitations.invited_by` est obligatoire et lié à Auth avec `ON DELETE RESTRICT`. Cette dépendance est explicitement prise en charge : la colonne devient nullable avec `ON DELETE SET NULL`, afin de conserver l’invitation. Les colonnes d’auteur sans clé étrangère dans le schéma réel conservent leur UUID historique ; aucune relation supplémentaire n’est inventée. Les invitations reçoivent également les gardes de compte actif et de chantier.
+
 La préparation et l’appel Auth sont deux transactions distinctes : si Auth échoue, les accès restent bloqués, les contributions sont préservées et le compte reste listé. Réessayer « Supprimer le compte » termine l’opération. La préparation supprime déjà le profil ; aucun accès ne doit être rétabli entre ces étapes.
 
 Les JWT existants sont refusés par le contrôle serveur de compte actif, les règles RLS restrictives et les gardes d’écriture des tables du journal. Les trois buckets standards deviennent privés. Une URL signée déjà émise reste utilisable jusqu’à son expiration (jusqu’à une heure pour les photos) ; des fichiers déjà téléchargés ne peuvent pas être rappelés. Si un bucket personnalisé est configuré à la place de `chantier-files`, ses règles et son caractère privé doivent être vérifiés séparément.
@@ -26,25 +28,39 @@ Les JWT existants sont refusés par le contrôle serveur de compte actif, les r�
 
 Le déploiement s’annule intégralement si les tables/colonnes/types attendus manquent, si une contrainte `UNIQUE(user_id)` interdit plusieurs chantiers, si des colonnes obligatoires supplémentaires rendent les attributions impossibles, si une contrainte multicolonne du corps de message ne peut pas être adaptée sans interprétation, ou si des FK/triggers DELETE inconnus risquent d’effacer des contributions. Les triggers DELETE personnalisés Auth/profiles et tables de droits doivent être examinés avant adaptation. Les cascades vers une table métier depuis les comptes, memberships, demandes d’accès, réactions ou reçus de lecture sont refusées. Le contrôle est répété avant remplacement/retrait des droits et préparation de la suppression pour refuser les dépendances dangereuses ajoutées ultérieurement.
 
+La contrainte observée `CHECK (body IS NOT NULL OR deleted_at IS NOT NULL)` est reconnue par sa définition exacte et conservée sans modification. Elle accepte déjà une légende vide (`body=''`) pour une photo. Elle continue d’interdire un corps NULL sans suppression logique. Toute autre contrainte multicolonne inconnue reste bloquante.
+
 Les écritures directes dans les tables de rôles/membres sont retirées aux clients ; seules les RPC et les triggers historiques exécutés avec les droits de leur propriétaire peuvent les modifier. Les accès directs aux profils sont limités au profil courant. Les règles historiques hors actions restent en place et sont complétées par des limites de compte actif et de chantier. Cette migration ne constitue pas un audit exhaustif des anciennes fonctions SECURITY DEFINER non fournies. Il faut toujours conserver la sauvegarde et l’export de schéma avant déploiement. Si un précontrôle s’arrête, fournir son message et l’export de schéma réel ; ne pas supprimer le contrôle pour forcer l’installation.
 
 ## Vérification reproductible
 
-Sur une base PostgreSQL 16 **vide et jetable uniquement** :
+Sur une base PostgreSQL 17 **vide et jetable uniquement** :
 
 ```sh
 psql -v ON_ERROR_STOP=1 -f supabase/tests/backend-fixture.sql
-psql -v ON_ERROR_STOP=1 -f supabase/migrations/20260906000200_v14_2_schema_production.sql
+psql -v ON_ERROR_STOP=1 -f supabase/migrations/20260906000300_v14_2_contraintes_reelles.sql
 psql -v ON_ERROR_STOP=1 -f supabase/tests/backend-assertions.sql
 ```
 
-La fixture refuse une base contenant déjà Auth, Storage ou profiles. Elle ne reproduit pas le schéma de production absent ; elle modélise explicitement les colonnes connues et des anciennes politiques permissives pour éprouver les nouvelles protections. Les assertions couvrent créateur/pilote/admin/autre/lecture seule, échéances, photos seules, liens inter-chantiers, multichantiers, inscriptions Auth sans profil, révocation avec ancien JWT, suppression et préservation des contributions. Elles vérifient aussi le refus d’une modification d’action sans auteur/pilote via une ancienne RPC `SECURITY DEFINER` et le refus d’une cascade métier ajoutée après déploiement.
+La fixture refuse une base contenant déjà Auth, Storage ou profiles. Elle modélise explicitement les colonnes connues et des anciennes politiques permissives pour éprouver les nouvelles protections. Les assertions couvrent créateur/pilote/admin/autre/lecture seule, échéances, photos seules, liens inter-chantiers, multichantiers, inscriptions Auth sans profil, révocation avec ancien JWT, suppression et préservation des contributions. Elles vérifient aussi le refus d’une modification d’action sans auteur/pilote via une ancienne RPC `SECURITY DEFINER` et le refus d’une cascade métier ajoutée après déploiement.
+
+Dans une **seconde base vide et jetable**, exécuter la variante issue du diagnostic :
+
+```sh
+psql -v ON_ERROR_STOP=1 -f supabase/tests/backend-fixture.sql
+psql -v ON_ERROR_STOP=1 -f supabase/tests/backend-production-shape.sql
+psql -v ON_ERROR_STOP=1 -f supabase/migrations/20260906000300_v14_2_contraintes_reelles.sql
+psql -v ON_ERROR_STOP=1 -f supabase/tests/backend-assertions.sql
+psql -v ON_ERROR_STOP=1 -f supabase/tests/backend-production-assertions.sql
+```
+
+Cette variante reproduit les CHECK et clés étrangères observés du schéma public et les index uniques hors clés primaires. Les données sont fictives et les corps des anciens triggers, absents du diagnostic, ne sont pas inventés. Elle contrôle notamment la conservation de la contrainte de message et des invitations, les colonnes d’auteur sans relation Auth, et le refus d’accès aux invitations après révocation.
 
 ```sh
 node supabase/tests/edge-delete-user.test.cjs
 ```
 
-Node 24 : **9 scénarios du gestionnaire Edge exécutés avec succès**, Auth/RPC simulés. **50 assertions SQL et 8 scénarios de refus de migration avec rollback ont été exécutés avec succès sur PostgreSQL 18.3 via PGlite 0.5.8**, entièrement en mémoire. Aucun appel à la production. La fixture reprend désormais le contrat réel `journal_access_requests.requester_id`. Les variantes vérifient notamment l’identité de demande absente, une colonne historique absente, l’index mono-chantier, les triggers DELETE Auth et memberships, une FK utilisateur inconnue en cascade, une contrainte de message multicolonne et une cascade métier indirecte.
+Node 24 : **9 scénarios du gestionnaire Edge exécutés avec succès**, Auth/RPC simulés. Sur **PostgreSQL 18.3 via PGlite 0.5.8**, entièrement en mémoire : **50 assertions SQL sur chaque fixture**, **14 contrôles supplémentaires sur la variante du diagnostic** (13 assertions SELECT et un contrôle dans un bloc DO), et **8 scénarios de refus de migration avec rollback**, tous réussis. Aucun appel à la production. Les variantes négatives vérifient notamment l’identité de demande absente, une colonne historique absente, l’index mono-chantier, les triggers DELETE Auth et memberships, une FK utilisateur inconnue en cascade, une contrainte de message multicolonne inconnue et une cascade métier indirecte.
 
 Pour reproduire ce contrôle local sans serveur PostgreSQL :
 
@@ -53,7 +69,7 @@ npm install --prefix /tmp/journal-pglite @electric-sql/pglite@0.5.8 --no-audit -
 PGLITE_MODULE=/tmp/journal-pglite/node_modules/@electric-sql/pglite node supabase/tests/run-backend-pglite.cjs
 ```
 
-Le workflow conserve son contrôle PostgreSQL 16 avant toute modification de production ; ce contrôle CI n’a pas été exécuté depuis l’environnement de préparation. Un succès sur cette fixture ne démontre pas la compatibilité d’un schéma historique différent : le précontrôle transactionnel reste obligatoire sur la base réelle. Les services Auth/Storage Supabase réels ne sont pas démarrés par PGlite ; leur intégration reste à vérifier sur le projet de qualification.
+Le workflow impose les deux fixtures sur PostgreSQL 17 avant toute modification de production ; ce contrôle CI n’a pas été exécuté depuis l’environnement de préparation. Le précontrôle transactionnel reste obligatoire sur la base réelle. Les fonctions historiques `set_message_author` et `touch_chantier_after_message` sont conservées, mais leurs corps ne figurent pas dans le diagnostic. Les services Auth/Storage Supabase réels ne sont pas démarrés par PGlite ; leur intégration, notamment la suppression d’un compte de test avec ces triggers, reste à qualifier après publication.
 
 ## Sources techniques
 

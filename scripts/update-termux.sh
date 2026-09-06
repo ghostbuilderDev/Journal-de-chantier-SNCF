@@ -114,7 +114,11 @@ for ((attempt=0; attempt<180; attempt++)); do
   result="$(gh run view "$run_id" --repo "${REPOSITORY,,}" --json status,conclusion --jq '.status + " " + (.conclusion // "")')"
   read -r status conclusion <<<"$result"
   if [[ "$status" == 'completed' ]]; then
-    [[ "$conclusion" == 'success' ]] || fail "Supabase : $conclusion. Consultez https://github.com/${REPOSITORY,,}/actions/runs/$run_id ; l'interface n'a pas ete publiee."
+    if [[ "$conclusion" != 'success' ]]; then
+      echo 'Detail du blocage GitHub Actions :'
+      gh run view "$run_id" --repo "${REPOSITORY,,}" --log-failed 2>/dev/null | tail -n 80 || true
+      fail "Supabase : $conclusion. Consultez https://github.com/${REPOSITORY,,}/actions/runs/$run_id ; l'interface n'a pas ete publiee."
+    fi
     break
   fi
   if (( attempt % 6 == 0 )); then echo "Supabase : $status..."; fi

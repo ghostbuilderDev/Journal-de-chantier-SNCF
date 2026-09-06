@@ -1,6 +1,6 @@
 // Optional local runner: Node 24 + @electric-sql/pglite@0.5.8.
 // PostgreSQL runs only in memory; this script cannot connect to a Supabase project.
-// CI still executes the SQL fixture/assertions against PostgreSQL 16.
+// CI also executes both SQL fixtures/assertions against PostgreSQL 17.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -8,7 +8,7 @@ const { PGlite } = require(process.env.PGLITE_MODULE || '@electric-sql/pglite');
 const root = path.resolve(__dirname, '..');
 const read = name => fs.readFileSync(path.join(root, name), 'utf8').replace(/^\\set ON_ERROR_STOP on\s*$/gm, '');
 const fixture = read('tests/backend-fixture.sql');
-const migration = read('migrations/20260906000200_v14_2_schema_production.sql');
+const migration = read('migrations/20260906000300_v14_2_contraintes_reelles.sql');
 const assertions = read('tests/backend-assertions.sql');
 
 async function run() {
@@ -22,6 +22,21 @@ async function run() {
     assert.ok(assertionCount >= 50, 'All SQL security/functional assertions must run.');
     console.log(`PASS: ${assertionCount} SQL security/functional assertions.`);
   } finally { await db.close(); }
+
+  // Reproduce the observed CHECK/FK/index contracts separately from the legacy
+  // fixture; historical trigger bodies and policies were not part of the report.
+  const productionShape = new PGlite();
+  try {
+    await productionShape.exec(fixture);
+    await productionShape.exec(read('tests/backend-production-shape.sql'));
+    await productionShape.exec(migration);
+    const genericResults = await productionShape.exec(assertions);
+    assert.ok(genericResults.filter(result => result.fields?.some(field => ['test_require','test_denied'].includes(field.name))).length >= 50);
+    const actualResults = await productionShape.exec(read('tests/backend-production-assertions.sql'));
+    const actualCount = actualResults.filter(result => result.fields?.some(field => ['test_require','test_denied'].includes(field.name))).length;
+    assert.ok(actualCount > 0, 'Production contract assertions must run.');
+    console.log(`PASS: observed production schema: 50 generic assertions and ${actualCount} production contract assertions.`);
+  } finally { await productionShape.close(); }
 
   const incompatibilities = [
     ['missing historical column', 'alter table profiles rename column company to legacy_company', /colonne attendue/],

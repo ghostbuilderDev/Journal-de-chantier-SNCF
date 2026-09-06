@@ -5,9 +5,12 @@ do $$ begin
     raise exception 'Fixture refusée : la base doit être vide et jetable.';
   end if;
 end $$;
-create role anon nologin;
-create role authenticated nologin;
-create role service_role nologin bypassrls;
+-- Roles are cluster-wide: CI uses two EMPTY databases in one disposable cluster.
+do $$ begin
+  if not exists(select 1 from pg_roles where rolname='anon') then create role anon nologin; end if;
+  if not exists(select 1 from pg_roles where rolname='authenticated') then create role authenticated nologin; end if;
+  if not exists(select 1 from pg_roles where rolname='service_role') then create role service_role nologin bypassrls; end if;
+end $$;
 create schema auth;
 create schema storage;
 create table auth.users(id uuid primary key,email text,raw_user_meta_data jsonb default '{}'::jsonb);

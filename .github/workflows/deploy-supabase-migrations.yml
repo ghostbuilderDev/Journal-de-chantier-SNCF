@@ -31,7 +31,7 @@ jobs:
     timeout-minutes: 15
     services:
       postgres:
-        image: postgres:16
+        image: postgres:17
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: journal-ci-only
@@ -69,11 +69,23 @@ jobs:
           set -euo pipefail
           test_container="${{ job.services.postgres.id }}"
           docker exec -i "$test_container" psql -U postgres -d journal_release_test -v ON_ERROR_STOP=1 < supabase/tests/backend-fixture.sql
-          docker exec -i "$test_container" psql -U postgres -d journal_release_test -v ON_ERROR_STOP=1 < supabase/migrations/20260906000200_v14_2_schema_production.sql
+          docker exec -i "$test_container" psql -U postgres -d journal_release_test -v ON_ERROR_STOP=1 < supabase/migrations/20260906000300_v14_2_contraintes_reelles.sql
           docker exec -i "$test_container" psql -U postgres -d journal_release_test -v ON_ERROR_STOP=1 < supabase/tests/backend-assertions.sql
 
       - name: Tester la suppression de compte et ses refus d'acces
         run: node supabase/tests/edge-delete-user.test.cjs
+
+      - name: Tester les contraintes du diagnostic reel sur une seconde base jetable
+        shell: bash
+        run: |
+          set -euo pipefail
+          test_container="${{ job.services.postgres.id }}"
+          docker exec "$test_container" createdb -U postgres journal_production_shape_test
+          docker exec -i "$test_container" psql -U postgres -d journal_production_shape_test -v ON_ERROR_STOP=1 < supabase/tests/backend-fixture.sql
+          docker exec -i "$test_container" psql -U postgres -d journal_production_shape_test -v ON_ERROR_STOP=1 < supabase/tests/backend-production-shape.sql
+          docker exec -i "$test_container" psql -U postgres -d journal_production_shape_test -v ON_ERROR_STOP=1 < supabase/migrations/20260906000300_v14_2_contraintes_reelles.sql
+          docker exec -i "$test_container" psql -U postgres -d journal_production_shape_test -v ON_ERROR_STOP=1 < supabase/tests/backend-assertions.sql
+          docker exec -i "$test_container" psql -U postgres -d journal_production_shape_test -v ON_ERROR_STOP=1 < supabase/tests/backend-production-assertions.sql
 
       - name: Installer la CLI Supabase
         uses: supabase/setup-cli@v1
