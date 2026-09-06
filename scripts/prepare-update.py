@@ -26,6 +26,10 @@ BACKEND = [
     'scripts/prepare-update.py',
     'scripts/update-termux.sh',
     'scripts/release-base-sha256.json',
+    'scripts/release-previous-sha256.json',
+    'tests/deploy-transport.test.py',
+    'scripts/configure-supabase-db.py',
+    'tests/configure-db.test.py',
 ]
 FRONTEND = [
     'app-v13.js', 'styles-v13.css', 'index.html', 'service-worker-v13.js',
@@ -66,6 +70,8 @@ def safe_target(repo: Path, relative: str) -> Path:
 
 def prepare(repo: Path):
     base = json.loads((ROOT / 'scripts/release-base-sha256.json').read_text())
+    previous_path = ROOT / 'scripts/release-previous-sha256.json'
+    previous = json.loads(previous_path.read_text()) if previous_path.is_file() else {}
     changes = {}
     for relative in BACKEND + FRONTEND:
         source = ROOT / relative
@@ -77,8 +83,8 @@ def prepare(repo: Path):
             content = merged_config(content, target)
         elif target.exists():
             digest = hashlib.sha256(target.read_bytes()).hexdigest()
-            if target.read_bytes() != content and digest != base.get(relative):
-                raise ValueError(f'{relative} differe de la version V14.1 fournie. '
+            if target.read_bytes() != content and digest not in (base.get(relative), previous.get(relative)):
+                raise ValueError(f'{relative} differe des versions V14.1/V14.2 fournies. '
                                  'Mise a jour interrompue pour conserver vos autres modifications ; '
                                  'transmettez une nouvelle archive du depot pour les integrer.')
         changes[relative] = content

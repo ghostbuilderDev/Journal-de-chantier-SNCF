@@ -10,6 +10,9 @@ on:
       - "supabase/functions/journal-delete-user/**"
       - "supabase/config.toml"
       - "scripts/deploy-supabase-release.py"
+      - "tests/deploy-transport.test.py"
+      - "tests/configure-db.test.py"
+      - "scripts/configure-supabase-db.py"
       - ".github/workflows/deploy-supabase-migrations.yml"
   workflow_dispatch:
 
@@ -43,6 +46,7 @@ jobs:
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
     steps:
       - name: Recuperer le depot
         uses: actions/checkout@v4
@@ -75,6 +79,23 @@ jobs:
         uses: supabase/setup-cli@v1
         with:
           version: 2.116.0
+
+      - name: Tester le transport de migration sans reseau
+        run: |
+          python3 tests/deploy-transport.test.py
+          python3 tests/configure-db.test.py
+
+      - name: Installer le client PostgreSQL si configure
+        if: env.SUPABASE_DB_URL != ''
+        run: |
+          if ! command -v psql >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y postgresql-client
+          fi
+
+      - name: Verifier la connexion PostgreSQL en lecture seule
+        if: env.SUPABASE_DB_URL != ''
+        run: python3 scripts/deploy-supabase-release.py --check-connection
 
       - name: Appliquer uniquement les migrations de cette version
         run: python3 scripts/deploy-supabase-release.py
