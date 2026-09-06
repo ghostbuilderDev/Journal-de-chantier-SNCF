@@ -70,11 +70,73 @@ def validate(config):
     return config
 
 
+def public_api_key():
+    # Read literals only; config.js belongs to the existing app and is never
+    # executed or rewritten by this installer. A service-role key is refused.
+    try:
+        source = (ROOT / 'config.js').read_text(encoding='utf-8')
+        def literal(name):
+            matches = re.findall(r'(?m)^\s*' + name + r'''\s*:\s*(['"])([^'"\r\n]+)\1\s*,?\s*$''', source)
+            if len(matches) != 1:
+                raise ValueError('literal')
+            return matches[0][1]
+        if literal('SUPABASE_URL').rstrip('/') != f'https://{PROJECT}.supabase.co':
+            raise ValueError('project')
+        key = literal('SUPABASE_ANON_KEY')
+        if re.fullmatch(r'sb_publishable_[A-Za-z0-9_-]{20,}', key):
+            return key
+        if not re.fullmatch(r'[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+', key):
+            raise ValueError('public key')
+        payload = key.split('.')[1]
+        claims = json.loads(base64.urlsafe_b64decode(payload + '=' * (-len(payload) % 4)))
+        if claims.get('role') != 'anon' or claims.get('ref') != PROJECT:
+            raise ValueError('anon project')
+        return key
+    except Exception:
+        raise RuntimeError('Cle publique du projet introuvable ou non valide dans config.js ; controle Data API impossible. Aucune cle affichee.') from None
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        # Never forward the app's public credential to a different endpoint.
+        return None
+
+
+def assert_net_api_hidden():
+    key = public_api_key()
+    opener = urllib.request.build_opener(NoRedirect())
+    for table in ('http_request_queue', '_http_response'):
+        request = urllib.request.Request(
+            f'https://{PROJECT}.supabase.co/rest/v1/{table}?select=id&limit=0',
+            headers={'apikey': key, 'Accept-Profile': 'net', 'Accept': 'application/json'}, method='GET')
+        hidden = False
+        try:
+            # limit=0 and select=id mean no queued headers or bodies are read,
+            # even if an administrator has exposed the schema inadvertently.
+            with opener.open(request, timeout=15):
+                pass
+        except urllib.error.HTTPError as error:
+            with error:
+                if error.code == 406:
+                    try:
+                        raw = error.read(16385)
+                        data = json.loads(raw) if len(raw) <= 16384 else None
+                        hidden = isinstance(data, dict) and data.get('code') == 'PGRST106'
+                    except (OSError, ValueError):
+                        pass
+        except (OSError, ValueError):
+            pass
+        if not hidden:
+            raise RuntimeError('Protection Data API de pg_net non confirmee (schema net expose ou verification indisponible). Notifications inactives ; aucune cle affichee.')
+
+
 def ensure_queue_private():
     # pg_net temporarily stores the dispatch header in its technical queue.
     # Keep the existing request functions and write privileges; only client
-    # SELECT is removed. A hosted extension owner can refuse REVOKE, so verify
-    # the effective table/column rights afterwards before any secret is sent.
+    # SELECT is removed when the managed extension permits it. Supabase also
+    # documents a safe default with SELECT grants: net is NOT exposed by the
+    # Data API and both client roles are NOLOGIN. Verify that actual boundary
+    # when grants remain; do not equate internal grants with API exposure.
     query("DO $privacy$ BEGIN BEGIN "
           "REVOKE SELECT ON TABLE net.http_request_queue, net._http_response FROM PUBLIC, anon, authenticated; "
           "EXCEPTION WHEN insufficient_privilege THEN NULL; END; END $privacy$;")
@@ -83,8 +145,14 @@ def ensure_queue_private():
                  "has_any_column_privilege('authenticated','net.http_request_queue','SELECT') OR "
                  "has_any_column_privilege('anon','net._http_response','SELECT') OR "
                  "has_any_column_privilege('authenticated','net._http_response','SELECT')) AS applied;")
+    if len(rows) == 1 and rows[0].get('applied') is True:
+        return
+    rows = query("SELECT count(*) = 2 AND bool_and(NOT rolcanlogin) AS applied "
+                 "FROM pg_catalog.pg_roles WHERE rolname IN ('anon','authenticated');")
     if len(rows) != 1 or rows[0].get('applied') is not True:
-        raise RuntimeError('La file technique pg_net reste lisible par les comptes clients ; activation refusee pour proteger les secrets de notification.')
+        raise RuntimeError('Les roles clients ne confirment pas NOLOGIN ; activation interrompue.')
+    assert_net_api_hidden()
+    print('Protection pg_net verifiee : roles clients sans connexion directe et schema net exclu de la Data API.')
 
 
 def provision():

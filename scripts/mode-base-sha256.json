@@ -38,7 +38,8 @@
   ],
   ".github/workflows/deploy-mode-chantier.yml": [
     null,
-    "c08aa444a5702a91f696ecf946032f1fc62e18413a8c0176f7faf19b45263e74"
+    "c08aa444a5702a91f696ecf946032f1fc62e18413a8c0176f7faf19b45263e74",
+    "1dab162570fb411652b5b67de747553e431673caaf3d2961041005f87daeae75"
   ],
   "supabase/migrations/20260906000400_v14_4_mode_chantier.sql": [
     null,
@@ -78,14 +79,17 @@
   ],
   "scripts/prepare-mode-update.py": [
     null,
-    "1a16146ebbcfdd26fba2b3ff7277dec1edaab8de79d7c2f61bc2c2624f06cbbf"
+    "1a16146ebbcfdd26fba2b3ff7277dec1edaab8de79d7c2f61bc2c2624f06cbbf",
+    "86bbe1733686df7fce9e1679c1b6c6c954c070238892ee5c83bd9df283ac8847"
   ],
   "scripts/update-mode-termux.sh": [
     null,
-    "3af10536d4f98387a8ab16536db2146cf688443296dd6769321a32aaaaf5cf25"
+    "3af10536d4f98387a8ab16536db2146cf688443296dd6769321a32aaaaf5cf25",
+    "f080dcb790faabca708485a8c69c2a4facd88d8214fad14fa7462a11530a4f35"
   ],
   "scripts/wait-mode-workflow.py": [
-    null
+    null,
+    "6847db1f71b6187d687e7b7acd6dea8c2a83e9480cde34bdc2bcb03ebfc2bba6"
   ],
   "scripts/configure-mode-chantier.py": [
     null,
@@ -97,18 +101,21 @@
   ],
   "scripts/mode-base-sha256.json": [
     null,
-    "c96ad58433080148cd43b95e7712d915cddc94d7684417d474f9f6a4b37d3e01"
+    "c96ad58433080148cd43b95e7712d915cddc94d7684417d474f9f6a4b37d3e01",
+    "9f2f14b505cbae8f73b5f32fde29f3f0f2035dc66461cac2a8b26f5f229a21ad"
   ],
   "tests/mode-deploy.test.py": [
     null,
-    "b17a41f1eee3c7718615957254d04f161453058801d3ec1abb7025741219ae81"
+    "b17a41f1eee3c7718615957254d04f161453058801d3ec1abb7025741219ae81",
+    "9a435935a9431ac5aa751a49c2b00ca9ffd526338075d22c7eca7249492533c9"
   ],
   "tests/mode-deploy-config.test.py": [
     null,
     "6672e4e51f68e924a66745aa1a0bcd876737562029367cd1fcb510859ef78b50"
   ],
   "tests/mode-workflow.test.py": [
-    null
+    null,
+    "c26a747d49ca2e0ed31a2c67d34dbff562c997ecbe1596f43081dbd5e1a879b4"
   ],
   "mode-chantier.js": [
     null,
@@ -120,7 +127,8 @@
   ],
   "MODE_CHANTIER_V14_4.md": [
     null,
-    "1e90b5dd084cc1b8d24e95e59dfdc190e71586bc410c7d284b0975fc6abb58c9"
+    "1e90b5dd084cc1b8d24e95e59dfdc190e71586bc410c7d284b0975fc6abb58c9",
+    "6b393dfe2cafc2258eaf47402d9ac681180920b40269d1c68b590bf8f23ebc99"
   ],
   "tests/mode-worker.test.cjs": [
     null,
