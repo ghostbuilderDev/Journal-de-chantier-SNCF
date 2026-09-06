@@ -18,7 +18,10 @@ create table public.profiles(id uuid primary key references auth.users(id) on de
 create table public.chantiers(id uuid primary key,name text,created_by uuid not null references auth.users(id) on delete cascade);
 create table public.journal_administrators(user_id uuid primary key references auth.users(id) on delete cascade,role text not null);
 create table public.chantier_members(chantier_id uuid references chantiers(id) on delete cascade,user_id uuid references profiles(id) on delete cascade,role text not null,primary key(chantier_id,user_id));
-create table public.journal_access_requests(id uuid primary key default gen_random_uuid(),user_id uuid references profiles(id) on delete cascade,status text not null default 'en_attente');
+create table public.journal_access_requests(
+  id uuid primary key default gen_random_uuid(),requester_id uuid not null references profiles(id) on delete cascade,
+  email text not null,full_name text,company text,status text not null default 'en_attente',decision_note text,
+  requested_at timestamptz not null default now(),reviewed_by uuid references auth.users(id),reviewed_at timestamptz);
 create table public.action_items(id uuid primary key default gen_random_uuid(),chantier_id uuid references chantiers(id) on delete cascade,
   title text not null,description text,assignee text,due_date date check(due_date>=current_date+1),priority text default 'normale',status text default 'a_faire',
   message_id uuid,created_by uuid not null references profiles(id) on delete cascade,created_at timestamptz default now(),updated_at timestamptz default now());
@@ -50,7 +53,8 @@ insert into public.profiles(id,email,full_name,company) select id,email,'Personn
 insert into public.journal_administrators(user_id,role) values('00000000-0000-4000-8000-000000000001','proprietaire');
 insert into public.chantiers values('aaaaaaaa-0000-4000-8000-000000000001','A','00000000-0000-4000-8000-000000000003'),('bbbbbbbb-0000-4000-8000-000000000001','B','00000000-0000-4000-8000-000000000001');
 insert into public.chantier_members(chantier_id,user_id,role) select 'aaaaaaaa-0000-4000-8000-000000000001',id,case right(id::text,1) when '5' then 'lecture' when '6' then 'administrateur' else 'membre' end from auth.users where right(id::text,1) in ('2','3','4','5','6','8');
-insert into public.journal_access_requests(user_id,status) select id,case right(id::text,1) when '7' then 'en_attente' else 'acceptee' end from auth.users;
+insert into public.journal_access_requests(requester_id,email,full_name,company,status)
+select id,email,'Personne '||right(id::text,1),'Entreprise',case right(id::text,1) when '7' then 'en_attente' else 'acceptee' end from auth.users;
 insert into public.action_items(id,chantier_id,title,assignee,created_by) values('11111111-0000-4000-8000-000000000001','aaaaaaaa-0000-4000-8000-000000000001','Action existante','Personne 3','00000000-0000-4000-8000-000000000002'),('11111111-0000-4000-8000-000000000002','aaaaaaaa-0000-4000-8000-000000000001','Ancienne action du lecteur','Texte libre','00000000-0000-4000-8000-000000000005');
 insert into public.chantier_messages(id,chantier_id,body,author_id,author_name) values('22222222-0000-4000-8000-000000000001','aaaaaaaa-0000-4000-8000-000000000001','Historique conservé','00000000-0000-4000-8000-000000000003','Personne 3');
 insert into public.chantier_documents(chantier_id,created_by,created_by_name) values('aaaaaaaa-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000003','Personne 3');

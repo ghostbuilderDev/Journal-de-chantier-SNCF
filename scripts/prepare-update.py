@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parent.parent
 BACKEND = [
     '.github/workflows/deploy-supabase-migrations.yml',
     'supabase/migrations/20260906000100_v14_2_collaborateurs_actions.sql',
+    'supabase/migrations/20260906000200_v14_2_schema_production.sql',
     'supabase/release-migrations.txt',
     'supabase/tests/backend-fixture.sql',
     'supabase/tests/backend-assertions.sql',
@@ -68,6 +69,15 @@ def safe_target(repo: Path, relative: str) -> Path:
     return target
 
 
+def known_hashes(manifest: dict, relative: str) -> set[str]:
+    value = manifest.get(relative)
+    if isinstance(value, str):
+        return {value}
+    if isinstance(value, list) and all(isinstance(item, str) for item in value):
+        return set(value)
+    return set()
+
+
 def prepare(repo: Path):
     base = json.loads((ROOT / 'scripts/release-base-sha256.json').read_text())
     previous_path = ROOT / 'scripts/release-previous-sha256.json'
@@ -83,7 +93,8 @@ def prepare(repo: Path):
             content = merged_config(content, target)
         elif target.exists():
             digest = hashlib.sha256(target.read_bytes()).hexdigest()
-            if target.read_bytes() != content and digest not in (base.get(relative), previous.get(relative)):
+            accepted = known_hashes(base, relative) | known_hashes(previous, relative)
+            if target.read_bytes() != content and digest not in accepted:
                 raise ValueError(f'{relative} differe des versions V14.1/V14.2 fournies. '
                                  'Mise a jour interrompue pour conserver vos autres modifications ; '
                                  'transmettez une nouvelle archive du depot pour les integrer.')

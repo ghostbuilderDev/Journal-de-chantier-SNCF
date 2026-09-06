@@ -1,5 +1,8 @@
 {
-  ".github/workflows/deploy-supabase-migrations.yml": "5638646dfbd72406ce84b7b82ec54f9d2534767de1c2314f7bd564c3e157f791",
+  ".github/workflows/deploy-supabase-migrations.yml": [
+    "5638646dfbd72406ce84b7b82ec54f9d2534767de1c2314f7bd564c3e157f791",
+    "7ba31e5f660c1012d531cc7d1bd830dbc8a9db5a622da69f9ecd0f6bd4afe389"
+  ],
   ".gitignore": "8dd2173f91fe3491115b2aae7dc9429ad41476a79d18314dc47cd9bbdb8f5e1c",
   "CONTENU_SHA256.txt": "0fe48919f0d9d185af967aeb3ac9e8ae053c0327e6a08884ce12215361df6406",
   "INVENTAIRE_SUPABASE.md": "f9f844d2075fb3f4d7f1e672024c98061a4e711d0b708867d4ae9d69a36bdb03",
@@ -21,8 +24,12 @@
   "manifest.json": "8b4e5c78d1a905086991b3e0f2b954729185dd74a0fcecf68453e3f4a6b26fbf",
   "manifest.webmanifest": "a0555ba272f6c555be9b5c274410168c9c1805a106cfe756a0110f0e20336ad0",
   "scripts/deploy-supabase-release.py": "4cadfd61de91dfe2352a13ca0ac4fd48847cdbb82455a8613177dee6f34c289e",
-  "scripts/prepare-update.py": "1a5f4ede3c20d8a5629c35443b796a3df99e8403b6ba47538d5cf0eb76f30862",
+  "scripts/prepare-update.py": [
+    "1a5f4ede3c20d8a5629c35443b796a3df99e8403b6ba47538d5cf0eb76f30862",
+    "06189e59aad6f4358ed563f788f489a281cc1edd96997e26f741b5a53847d86d"
+  ],
   "scripts/release-base-sha256.json": "f0f2f566c8baad5e391faa9cc0fa63238248108fe76fc64c2f11f1247060c7f7",
+  "scripts/release-previous-sha256.json": "225da27f080c65381da86f6a8a28d65800edc50bc32f6dbdb4b11d6fa7a5252c",
   "scripts/update-termux.sh": "2f4f00922e0bc37557eddd8588cd8fe822901c9a811f438c93d9c719b7d3e9b3",
   "service-worker-v13.js": "d998e62b7634324b582903912b0cb5b69a8ab660a70368ef2f784c908400ec2d",
   "styles-v13.css": "93f4d3e9fadde518add9baca430549f38a9b9bd95bad247b49c046af3a01de26",

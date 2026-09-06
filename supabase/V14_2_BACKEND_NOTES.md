@@ -34,7 +34,7 @@ Sur une base PostgreSQL 16 **vide et jetable uniquement** :
 
 ```sh
 psql -v ON_ERROR_STOP=1 -f supabase/tests/backend-fixture.sql
-psql -v ON_ERROR_STOP=1 -f supabase/migrations/20260906000100_v14_2_collaborateurs_actions.sql
+psql -v ON_ERROR_STOP=1 -f supabase/migrations/20260906000200_v14_2_schema_production.sql
 psql -v ON_ERROR_STOP=1 -f supabase/tests/backend-assertions.sql
 ```
 
@@ -44,7 +44,7 @@ La fixture refuse une base contenant déjà Auth, Storage ou profiles. Elle ne r
 node supabase/tests/edge-delete-user.test.cjs
 ```
 
-Node 24 : **9 scénarios du gestionnaire Edge exécutés avec succès**, Auth/RPC simulés. **46 assertions SQL et 7 scénarios de refus de migration avec rollback ont été exécutés avec succès sur PostgreSQL 18.3 via PGlite 0.5.8**, entièrement en mémoire. Aucun appel à la production. Les 7 variantes vérifient la colonne historique absente, l’index mono-chantier, les triggers DELETE Auth et memberships, une FK utilisateur inconnue en cascade, une contrainte de message multicolonne et une cascade métier indirecte.
+Node 24 : **9 scénarios du gestionnaire Edge exécutés avec succès**, Auth/RPC simulés. **50 assertions SQL et 8 scénarios de refus de migration avec rollback ont été exécutés avec succès sur PostgreSQL 18.3 via PGlite 0.5.8**, entièrement en mémoire. Aucun appel à la production. La fixture reprend désormais le contrat réel `journal_access_requests.requester_id`. Les variantes vérifient notamment l’identité de demande absente, une colonne historique absente, l’index mono-chantier, les triggers DELETE Auth et memberships, une FK utilisateur inconnue en cascade, une contrainte de message multicolonne et une cascade métier indirecte.
 
 Pour reproduire ce contrôle local sans serveur PostgreSQL :
 

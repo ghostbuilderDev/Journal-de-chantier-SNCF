@@ -47,10 +47,13 @@ select set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000007'
 select public.test_denied('select * from list_journal_user_directory()','pending user cannot read directory');
 select set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000001',false);
 select public.test_require((select value->>'full_name'='Jean Essai' from jsonb_array_elements(journal_v142_administration_dashboard()) where value->>'id'='00000000-0000-4000-8000-000000000009'),'dashboard does not mislabel an Auth-only registration as deleting');
+select public.test_require((select value->>'request_status'='en_attente' from jsonb_array_elements(journal_v142_administration_dashboard()) where value->>'id'='00000000-0000-4000-8000-000000000007'),'dashboard reads pending status through requester_id');
 select journal_v142_set_user_access('00000000-0000-4000-8000-000000000006','','[{"chantier_id":"aaaaaaaa-0000-4000-8000-000000000001","role":"administrateur"},{"chantier_id":"bbbbbbbb-0000-4000-8000-000000000001","role":"administrateur"}]');
 select public.test_require((select count(*)=2 from chantier_members where user_id='00000000-0000-4000-8000-000000000006'),'administrator on two sites');
+select public.test_require((select status='acceptee' from journal_access_requests where requester_id='00000000-0000-4000-8000-000000000006'),'grant updates request status through requester_id');
 select public.test_denied($q$select journal_v142_revoke_user_access('00000000-0000-4000-8000-000000000001')$q$,'owner protected from revocation');
 select journal_v142_revoke_user_access('00000000-0000-4000-8000-000000000008');
+select public.test_require((select status='refusee' from journal_access_requests where requester_id='00000000-0000-4000-8000-000000000008'),'revocation updates request status through requester_id');
 select set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000008',false);
 select public.test_require(not journal_v142_is_active(),'revoked old JWT inactive');
 select public.test_require((select count(*)=0 from chantiers),'revoked JWT reads no sites despite old permissive policy');
@@ -102,6 +105,7 @@ set role service_role;
 select public.test_denied($q$select journal_v142_prepare_user_deletion('00000000-0000-4000-8000-000000000004','00000000-0000-4000-8000-000000000003')$q$,'server refuses non-owner deletion actor');
 select journal_v142_prepare_user_deletion('00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000003');
 reset role;
+select public.test_require(not exists(select 1 from journal_access_requests where requester_id='00000000-0000-4000-8000-000000000003'),'deletion removes requests through requester_id');
 -- Simulates Auth hard-delete database side only; Edge Auth integration separately tested.
 delete from auth.users where id='00000000-0000-4000-8000-000000000003';
 select public.test_require((select count(*)=2 from chantiers),'deletion preserves all sites');

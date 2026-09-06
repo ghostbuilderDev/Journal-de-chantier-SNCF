@@ -69,7 +69,7 @@ jobs:
           set -euo pipefail
           test_container="${{ job.services.postgres.id }}"
           docker exec -i "$test_container" psql -U postgres -d journal_release_test -v ON_ERROR_STOP=1 < supabase/tests/backend-fixture.sql
-          docker exec -i "$test_container" psql -U postgres -d journal_release_test -v ON_ERROR_STOP=1 < supabase/migrations/20260906000100_v14_2_collaborateurs_actions.sql
+          docker exec -i "$test_container" psql -U postgres -d journal_release_test -v ON_ERROR_STOP=1 < supabase/migrations/20260906000200_v14_2_schema_production.sql
           docker exec -i "$test_container" psql -U postgres -d journal_release_test -v ON_ERROR_STOP=1 < supabase/tests/backend-assertions.sql
 
       - name: Tester la suppression de compte et ses refus d'acces

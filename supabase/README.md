@@ -15,15 +15,15 @@ L'installateur `scripts/update-termux.sh` envoie d'abord le backend à GitHub. L
 
 L'installateur attend le succès de ces étapes avant de publier l'interface. Il conserve `config.js` et fusionne uniquement la section `[functions.journal-delete-user]` du fichier Supabase `config.toml` ; les autres sections sont conservées.
 
-Le mot de passe de base `SUPABASE_DB_PASSWORD` n'est pas utilisé : ce workflow passe par la Management API, sans `supabase db push`.
+Lorsque `SUPABASE_DB_URL` est configuré, le workflow ouvre la connexion PostgreSQL TLS officielle du projet et transmet le mot de passe uniquement à `psql` par son environnement. La valeur n'est jamais ajoutée au code, aux arguments de commande ou aux journaux. L'ancienne Management API reste seulement le transport historique de repli lorsqu'aucune URL PostgreSQL n'est configurée ; un refus HTTP 403 / 1010 ne déclenche aucun changement automatique de transport.
 
 La CLI est fixée à la version `2.116.0`. `SUPABASE_ACCESS_TOKEN` doit autoriser l'écriture SQL et le déploiement des fonctions sur ce projet ; la clé publique de `config.js` ne peut pas le remplacer. Le workflow refuse de déployer une autre branche que `main`, y compris lors d'un déclenchement manuel. Les contrôles et le déploiement utilisent le même commit GitHub.
 
 ## Migrations anciennes
 
-Les quatre migrations V14/V14.1 restent des pièces d'historique. Elles ne sont **pas rejouées** par cette livraison, même si elles n'apparaissent pas dans l'ancien registre. La migration V14.2 vérifie ses prérequis et s'arrête si le schéma existant ne correspond pas.
+Les quatre migrations V14/V14.1 restent des pièces d'historique. Elles ne sont **pas rejouées** par cette livraison, même si elles n'apparaissent pas dans l'ancien registre. Le fichier V14.2 `00100`, refusé intégralement avant tout enregistrement, est conservé comme transaction vide afin qu'un futur outil standard ne rejoue jamais son ancienne hypothèse erronée. La migration active `00200` utilise le contrat réel `journal_access_requests.requester_id`, vérifie ses prérequis et s'arrête si le reste du schéma existant ne correspond pas.
 
-Pour les mises à jour suivantes : ajouter un nouveau fichier SQL, l'inscrire explicitement dans `release-migrations.txt`, conserver les fichiers déjà publiés sans les modifier, et tester sur une copie du schéma réel. Chaque fichier doit avoir une unique enveloppe `BEGIN;` / `COMMIT;`, sur leurs propres lignes.
+Pour les mises à jour suivantes : ajouter un nouveau fichier SQL, l'inscrire explicitement dans `release-migrations.txt`, conserver les migrations effectivement enregistrées sans les modifier, et tester sur une copie du schéma réel. Chaque fichier doit avoir une unique enveloppe `BEGIN;` / `COMMIT;`, sur leurs propres lignes. Le registre applicatif `journal_sql_migrations` est distinct du registre de la CLI Supabase ; continuer à utiliser ce déployeur explicite pour cette installation.
 
 ## Suppression des comptes
 
