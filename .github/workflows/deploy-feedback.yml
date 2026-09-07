@@ -1,0 +1,86 @@
+name: Deployer le fil des ameliorations V14.5
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/20260907000500_v14_5_retours_application.sql'
+      - 'supabase/feedback-release-migrations.txt'
+      - 'supabase/tests/feedback-*'
+      - 'scripts/deploy-feedback-release.py'
+      - 'scripts/wait-feedback-workflow.py'
+      - 'scripts/update-feedback-termux.sh'
+      - 'scripts/prepare-feedback-update.py'
+      - 'scripts/feedback-*'
+      - 'tests/feedback-deploy*.py'
+      - 'tests/feedback-workflow.test.py'
+      - '.github/workflows/deploy-feedback.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    name: Tester et ouvrir le fil des ameliorations
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: journal-ci-only
+          POSTGRES_DB: journal_feedback_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d journal_feedback_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - name: Recuperer le depot
+        uses: actions/checkout@v4
+
+      - name: Tester les retours et droits sur PostgreSQL 17 jetable
+        shell: bash
+        run: |
+          set -euo pipefail
+          test_container="${{ job.services.postgres.id }}"
+          docker exec -i "$test_container" psql -U postgres -d journal_feedback_test -v ON_ERROR_STOP=1 < supabase/tests/backend-fixture.sql
+          docker exec -i "$test_container" psql -U postgres -d journal_feedback_test -v ON_ERROR_STOP=1 < supabase/tests/backend-production-shape.sql
+          docker exec -i "$test_container" psql -U postgres -d journal_feedback_test -v ON_ERROR_STOP=1 < supabase/migrations/20260906000300_v14_2_contraintes_reelles.sql
+          docker exec -i "$test_container" psql -U postgres -d journal_feedback_test -v ON_ERROR_STOP=1 < supabase/tests/feedback-backend-fixture.sql
+          docker exec -i "$test_container" psql -U postgres -d journal_feedback_test -v ON_ERROR_STOP=1 < supabase/migrations/20260907000500_v14_5_retours_application.sql
+          docker exec -i "$test_container" psql -U postgres -d journal_feedback_test -v ON_ERROR_STOP=1 < supabase/tests/feedback-backend-assertions.sql
+
+      - name: Tester la migration unique et sa reprise sans connexion
+        run: python3 tests/feedback-deploy-release.test.py
+
+      - name: Tester la reconnaissance differee du workflow et la reprise
+        run: python3 tests/feedback-workflow.test.py
+
+      - name: Installer le client PostgreSQL
+        shell: bash
+        run: |
+          if ! command -v psql >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y postgresql-client
+          fi
+
+      - name: Deployer et verifier les droits avant publication de l interface
+        shell: bash
+        env:
+          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          test "$SUPABASE_PROJECT_ID" = 'eqfwdcttvnnrakyaacjm' || { echo 'Projet inattendu.'; exit 1; }
+          test -n "$SUPABASE_DB_URL" || { echo 'Secret SUPABASE_DB_URL absent.'; exit 1; }
+          python3 scripts/deploy-feedback-release.py
