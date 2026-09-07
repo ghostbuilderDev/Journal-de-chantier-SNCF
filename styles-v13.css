@@ -414,3 +414,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .message-action-link small { color: var(--muted); margin-top: 4px; }
 .action-title-link { border: 0; padding: 0; background: transparent; color: var(--sncf); font-weight: 800; text-align: left; }
 .action-description { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* V14.7 : bouton PDF du journal, hors du lecteur intégré Android. */
+.document-pdf-launch { min-height: 300px; padding: 28px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; border: 1px solid #dce2e5; border-radius: 18px; background: #f6f8fa; text-align: center; }
+.document-pdf-launch p { overflow-wrap: anywhere; max-width: 100%; margin: 0; }
+.document-pdf-icon { padding: 12px 10px; border-radius: 6px; background: #d9e3ed; color: #294563; font-weight: 800; }
+.document-pdf-open { width: min(100%, 440px); min-height: 52px; border: 0; border-radius: 20px; background: #1a73e8; color: white; font: inherit; font-weight: 700; cursor: pointer; }
+.document-pdf-open:focus-visible { outline: 3px solid #173a50; outline-offset: 4px; }
+.document-pdf-launch small { color: #52616b; }

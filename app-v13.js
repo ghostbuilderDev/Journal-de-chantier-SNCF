@@ -1516,6 +1516,22 @@
       } catch (error) { button.disabled = false; result.className = "setup-result error"; result.textContent = `Import interrompu après ${completed} document(s) : ${friendlyError(error)}`; }
     });
   }
+  async function openDocumentInBrowser(documentItem) {
+    // Ouvrir immédiatement évite le blocage des popups après une requête asynchrone.
+    const owner = app.user?.id, db = app.db;
+    const tab = window.open("about:blank", "_blank");
+    if (!tab) return toast("Autorisez l’ouverture d’un nouvel onglet pour consulter ce fichier.", "warning");
+    try {
+      tab.opener = null;
+      const url = await signedDocumentUrl(documentItem, { force: true });
+      if (app.user?.id !== owner || app.db !== db) throw new Error("Le compte a changé. Rouvrez le document depuis votre session.");
+      if (!url) throw new Error("Ce document n’est plus disponible.");
+      tab.location.replace(url);
+    } catch (error) {
+      tab.close();
+      toast(`Ouverture impossible : ${friendlyError(error)}`, "error");
+    }
+  }
   async function openDocumentViewer(documentItem) {
     if (!documentItem) return;
     try {
@@ -1527,7 +1543,7 @@
       const body = documentIsImage(documentItem)
         ? `<div class="document-viewer-image-wrap"><img src="${escapeHtml(url)}" alt="${escapeHtml(name)}" class="document-viewer-image" draggable="false"></div>`
         : documentIsPdf(documentItem)
-          ? `<iframe class="document-viewer-pdf" title="${escapeHtml(name)}" src="${escapeHtml(`${url}#toolbar=0&navpanes=0`)}" sandbox="allow-same-origin" referrerpolicy="no-referrer"></iframe>`
+          ? `<div class="document-pdf-launch"><span class="document-pdf-icon" aria-hidden="true">PDF</span><p>${escapeHtml(name)}</p><button class="document-pdf-open" id="openDocumentPdf" type="button">Ouvrir</button><small>Consulter le PDF dans le lecteur de votre appareil.</small></div>`
           : documentIsText(documentItem)
             ? `<pre class="document-viewer-text" id="documentTextPreview">Chargement du contenu…</pre>`
             : `<div class="document-preview-unavailable"><span>${escapeHtml(documentFileIcon(documentItem))}</span><div><b>Prévisualisation indisponible</b><p>${canManageDocuments() ? "Ce format peut être ouvert par un administrateur depuis son appareil." : "Demande une version PDF ou image à un administrateur pour le consulter dans l’application."}</p></div></div>`;
@@ -1537,7 +1553,8 @@
         footer: `<button class="secondary-button" id="closeDocumentViewer">Fermer</button>${canManageDocuments() ? `<button class="primary-button" id="adminOpenDocument">Ouvrir / télécharger</button>` : ""}`
       });
       $("closeDocumentViewer").addEventListener("click", closeModal);
-      $("adminOpenDocument")?.addEventListener("click", () => window.open(url, "_blank", "noopener"));
+      $("openDocumentPdf")?.addEventListener("click", () => { void openDocumentInBrowser(documentItem); });
+      $("adminOpenDocument")?.addEventListener("click", () => { void openDocumentInBrowser(documentItem); });
       if (documentIsText(documentItem)) {
         fetch(url, { credentials: "omit" }).then(response => response.ok ? response.text() : Promise.reject(new Error(`Lecture impossible (${response.status})`))).then(text => {
           const preview = $("documentTextPreview");
@@ -1754,12 +1771,13 @@
     const configured = Boolean(item.url);
     const action = configured ? "open-portal-app" : "configure-portal-suggestion";
     const detail = item.description || (configured ? "Application disponible depuis le Journal chantier." : "Lien à renseigner par le propriétaire principal.");
-    return `<article class="portal-app-card ${item.suggestion ? "is-suggestion" : ""}"><button class="portal-app-open" data-action="${action}" data-portal-app-id="${escapeHtml(item.id)}" data-portal-suggestion="${escapeHtml(item.name || "")}" ${configured ? "" : (manager ? "" : "disabled") }><span class="portal-app-icon">${iconSvg(portalIconKey(item.icon_key), "portal-icon-svg")}</span><span class="portal-app-copy"><b>${escapeHtml(item.name || "Application")}</b><small>${escapeHtml(detail)}</small></span><span class="portal-app-arrow" aria-hidden="true">${configured ? "↗" : "＋"}</span></button>${manager && !item.suggestion && item.id !== "integrated-briefing" ? `<button class="portal-app-menu" data-action="portal-app-menu" data-portal-app-id="${escapeHtml(item.id)}" aria-label="Gérer ${escapeHtml(item.name || "l’application")}">⋮</button>` : ""}</article>`;
+    return `<article class="portal-app-card ${item.suggestion ? "is-suggestion" : ""}"><button class="portal-app-open" data-action="${action}" data-portal-app-id="${escapeHtml(item.id)}" data-portal-suggestion="${escapeHtml(item.name || "")}" ${configured ? "" : (manager ? "" : "disabled") }><span class="portal-app-icon">${iconSvg(portalIconKey(item.icon_key), "portal-icon-svg")}</span><span class="portal-app-copy"><b>${escapeHtml(item.name || "Application")}</b><small>${escapeHtml(detail)}</small></span><span class="portal-app-arrow" aria-hidden="true">${configured ? "↗" : "＋"}</span></button>${manager && !item.suggestion && item.id !== "integrated-briefing" && item.id !== "integrated-ainm" ? `<button class="portal-app-menu" data-action="portal-app-menu" data-portal-app-id="${escapeHtml(item.id)}" aria-label="Gérer ${escapeHtml(item.name || "l’application")}">⋮</button>` : ""}</article>`;
   }
   function renderApps() {
     if (!els.portalAppsGrid) return;
     const apps = [...(app.portalApps || [])];
     if (!apps.some(item => item.icon_key === 'briefing')) apps.unshift({id:'integrated-briefing',icon_key:'briefing',name:'Briefing au pied de l’opération',url:'./briefing/index.html',description:'Enregistrer le PDF signé dans le fil et les archives du chantier.'});
+    if (!apps.some(isAinmPortalApp)) apps.push(ainmPortalApp());
     const suggestions = PORTAL_SUGGESTIONS.filter(suggestion => !isConfiguredSuggestion(suggestion, apps));
     const displayed = [...apps, ...suggestions];
     els.appsCount.textContent = apps.length;
@@ -1785,7 +1803,18 @@
     if (parsed.protocol !== "https:") throw new Error("Pour protéger le journal, le lien doit commencer par https://.");
     return parsed.toString();
   }
-  function portalAppById(id) { if (id === 'integrated-briefing') return {id, icon_key:'briefing'}; return (app.portalApps || []).find(item => String(item.id) === String(id)) || null; }
+  function ainmPortalApp() {
+    return {id: "integrated-ainm", icon_key: "report", name: "Rapport journalier",
+      url: "https://ghostbuilderdev.github.io/rapport-journalier-ainm/",
+      description: "Archiver le PDF sur SharePoint et dans les documents du chantier."};
+  }
+  function isAinmPortalApp(item) {
+    try {
+      const url = new URL(item?.url || "");
+      return url.origin === "https://ghostbuilderdev.github.io" && url.pathname.replace(/\/$/, "") === "/rapport-journalier-ainm";
+    } catch (_) { return false; }
+  }
+  function portalAppById(id) { if (id === "integrated-ainm") return ainmPortalApp(); if (id === 'integrated-briefing') return {id, icon_key:'briefing'}; return (app.portalApps || []).find(item => String(item.id) === String(id)) || null; }
   function openPortalApp(item) {
     if (item?.icon_key === 'briefing' || item?.id === 'suggestion-briefing') {
       return window.JournalBriefing.open({
@@ -1794,7 +1823,15 @@
       });
     }
     if (!item?.url) return openPortalAppDialog(null, item?.name || "");
-    try { window.open(safePortalUrl(item.url), "_blank", "noopener,noreferrer"); }
+    try {
+      const destination = new URL(safePortalUrl(item.url));
+      if (isAinmPortalApp(item)) {
+        const chantier = currentChantier();
+        if (!isCloudReady() || !app.user?.id || !chantier) throw new Error("Connectez-vous et sélectionnez un chantier avant d’ouvrir le rapport journalier.");
+        destination.searchParams.set("chantierId", chantier.id);
+      }
+      window.open(destination.href, "_blank", "noopener,noreferrer");
+    }
     catch (error) { toast(friendlyError(error), "error"); }
   }
   async function savePortalApp(values, existing = null) {
