@@ -18,7 +18,9 @@
   <link rel="stylesheet" href="styles-v14.3.css?v=14.3-design" media="screen">
   <link rel="stylesheet" href="mode-chantier.css?v=14.4-mode-chantier" media="screen">
   <script src="mode-chantier.js?v=14.4-mode-chantier" defer></script>
-  <script src="app-v13.js?v=14.4-mode-chantier" defer></script>
+  <link rel="stylesheet" href="feedback.css?v=14.5-retours" media="screen">
+  <script src="feedback.js?v=14.5-retours" defer></script>
+  <script src="app-v13.js?v=14.5-retours" defer></script>
 </head>
 <body>
   <div class="app-shell" id="appShell">
@@ -38,6 +40,8 @@
         <span aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/></svg></span>
         <input id="chantierSearch" type="search" placeholder="Rechercher un chantier">
       </div>
+
+      <button class="sidebar-directory-button feedback-entry" id="sidebarFeedbackBtn" type="button" hidden><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-8l-5 3v-3H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"/><path d="M8 8h8M8 12h5"/></svg><span>Améliorer l’application<small>Idées et problèmes rencontrés</small></span></button>
 
       <div class="section-label"><span>MES CHANTIERS</span><span id="chantierCount">0</span></div>
       <nav class="chantier-list" id="chantierList" aria-label="Liste des chantiers"></nav>
@@ -65,6 +69,7 @@
           <span class="site-heading-copy"><b id="siteName">Choisissez un chantier</b><small id="siteMeta">Journal partagé sécurisé</small></span>
         </button>
         <div class="topbar-tools">
+          <button class="tool-button hide-small feedback-topbar" id="feedbackBtn" type="button" title="Améliorer l’application : espace commun à tous les utilisateurs" hidden><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-8l-5 3v-3H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"/><path d="M8 8h8M8 12h5"/></svg><span>Améliorer l’application</span></button>
           <button class="tool-button hide-small" id="userDirectoryBtn" title="Consulter les personnes inscrites" hidden><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3.5 20c.7-3.5 2.5-5.2 5.5-5.2s4.8 1.7 5.5 5.2M17 5a3 3 0 0 1 0 6M17 15c2.5 0 4 1.5 4 4"/></svg><span>Annuaire</span></button>
           <button class="tool-button hide-small" id="adminDashboardBtn" title="Administrer les comptes" hidden><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6v5.2c0 4.5 3.1 8.6 7.5 9.8 4.4-1.2 7.5-5.3 7.5-9.8V6L12 3Z"/><path d="m8.8 12 2.1 2.1 4.4-4.4"/></svg><span>Administration</span></button>
           <button class="tool-button hide-small" id="inviteBtn" title="Inviter un interlocuteur"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3.5 20c.7-3.5 2.5-5.2 5.5-5.2s4.8 1.7 5.5 5.2M18 8v6M15 11h6"/></svg><span>Inviter</span></button>

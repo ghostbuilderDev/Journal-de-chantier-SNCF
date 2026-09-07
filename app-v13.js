@@ -87,7 +87,7 @@
     getContext: () => ({ ready: isCloudReady(), userId: app.user?.id || null, db: app.db,
       currentId: app.currentId, chantiers: app.chantiers, tab: app.activeTab }),
     toast, openModal, closeModal,
-    isOverlayOpen: () => !els.modalBackdrop.hidden || !els.photoViewer.hidden,
+    isOverlayOpen: () => !els.modalBackdrop.hidden || !els.photoViewer.hidden || Boolean(feedback?.isOpen()),
     async navigate({ chantierId, messageId, actionId }) {
       if (!isCloudReady() || !app.chantiers.some(item => String(item.id) === chantierId)) return false;
       if (app.sendingMessage) { toast("Attends la fin de l’envoi avant d’ouvrir cet événement.", "warning"); return false; }
@@ -115,6 +115,14 @@
       }
       return true;
     }
+  });
+
+  // JournalFeedback V14.5: independent global feedback space.
+  const feedback = window.JournalFeedback?.create({
+    getContext: () => ({ ready: isCloudReady(), userId: app.user?.id || null,
+      db: app.db, profileName: app.profile?.full_name || "" }),
+    toast,
+    onVisibilityChange: () => modeChantier?.presence()
   });
 
   function defaultLocalData() {
@@ -770,6 +778,7 @@
     };
   }
   function clearSessionPrivateState() {
+    if (typeof feedback !== "undefined") feedback?.clear();
     if (typeof modeChantier !== "undefined") void modeChantier?.clear();
     app.sessionVersion = (app.sessionVersion || 0) + 1;
     app.sendingMessage = false;
@@ -1912,7 +1921,7 @@
       els.inviteBtn.innerHTML = `${iconSvg("user-plus")}<span>Inviter</span>`;
     }
   }
-  function renderAll(options) { renderProfile(); renderConnection(); renderAccessControls(); renderSidebar(); renderHeader(); renderPinnedMessages(); renderMessages(options); renderPlans(); renderActions(); renderPilotage(); renderApps(); renderPrintCover(); if (typeof modeChantier !== "undefined") modeChantier?.contextChanged(); }
+  function renderAll(options) { if (typeof feedback !== "undefined") feedback?.contextChanged(); renderProfile(); renderConnection(); renderAccessControls(); renderSidebar(); renderHeader(); renderPinnedMessages(); renderMessages(options); renderPlans(); renderActions(); renderPilotage(); renderApps(); renderPrintCover(); if (typeof modeChantier !== "undefined") modeChantier?.contextChanged(); }
   function setActiveTab(tab) {
     app.activeTab = tab;
     $$(".tab").forEach(button => button.classList.toggle("active", button.dataset.tab === tab));
@@ -4094,7 +4103,7 @@
   async function initialize() {
     wireEvents();
     const callbackError = takeAuthCallbackError();
-    if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("./service-worker-v13.js?v=14.4-mode-chantier").catch(error => console.warn("Service worker", error));
+    if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("./service-worker-v13.js?v=14.5-retours").catch(error => console.warn("Service worker", error));
     syncFromLocal();
     if (cloudConfigured()) {
       try { await initializeCloud(); }

@@ -1,8 +1,9 @@
-const CACHE_NAME = 'journal-chantier-connecte-v14.4-mode-chantier';
+const CACHE_NAME = 'journal-chantier-connecte-v14.5-retours';
 const APP_SHELL = [
+  './feedback.js?v=14.5-retours', './feedback.css?v=14.5-retours',
   './', './index.html', './styles-v13.css?v=14.2-collaborateurs',
   './styles-v14.3.css?v=14.3-design', './mode-chantier.css?v=14.4-mode-chantier',
-  './mode-chantier.js?v=14.4-mode-chantier', './app-v13.js?v=14.4-mode-chantier',
+  './mode-chantier.js?v=14.4-mode-chantier', './app-v13.js?v=14.5-retours',
   './supabase.js?v=14.2-collaborateurs', './config.js?v=14.2-collaborateurs',
   './manifest.webmanifest', './journal-chantier-logo-v14.png'
 ];
