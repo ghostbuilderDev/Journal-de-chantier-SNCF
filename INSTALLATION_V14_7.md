@@ -1,4 +1,16 @@
-# Journal V14.7 + Rapport AINM V10.2
+# Correctif du rapport final et retour au journal — V10.3
+
+Cette livraison conserve le journal V14.7 et tous les correctifs du briefing. Aucune nouvelle migration SQL n'est ajoutée. Si V14.7/V10.2 est déjà installé, seuls les fichiers du rapport concernés et la notice du journal sont mis à jour.
+
+Dans Contrôle, le bouton principal « Enregistrer le rapport final dans le journal » enregistre le PDF dans Documents → Rapports journaliers et conserve l'envoi SharePoint. Le téléchargement téléphone ne crée plus automatiquement un nouveau rapport : le formulaire et ses signatures restent disponibles pour le dépôt. Après confirmation des deux archives, le rapport suivant est préparé comme précédemment.
+
+Si un rapport a déjà été enregistré uniquement sur le téléphone, utiliser « Déposer un PDF déjà enregistré », choisir ce PDF et vérifier le chantier destinataire. Le fichier est déposé tel quel ; cette opération ne remplace pas le brouillon en cours. Ses dates et entreprises ne sont pas déduites du brouillon actuel. S'il existe déjà un PDF en attente, l'application reprend d'abord cet envoi conservé.
+
+Le lien « Retour au journal de chantier » est présent sur l'accueil et au-dessus de l'en-tête du rapport. Il conserve la saisie avant de revenir au journal et attend la fin d'un envoi en cours.
+
+Tests supplémentaires : confirmation téléphone sans passage au rapport suivant, bouton principal relié au double archivage, dépôt d'un PDF existant sans effacement du brouillon, retours visibles et conservation de saisie, reprises existantes. Les envois réels et le rendu sur téléphone restent à vérifier après publication.
+
+# Journal V14.7 + Rapport AINM V10.3
 
 Utiliser ce pack à la place du ZIP Rapport V10.1. Il contient les deux applications complètes, dans deux dossiers distincts, et un installateur qui contrôle les versions avant de modifier les dépôts.
 
@@ -15,11 +27,11 @@ Cette vérification porte sur les dernières livraisons retrouvées, pas sur une
 - La migration AINM porte désormais le numéro **20260907000700**. Le numéro **20260907000500** était déjà utilisé par les retours d'amélioration V14.5. Aucune migration historique n'est remplacée. Les droits AINM utilisent la fonction actuelle du journal, y compris le blocage des comptes révoqués.
 
 ## Installation Termux
-Télécharger `Journal-V14.7-Rapport-V10.2-Mise-a-jour.zip` dans Téléchargements.
+Télécharger `Journal-V14.7-Rapport-V10.3-Mise-a-jour.zip` dans Téléchargements.
 
 ```bash
 mkdir -p "$HOME/mise-a-jour-journal-v14.7"
-unzip -o "$HOME/storage/downloads/Journal-V14.7-Rapport-V10.2-Mise-a-jour.zip" -d "$HOME/mise-a-jour-journal-v14.7"
+unzip -o "$HOME/storage/downloads/Journal-V14.7-Rapport-V10.3-Mise-a-jour.zip" -d "$HOME/mise-a-jour-journal-v14.7"
 cd "$HOME/mise-a-jour-journal-v14.7"
 python installer.py --journal "$HOME/Journal-de-chantier-SNCF" --rapport "$HOME/projets/rapport-journalier-ainm-pwa" --verifier
 ```
@@ -57,14 +69,14 @@ set -e
 cd "$HOME/projets/rapport-journalier-ainm-pwa"
 git diff --stat
 git add -A
-git commit -m "V10.2 : compatibilité avec le journal V14.7 et ses droits actuels"
+git commit -m "V10.3 : compatibilité avec le journal V14.7 et ses droits actuels"
 git push
 )
 ```
 
 Il est possible d'installer un dépôt à la fois en ne passant que --journal ou --rapport. Ne pas publier le rapport avant la réussite de la migration correspondante.
 
-Après GitHub Pages, fermer et rouvrir les deux PWA avec Internet. Ne pas effacer les données Chrome : elles contiennent les brouillons et les PDF en attente. Vérifier V10.2 dans AINM ; le journal conserve son interface sans numéro de version visible.
+Après GitHub Pages, fermer et rouvrir les deux PWA avec Internet. Ne pas effacer les données Chrome : elles contiennent les brouillons et les PDF en attente. Vérifier V10.3 dans AINM ; le journal conserve son interface sans numéro de version visible.
 
 ## Première vérification sur téléphone
 1. Ouvrir un briefing depuis le journal : vérifier qu'il s'ouvre toujours et que son PDF va dans le fil, ses archives et SharePoint.
