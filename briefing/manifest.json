@@ -1,0 +1,32 @@
+{
+  "id": "./",
+  "name": "Briefing au pied de l’opération",
+  "short_name": "Briefing",
+  "description": "Briefing chantier avec signatures, PDF et partage mobile sécurisé.",
+  "start_url": "./?source=pwa",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
+  "orientation": "portrait",
+  "background_color": "#eef2f5",
+  "theme_color": "#c40000",
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "icon-192-v19b.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512-v19b.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
+

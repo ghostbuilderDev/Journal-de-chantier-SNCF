@@ -1103,7 +1103,7 @@
     const attachments = deleted ? [] : (message.attachments || []);
     const images = attachments.filter(fileIsImage), documents = attachments.filter(item => !fileIsImage(item));
     if (message.message_type === "Système") return `<article class="message-row system"><div class="message-bubble">${escapeHtml(message.body || "")}</div></article>`;
-    return `<article class="message-row ${mine ? "mine" : ""}" data-message-row="${message.id}"><span class="message-avatar">${escapeHtml(initial(message.author_name))}</span><div class="message-bubble ${deleted ? "deleted" : ""}"><button class="message-menu" data-action="message-menu" data-message-id="${message.id}" aria-label="Options">⋮</button><div class="message-head"><span class="author-name">${escapeHtml(message.author_name || "Intervenant")}</span>${message.message_type ? `<span class="message-tag ${typeClass(message.message_type)}">${escapeHtml(message.message_type)}</span>` : ""}${message.zone ? `<span class="zone-tag">${escapeHtml(message.zone)}</span>` : ""}${message.is_important ? `<span class="important-star">★</span>` : ""}</div>${parent ? `<button class="reply-quote" data-action="jump-message" data-message-id="${parent.id}"><b>${escapeHtml(parent.author_name || "Intervenant")}</b>${escapeHtml(truncate(parent.body || "Pièce jointe", 90))}</button>` : ""}${deleted ? `<div class="message-text">Message supprimé.</div>` : ""}${!deleted && images.length ? `<div class="attachment-grid ${images.length === 1 ? "one" : ""}">${images.map(renderAttachment).join("")}</div>` : ""}${!deleted ? documents.map(renderAttachment).join("") : ""}${!deleted && message.body ? `<div class="message-text">${renderRichText(message.body)}</div>` : ""}${!deleted ? renderMessageActionLinks(message) : ""}${!deleted ? renderReactionBar(message) : ""}<div class="message-footer"><span>${formatTime(message.created_at)}</span>${mine ? `<span class="message-status" title="${messageReadBySomeoneElse(message) ? "Lu par un interlocuteur" : "Envoyé"}">${messageReadBySomeoneElse(message) ? "✓✓" : "✓"}</span>` : ""}</div>${!deleted ? `<div class="message-actions"><button data-action="reply" data-message-id="${message.id}">↩ Répondre</button><button data-action="open-reactions" data-message-id="${message.id}">☺ Réagir</button><button data-action="make-action" data-message-id="${message.id}">✓ Action</button>${mine ? `<button data-action="toggle-important" data-message-id="${message.id}">${message.is_important ? "★ Désépingler" : "☆ Épingler"}</button>` : ""}</div>` : ""}</div></article>`;
+    return `<article class="message-row ${mine ? "mine" : ""}" data-message-row="${message.id}"><span class="message-avatar">${escapeHtml(initial(message.author_name))}</span><div class="message-bubble ${deleted ? "deleted" : ""}"><button class="message-menu" data-action="message-menu" data-message-id="${message.id}" aria-label="Options">⋮</button><div class="message-head"><span class="author-name">${escapeHtml(message.author_name || "Intervenant")}</span>${message.message_type ? `<span class="message-tag ${typeClass(message.message_type)}">${escapeHtml(message.message_type)}</span>` : ""}${message.zone ? `<span class="zone-tag">${escapeHtml(message.zone)}</span>` : ""}${message.is_important ? `<span class="important-star">★</span>` : ""}</div>${parent ? `<button class="reply-quote" data-action="jump-message" data-message-id="${parent.id}"><b>${escapeHtml(parent.author_name || "Intervenant")}</b>${escapeHtml(truncate(parent.body || "Pièce jointe", 90))}</button>` : ""}${deleted ? `<div class="message-text">Message supprimé.</div>` : ""}${!deleted && images.length ? `<div class="attachment-grid ${images.length === 1 ? "one" : ""}">${images.map(renderAttachment).join("")}</div>` : ""}${!deleted ? documents.map(renderAttachment).join("") : ""}${!deleted && message.body ? `<div class="message-text">${renderRichText(message.body)}</div>` : ""}${!deleted && message.briefing_document_id ? `<button class="secondary-button" data-action="open-document" data-document-id="${escapeHtml(message.briefing_document_id)}">Consulter le briefing signé</button>` : ""}${!deleted ? renderMessageActionLinks(message) : ""}${!deleted ? renderReactionBar(message) : ""}<div class="message-footer"><span>${formatTime(message.created_at)}</span>${mine ? `<span class="message-status" title="${messageReadBySomeoneElse(message) ? "Lu par un interlocuteur" : "Envoyé"}">${messageReadBySomeoneElse(message) ? "✓✓" : "✓"}</span>` : ""}</div>${!deleted ? `<div class="message-actions"><button data-action="reply" data-message-id="${message.id}">↩ Répondre</button><button data-action="open-reactions" data-message-id="${message.id}">☺ Réagir</button><button data-action="make-action" data-message-id="${message.id}">✓ Action</button>${mine ? `<button data-action="toggle-important" data-message-id="${message.id}">${message.is_important ? "★ Désépingler" : "☆ Épingler"}</button>` : ""}</div>` : ""}</div></article>`;
   }
   function scrollMessagesToBottom() {
     app.feedAtBottom = true;
@@ -1754,11 +1754,12 @@
     const configured = Boolean(item.url);
     const action = configured ? "open-portal-app" : "configure-portal-suggestion";
     const detail = item.description || (configured ? "Application disponible depuis le Journal chantier." : "Lien à renseigner par le propriétaire principal.");
-    return `<article class="portal-app-card ${item.suggestion ? "is-suggestion" : ""}"><button class="portal-app-open" data-action="${action}" data-portal-app-id="${escapeHtml(item.id)}" data-portal-suggestion="${escapeHtml(item.name || "")}" ${configured ? "" : (manager ? "" : "disabled") }><span class="portal-app-icon">${iconSvg(portalIconKey(item.icon_key), "portal-icon-svg")}</span><span class="portal-app-copy"><b>${escapeHtml(item.name || "Application")}</b><small>${escapeHtml(detail)}</small></span><span class="portal-app-arrow" aria-hidden="true">${configured ? "↗" : "＋"}</span></button>${manager && !item.suggestion ? `<button class="portal-app-menu" data-action="portal-app-menu" data-portal-app-id="${escapeHtml(item.id)}" aria-label="Gérer ${escapeHtml(item.name || "l’application")}">⋮</button>` : ""}</article>`;
+    return `<article class="portal-app-card ${item.suggestion ? "is-suggestion" : ""}"><button class="portal-app-open" data-action="${action}" data-portal-app-id="${escapeHtml(item.id)}" data-portal-suggestion="${escapeHtml(item.name || "")}" ${configured ? "" : (manager ? "" : "disabled") }><span class="portal-app-icon">${iconSvg(portalIconKey(item.icon_key), "portal-icon-svg")}</span><span class="portal-app-copy"><b>${escapeHtml(item.name || "Application")}</b><small>${escapeHtml(detail)}</small></span><span class="portal-app-arrow" aria-hidden="true">${configured ? "↗" : "＋"}</span></button>${manager && !item.suggestion && item.id !== "integrated-briefing" ? `<button class="portal-app-menu" data-action="portal-app-menu" data-portal-app-id="${escapeHtml(item.id)}" aria-label="Gérer ${escapeHtml(item.name || "l’application")}">⋮</button>` : ""}</article>`;
   }
   function renderApps() {
     if (!els.portalAppsGrid) return;
-    const apps = app.portalApps || [];
+    const apps = [...(app.portalApps || [])];
+    if (!apps.some(item => item.icon_key === 'briefing')) apps.unshift({id:'integrated-briefing',icon_key:'briefing',name:'Briefing au pied de l’opération',url:'./briefing/index.html',description:'Enregistrer le PDF signé dans le fil et les archives du chantier.'});
     const suggestions = PORTAL_SUGGESTIONS.filter(suggestion => !isConfiguredSuggestion(suggestion, apps));
     const displayed = [...apps, ...suggestions];
     els.appsCount.textContent = apps.length;
@@ -1784,8 +1785,14 @@
     if (parsed.protocol !== "https:") throw new Error("Pour protéger le journal, le lien doit commencer par https://.");
     return parsed.toString();
   }
-  function portalAppById(id) { return (app.portalApps || []).find(item => String(item.id) === String(id)) || null; }
+  function portalAppById(id) { if (id === 'integrated-briefing') return {id, icon_key:'briefing'}; return (app.portalApps || []).find(item => String(item.id) === String(id)) || null; }
   function openPortalApp(item) {
+    if (item?.icon_key === 'briefing' || item?.id === 'suggestion-briefing') {
+      return window.JournalBriefing.open({
+        context: () => ({ready: isCloudReady(), db: app.db, userId: app.user?.id, chantier: currentChantier()}),
+        toast, refresh: refreshCloudCurrent
+      });
+    }
     if (!item?.url) return openPortalAppDialog(null, item?.name || "");
     try { window.open(safePortalUrl(item.url), "_blank", "noopener,noreferrer"); }
     catch (error) { toast(friendlyError(error), "error"); }
@@ -3932,6 +3939,7 @@
     } else if (action === "open-document") {
       const documentItem = (app.documents || []).find(item => String(item.id) === String(element.dataset.documentId));
       if (documentItem) await openDocumentViewer(documentItem);
+      else toast("Document indisponible : actualisez le journal ou consultez les archives du chantier.", "warning");
     } else if (action === "document-folder-menu") {
       event.preventDefault();
       event.stopPropagation();

@@ -1,9 +1,11 @@
-const CACHE_NAME = 'journal-chantier-connecte-v14.5-retours';
+const CACHE_NAME = 'journal-chantier-connecte-v14.6-briefing';
 const APP_SHELL = [
+  './briefing-integration.js?v=14.6', './briefing/index.html', './briefing/journal-bridge.js',
+  './briefing/vendor/html2canvas.min.js', './briefing/vendor/jspdf.umd.min.js',
   './feedback.js?v=14.5-retours', './feedback.css?v=14.5-retours',
   './', './index.html', './styles-v13.css?v=14.2-collaborateurs',
   './styles-v14.3.css?v=14.3-design', './mode-chantier.css?v=14.4-mode-chantier',
-  './mode-chantier.js?v=14.4-mode-chantier', './app-v13.js?v=14.5-retours',
+  './mode-chantier.js?v=14.4-mode-chantier', './app-v13.js?v=14.6-briefing',
   './supabase.js?v=14.2-collaborateurs', './config.js?v=14.2-collaborateurs',
   './manifest.webmanifest', './journal-chantier-logo-v14.png'
 ];

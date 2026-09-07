@@ -1,0 +1,43 @@
+name: Installer les archives briefing
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/20260907000600_briefing_archive.sql'
+      - 'supabase/tests/briefing-backend.cjs'
+      - 'scripts/deploy-briefing-release.py'
+      - '.github/workflows/deploy-briefing.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: supabase-production
+  cancel-in-progress: false
+jobs:
+  install:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Tester les droits et la transaction en mémoire
+        run: |
+          npm install --prefix /tmp/briefing-tests @electric-sql/pglite@0.5.8 --no-audit --no-fund
+          PGLITE_MODULE=/tmp/briefing-tests/node_modules/@electric-sql/pglite node supabase/tests/briefing-backend.cjs
+          node tests/briefing-integration.test.cjs
+          node --check briefing-integration.js
+          node --check app-v13.js
+      - name: Installer le client PostgreSQL
+        run: |
+          if ! command -v psql >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y postgresql-client
+          fi
+      - name: Installer les archives dans le projet du journal
+        env:
+          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: python3 scripts/deploy-briefing-release.py
