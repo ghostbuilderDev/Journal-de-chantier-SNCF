@@ -6,7 +6,7 @@
  * sans paramètres d'URL, afin d'éviter les entrées de cache non maîtrisées.
  */
 const CACHE_PREFIX = 'briefing-pwa-pages-';
-const CACHE_NAME = 'briefing-pwa-pages-v42-gemini-v33-contract';
+const CACHE_NAME = 'briefing-pwa-pages-v43-journal-frame-fix';
 const APP_SHELL = [
   './',
   './index.html',

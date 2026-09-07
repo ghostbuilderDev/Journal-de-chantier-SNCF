@@ -1,4 +1,4 @@
-const CACHE_NAME = 'journal-chantier-connecte-v14.6-briefing';
+const CACHE_NAME = 'journal-chantier-connecte-v14.6.1-briefing';
 const APP_SHELL = [
   './briefing-integration.js?v=14.6', './briefing/index.html', './briefing/journal-bridge.js',
   './briefing/vendor/html2canvas.min.js', './briefing/vendor/jspdf.umd.min.js',

@@ -13,6 +13,25 @@
   var framed = false;
   try { framed = window.top !== window.self; } catch (error) { framed = true; }
 
+  // Autoriser uniquement le journal parent direct, de même origine et dossier.
+  var trustedJournal = false;
+  if (framed) {
+    try {
+      var params = new URLSearchParams(window.location.search);
+      var parentUrl = new URL(window.parent.location.href);
+      var journalUrl = new URL('../', window.location.href);
+      trustedJournal = window.top === window.parent &&
+        window.location.origin !== 'null' &&
+        parentUrl.origin === window.location.origin &&
+        params.get('journal_origin') === window.location.origin &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(params.get('journal_session') || '') &&
+        (parentUrl.pathname === journalUrl.pathname ||
+         parentUrl.pathname === journalUrl.pathname + 'index.html');
+    } catch (error) { trustedJournal = false; }
+  }
+  var blockedFrame = framed && !trustedJournal;
+
+
   try { window.name = ""; } catch (error) {}
   try { if (window.opener) window.opener = null; } catch (error) {}
 
@@ -24,10 +43,12 @@
 
   window.BriefingSecurity = Object.freeze({
     cleanPlainText: cleanPlainText,
-    isFramed: framed
+    isFramed: framed,
+    isBlockedFrame: blockedFrame,
+    isTrustedJournal: trustedJournal
   });
 
-  if (framed) {
+  if (blockedFrame) {
     window.addEventListener("DOMContentLoaded", function(){
       document.body.replaceChildren();
       var message = document.createElement("main");
@@ -10183,7 +10204,7 @@ window.updateLamBriefing=function(){let target=document.getElementById("oMiseVoi
   }
 
   document.addEventListener("DOMContentLoaded", function(){
-    if (window.BriefingSecurity && window.BriefingSecurity.isFramed) return;
+    if (window.BriefingSecurity && window.BriefingSecurity.isBlockedFrame) return;
     cleanAllPlainText();
     secureBlankTargets();
 
