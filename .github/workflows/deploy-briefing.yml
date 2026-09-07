@@ -6,6 +6,7 @@ on:
       - 'supabase/migrations/20260907000600_briefing_archive.sql'
       - 'supabase/tests/briefing-backend.cjs'
       - 'scripts/deploy-briefing-release.py'
+      - 'tests/briefing-installation.test.py'
       - '.github/workflows/deploy-briefing.yml'
   workflow_dispatch:
 permissions:
@@ -25,6 +26,7 @@ jobs:
           node-version: '24'
       - name: Tester les droits et la transaction en mémoire
         run: |
+          python3 tests/briefing-installation.test.py
           npm install --prefix /tmp/briefing-tests @electric-sql/pglite@0.5.8 --no-audit --no-fund
           PGLITE_MODULE=/tmp/briefing-tests/node_modules/@electric-sql/pglite node supabase/tests/briefing-backend.cjs
           node tests/briefing-integration.test.cjs
