@@ -1,0 +1,43 @@
+{
+  "base_commit": "505b7bda31cb0370413ee810a0481ad39a4aec74",
+  "files": {
+    ".github/workflows/deploy-v152.yml": null,
+    "supabase/migrations/20260908000300_v15_2_cr_simple.sql": null,
+    "supabase/tests/cr-v152-backend.cjs": null,
+    "supabase/tests/cr-v152-postgres.sql": null,
+    "supabase/tests/cr-v152-email.test.cjs": null,
+    "supabase/functions/journal-cr-send-v152/index.ts": null,
+    "supabase/functions/journal-cr-send-v152/handler.mjs": null,
+    "supabase/functions/journal-cr-send-v152/markup.mjs": null,
+    "scripts/deploy-v152-release.py": null,
+    "scripts/prepare-v152-update.py": null,
+    "scripts/wait-v152-workflow.py": null,
+    "scripts/update-v152-termux.sh": null,
+    "scripts/v152-base-sha256.json": null,
+    "tests/v152-installation.test.py": null,
+    "cr-off.js": "1c64b5aea953d9ff2efca57e91f7e9bb38916b337fe2a3a22d2db28b77e8b73d",
+    "cr-off.css": "3f78eaca91f83cff847c396acf57b25eecebe91896effd79c08fae30270f3c49",
+    "cr-ai.js": null,
+    "index.html": "8cb3a376416fb6f6540e16b3317c7e8adfdb02da3c0e25c5b0729f1c806bbed6",
+    "service-worker-v13.js": "a839a20580901f0c164eda56692b3bb862ba7f114815cad6480c77225e6021c0",
+    "tests/cr-v152-browser.cjs": null,
+    "VERSION_V15.2.md": null,
+    "VERIFICATIONS_V15.2.txt": null,
+    "supabase/tests/cr-v152-retrofit.cjs": null
+  },
+  "dependencies": {
+    "app-v13.js": "f28e3623906bb760e930a5ec2eba9686b6e3ba61163923c4f876aebb5ebb557e",
+    "styles-v13.css": "190ec6dd81049f5f609ff95a822d128f851bb0af7edfdfc1daa5b181059593a4",
+    "mode-chantier.js": "dc7af04e66cdf434e15a9779730dba9c521061371ca61de3032ee4f4e4f85ad9",
+    "supabase/migrations/20260908000100_v15_cr_encadrement.sql": "1810354ee104aea1a3382dc55d8127b00ed93403fcf6f8aa25205487e2b11b85",
+    "supabase/migrations/20260908000200_v15_1_cr_perimetres.sql": "de7e08f80ea13f94ac0261ce203cbf62fc95e2c419ddbc7e116c5423912f28cd",
+    "supabase/functions/journal-v15-push/handler.mjs": "0a79f6f2cb4a95796719b18f05c4a471f6fb86b001ec96b625aa9392afe0c23f",
+    "supabase/functions/journal-cr-send/handler.mjs": "813bcf40233801896425e28d0424daf31d7a2e948fc3abb39d9de0537223b289",
+    "supabase/tests/cr-v151-backend.cjs": "e87f9a228888e897235bc594d97761e0294eb3bc63b4244f8d0464f9fc1b5cd7",
+    "supabase/tests/backend-fixture.sql": "48df4e5fed1ef44036a8c765071d0f190e96cf9c54a8da88e982cc47dcb80bf7",
+    "supabase/tests/backend-production-shape.sql": "08f58b1e807c47c5d2faa2e20920d013b556bd6ee8244cd264725728d71bedcd",
+    "scripts/deploy-briefing-release.py": "fadbebe23ad0aa6b92ecad8fd030e75b74ab3c42170c70db5ea96323e7147bb3",
+    "scripts/deploy-supabase-release.py": "201bc69dff68f41c7685fac8caaf14f68231e3ecbfd9107537f6c30b01cfd824",
+    "briefing/index.html": "748219261f413e9cec4dfc10862ba03a3802d059009fed2cc0093a4057ccb8e5"
+  }
+}
