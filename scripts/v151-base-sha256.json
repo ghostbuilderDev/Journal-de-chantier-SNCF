@@ -1,0 +1,31 @@
+{
+  "base_commit": "ea7153fd37941db2e7e2132c201b96b81a09d6f8",
+  "files": {
+    ".github/workflows/deploy-v151.yml": null,
+    "supabase/migrations/20260908000200_v15_1_cr_perimetres.sql": null,
+    "supabase/tests/cr-v151-backend.cjs": null,
+    "supabase/tests/cr-v151-postgres.sql": null,
+    "scripts/deploy-v151-release.py": null,
+    "scripts/prepare-v151-update.py": null,
+    "scripts/wait-v151-workflow.py": null,
+    "scripts/update-v151-termux.sh": null,
+    "scripts/v151-base-sha256.json": null,
+    "tests/v151-installation.test.py": null,
+    "cr-off.js": "a4760e80174be6b3c8f90b0f44f4f118143cbe8f229fc907ec7ecf00d9803c0d",
+    "cr-off.css": "5a5dd876ae17a395cdccfd1c672daccbb46a18df39beb9c618853b98d0bfd55f",
+    "index.html": "814edd5bff4e4bde6e1fcec5e40c9ea12021a95a832982ea3010d2ac3f80a519",
+    "service-worker-v13.js": "575202eb724b60d7076f91117232ca1ab24633f277d128ae59a611c56f8089de",
+    "tests/cr-v151-browser.cjs": null,
+    "VERSION_V15.1.md": null,
+    "VERIFICATIONS_V15.1.txt": null
+  },
+  "dependencies": {
+    "app-v13.js": "f28e3623906bb760e930a5ec2eba9686b6e3ba61163923c4f876aebb5ebb557e",
+    "mode-chantier.js": "dc7af04e66cdf434e15a9779730dba9c521061371ca61de3032ee4f4e4f85ad9",
+    "supabase/migrations/20260908000100_v15_cr_encadrement.sql": "1810354ee104aea1a3382dc55d8127b00ed93403fcf6f8aa25205487e2b11b85",
+    "supabase/functions/journal-cr-send/handler.mjs": "813bcf40233801896425e28d0424daf31d7a2e948fc3abb39d9de0537223b289",
+    "supabase/functions/journal-v15-push/handler.mjs": "0a79f6f2cb4a95796719b18f05c4a471f6fb86b001ec96b625aa9392afe0c23f",
+    "scripts/deploy-briefing-release.py": "fadbebe23ad0aa6b92ecad8fd030e75b74ab3c42170c70db5ea96323e7147bb3",
+    "scripts/deploy-supabase-release.py": "201bc69dff68f41c7685fac8caaf14f68231e3ecbfd9107537f6c30b01cfd824"
+  }
+}
