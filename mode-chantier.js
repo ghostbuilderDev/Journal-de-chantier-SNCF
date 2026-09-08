@@ -105,6 +105,7 @@
       render(); presence(); updateWake(); return true;
     }
     async function unsubscribe() {
+      try { if (localStorage.getItem('journal_v15_push_user')) return true; } catch {}
       if (!nav?.serviceWorker) return;
       const reg = registration || await nav.serviceWorker.getRegistration?.();
       const sub = await reg?.pushManager?.getSubscription(); return sub ? Boolean(await sub.unsubscribe()) : true;

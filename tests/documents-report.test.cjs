@@ -21,7 +21,7 @@ function fn(name){const start=source.search(new RegExp('  (?:async )?function '+
  nodes.openDocumentPdf.click();assert.equal(tabs.length,1,'Fenêtre créée avant requête');await new Promise(setImmediate);
  assert.equal(tabs[0].opener,null);assert.equal(urls[0],'https://files.test/new-signed-pdf');
  nodes.adminOpenDocument.click();await new Promise(setImmediate);assert.equal(urls[1],urls[0]);
- manager=false;await ctx.openDocumentViewer(item);assert.doesNotMatch(modal.footer,/adminOpenDocument/);assert.match(modal.body,/openDocumentPdf/);
+ manager=false;await ctx.openDocumentViewer(item);assert.match(modal.footer,/adminOpenDocument/);assert.match(modal.body,/openDocumentPdf/);
  fail=true;await ctx.openDocumentInBrowser(item);assert.equal(tabs.at(-1).closed,true);assert.match(notices.at(-1),/Accès refusé/);fail=false;
  let release;waiter=new Promise(r=>release=r);const pending=ctx.openDocumentInBrowser(item);app.user={id:'B'};release();await pending;waiter=null;
  assert.equal(tabs.at(-1).closed,true);assert.match(notices.at(-1),/compte a changé/);
@@ -32,6 +32,7 @@ function fn(name){const start=source.search(new RegExp('  (?:async )?function '+
  vm.runInContext(['ainmPortalApp','isAinmPortalApp','portalAppById','openPortalApp'].map(fn).join('\n'),ctx);
  ctx.openPortalApp(ctx.ainmPortalApp());assert.equal(new URL(tabs.at(-1).url).searchParams.get('chantierId'),'site-A');
  assert.equal(new URL(tabs.at(-1).url).searchParams.size,1);
+ ctx.openPortalApp({url:'https://github.com/ghostbuilderDev/rapport-journalier-ainm'});assert.equal(new URL(tabs.at(-1).url).origin,'https://ghostbuilderdev.github.io');
  ctx.openPortalApp({icon_key:'briefing'});assert.equal(briefing,1);
  ctx.openPortalApp({url:'https://example.test/tool'});assert.equal(tabs.at(-1).url,'https://example.test/tool');
  ready=false;const count=tabs.length;ctx.openPortalApp(ctx.ainmPortalApp());assert.equal(tabs.length,count);

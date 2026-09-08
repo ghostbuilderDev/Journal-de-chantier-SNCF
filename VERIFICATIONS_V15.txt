@@ -1,0 +1,41 @@
+Journal de chantier V15.0 — vérification de la livraison, 8 septembre 2026
+
+Base examinée : Journal V14.7, commit 24627a6b70e6ff67f59bef3aacae4010e5264e03.
+
+RÉUSSIS LOCALEMENT
+- 62 tests JavaScript : sessions du fil, mode chantier, service worker, notifications
+  V15, confidentialité des payloads, briefing, documents contributeurs, lancement
+  AINM, refus d'envoi sans droits, contenu/destinataires issus du serveur,
+  idempotence, échecs et réponse email incertaine.
+- 4 tests Python de l'installateur : comparaison des versions, répétition,
+  fichier manquant, symlinks, séparation serveur/interface et configuration.
+- Scénarios PostgreSQL embarqué (PGlite) : création unique chantier/nuit,
+  rubriques privées, responsable et collègue distincts, contributions idempotentes,
+  saisies concurrentes, horaires après minuit, validation, version figée,
+  rectificatif, envoi groupé restreint, révocation et historique préservé.
+- Coexistence des migrations mode chantier, retours, briefing, AINM, CR V15
+  et vérification de la suppression sûre des comptes.
+- Scénario SQL préparé pour le contrôle PostgreSQL 17 du workflow.
+- Chromium, écran mobile 390 x 844 : démarrage du vrai journal, administration
+  compacte, filtre des inscriptions, action terminée repliée ; CR relié à la
+  base de test, attribution, contribution, statut, conservation d'un brouillon
+  d'une autre rubrique, accès limité et notification ouvrant la bonne rubrique.
+- Horaires de Paris : heures inexistantes ou ambiguës du changement d'heure
+  refusées sans choix explicite du décalage été/hiver.
+- Inspection visuelle des écrans mobiles et absence de débordement horizontal.
+- Simulation d'installation depuis la copie exacte V14.7 : serveur puis interface,
+  répétition autorisée, configuration conservée, version divergente refusée.
+- Syntaxe JavaScript, Python, Bash et transaction migration + registre.
+
+CONTRÔLES AU DÉPLOIEMENT
+Le workflow V15 exécute aussi les contrôles sur PostgreSQL 17 jetable, puis vérifie
+les droits du projet Supabase et le refus des appels anonymes aux fonctions.
+Termux attend la réussite du workflow pour le commit envoyé avant de publier
+l'interface. GitHub Pages doit ensuite terminer son déploiement.
+
+LIMITES DE CETTE VÉRIFICATION
+Aucune modification de la base de production, publication GitHub ou transmission
+à un destinataire réel n'a été effectuée depuis cet environnement. L'email doit
+être configuré avec un expéditeur vérifié ; les essais utilisent un service simulé.
+Une acceptation par le service email ne garantit pas la lecture ou la réception
+finale du message. Les alertes push demandent l'autorisation du téléphone.

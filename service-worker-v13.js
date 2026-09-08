@@ -1,11 +1,12 @@
-const CACHE_NAME = 'journal-chantier-connecte-v14.7-ainm-pdf';
+const CACHE_NAME = 'journal-chantier-connecte-v15.0';
 const APP_SHELL = [
+  './cr-off.js?v=15.0', './cr-off.css?v=15.0',
   './briefing-integration.js?v=14.6', './briefing/index.html', './briefing/journal-bridge.js',
   './briefing/vendor/html2canvas.min.js', './briefing/vendor/jspdf.umd.min.js',
   './feedback.js?v=14.5-retours', './feedback.css?v=14.5-retours',
   './', './index.html', './styles-v13.css?v=14.7-pdf',
   './styles-v14.3.css?v=14.3-design', './mode-chantier.css?v=14.4-mode-chantier',
-  './mode-chantier.js?v=14.4-mode-chantier', './app-v13.js?v=14.7-ainm-pdf',
+  './mode-chantier.js?v=15.0', './app-v13.js?v=15.0',
   './supabase.js?v=14.2-collaborateurs', './config.js?v=14.2-collaborateurs',
   './manifest.webmanifest', './journal-chantier-logo-v14.png'
 ];
@@ -116,6 +117,7 @@ self.addEventListener('message', event => {
 self.addEventListener('push', event => {
   event.waitUntil(modeSerial(async () => {
     let raw; try { raw = event.data?.json(); } catch { return; }
+    if (raw?.version === '14.4' && (await v15Store('read'))?.userId === raw.userId) return;
     const state = await modeStore('read');
     const payload = modePayload(raw,modeNow(state)); if (!payload) return;
     if (!modeActive(state) || !modeMatches(state,payload) || Date.parse(payload.expiresAt) > Date.parse(state.expiresAt)) return;
@@ -163,4 +165,57 @@ self.addEventListener('notificationclick', event => {
       if (!handled) await self.clients.openWindow(target.href);
     } else await self.clients.openWindow(target.href);
   }).catch(() => {}));
+});
+
+// V15: independent, persistent notifications. Payloads contain identifiers only.
+function v15Store(operation,value){
+ return new Promise((resolve,reject)=>{
+  const opening=indexedDB.open('journal-v15-notifications',1);
+  opening.onupgradeneeded=()=>opening.result.createObjectStore('state');
+  opening.onerror=()=>reject(new Error('state_unavailable'));
+  opening.onsuccess=()=>{
+   const db=opening.result,tx=db.transaction('state',operation==='read'?'readonly':'readwrite'),store=tx.objectStore('state');
+   const req=operation==='read'?store.get('identity'):operation==='clear'?store.delete('identity'):store.put(value,'identity');let result;
+   req.onsuccess=()=>{result=req.result;};tx.oncomplete=()=>{db.close();resolve(result||null);};tx.onerror=tx.onabort=()=>{db.close();reject(new Error('state_unavailable'));};
+  };
+ });
+}
+function v15Payload(p){return p?.version==='15' && ['userId','deviceId','id'].every(k=>MODE_UUID.test(p[k]||'')) && Date.parse(p.expiresAt)>Date.now() && Date.parse(p.expiresAt)<Date.now()+25*3600000;}
+self.addEventListener('message',event=>{
+ const m=event.data;if(!event.source||!modeInScope(event.source.url)||!['JOURNAL_V15_STATE','JOURNAL_V15_CLEAR'].includes(m?.type))return;
+ event.waitUntil(modeSerial(async()=>{
+  if(!MODE_UUID.test(m.deviceId||''))throw new Error('device');
+  const old=await v15Store('read');
+  if(m.type==='JOURNAL_V15_CLEAR'){
+   if(!old||old.deviceId===m.deviceId)await v15Store('clear');
+  }else{
+   if(!MODE_UUID.test(m.userId||''))throw new Error('user');
+   await v15Store('write',{userId:m.userId,deviceId:m.deviceId,seen:old?.userId===m.userId?old.seen||[]:[]});
+  }
+  if(m.type==='JOURNAL_V15_CLEAR'||old?.userId!==m.userId){for(const n of await self.registration.getNotifications()){if(n.tag?.startsWith('journal-v15-'))n.close();}}
+  event.ports?.[0]?.postMessage({ok:true});
+ }).catch(()=>event.ports?.[0]?.postMessage({ok:false})));
+});
+self.addEventListener('push',event=>{
+ let p;try{p=event.data?.json();}catch{return;}if(!v15Payload(p))return;
+ p={version:'15',userId:p.userId,deviceId:p.deviceId,id:p.id,expiresAt:p.expiresAt};
+ event.waitUntil(modeSerial(async()=>{
+  const state=await v15Store('read');if(!state||state.userId!==p.userId||state.deviceId!==p.deviceId||(state.seen||[]).includes(p.id))return;
+  const windows=await self.clients.matchAll({type:'window',includeUncontrolled:true});
+  windows.filter(c=>modeInScope(c.url)).forEach(c=>c.postMessage({type:'JOURNAL_V15_EVENT'}));
+  await self.registration.showNotification('Journal de chantier',{
+   body:'Un message ou une demande vous attend dans le journal.',icon:new URL('journal-chantier-logo-v14.png',self.registration.scope).href,
+   tag:'journal-v15-'+p.id,data:p,renotify:false
+  });
+  await v15Store('write',{...state,seen:[...(state.seen||[]).slice(-127),p.id]});
+ }).catch(()=>{}));
+});
+self.addEventListener('notificationclick',event=>{
+ const p=event.notification.data;if(!p||p.version!=='15')return;event.notification.close();
+ event.waitUntil(modeSerial(async()=>{
+  const state=await v15Store('read');if(!state||state.userId!==p.userId||state.deviceId!==p.deviceId||!MODE_UUID.test(p.id||''))return;
+  const windows=await self.clients.matchAll({type:'window',includeUncontrolled:true}),client=windows.find(c=>modeInScope(c.url));
+  if(client){await client.focus();client.postMessage({type:'JOURNAL_V15_OPEN',id:p.id});}
+  else{const url=new URL(self.registration.scope);url.searchParams.set('inbox',p.id);await self.clients.openWindow(url.href);}
+ }).catch(()=>{}));
 });

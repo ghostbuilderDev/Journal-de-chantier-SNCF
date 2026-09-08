@@ -87,7 +87,7 @@
     getContext: () => ({ ready: isCloudReady(), userId: app.user?.id || null, db: app.db,
       currentId: app.currentId, chantiers: app.chantiers, tab: app.activeTab }),
     toast, openModal, closeModal,
-    isOverlayOpen: () => !els.modalBackdrop.hidden || !els.photoViewer.hidden || Boolean(feedback?.isOpen()),
+    isOverlayOpen: () => !els.modalBackdrop.hidden || !els.photoViewer.hidden || Boolean(feedback?.isOpen()) || Boolean(crOff?.isOpen()),
     async navigate({ chantierId, messageId, actionId }) {
       if (!isCloudReady() || !app.chantiers.some(item => String(item.id) === chantierId)) return false;
       if (app.sendingMessage) { toast("Attends la fin de l’envoi avant d’ouvrir cet événement.", "warning"); return false; }
@@ -123,6 +123,20 @@
       db: app.db, profileName: app.profile?.full_name || "" }),
     toast,
     onVisibilityChange: () => modeChantier?.presence()
+  });
+
+  const crOff = window.JournalCR?.create({
+    getContext: () => ({ready:isCloudReady(),db:app.db,userId:app.user?.id,
+      chantiers:app.chantiers,currentId:app.currentId}),
+    toast, openAlerts:openAlertCenter,
+    async navigate({chantierId,messageId}) {
+      if (!isCloudReady() || !app.chantiers.some(c=>c.id===chantierId)) return false;
+      await selectChantier(chantierId); setActiveTab("chat");
+      app.search=""; app.typeFilter=""; app.onlyImportant=false;
+      app.advancedFilters={from:"",to:"",zone:"",author:"",attachment:false};
+      els.messageSearch.value="";els.typeFilter.value="";els.importantFilterBtn.setAttribute("aria-pressed","false");
+      renderMessages(); if(messageId) jumpToMessage(messageId); return true;
+    }
   });
 
   function defaultLocalData() {
@@ -1099,6 +1113,10 @@
   }
   function renderMessage(message) {
     const mine = String(message.author_id) === String(ownId()), deleted = Boolean(message.deleted_at);
+    const linkedActions = activeActionsFor(app.currentId).filter(a => a.message_id === message.id);
+    if (!deleted && linkedActions.length && linkedActions.every(a => a.status === "terminee")) {
+      return `<article class="message-row ${mine ? "mine" : ""}" data-message-row="${message.id}"><details class="completed-feed-details"><summary class="completed-feed-action">✓ Terminée · ${escapeHtml(linkedActions.map(a=>a.title).join(" · "))}<span>${escapeHtml(message.author_name||"Intervenant")} · ${formatTime(message.created_at)} · toucher pour les détails</span></summary><div class="message-bubble"><div class="message-text">${renderRichText(message.body||"")}</div>${(message.attachments||[]).map(renderAttachment).join("")}${renderMessageActionLinks(message)}${renderReactionBar(message)}</div></details></article>`;
+    }
     const parent = message.reply_to ? messageById(message.reply_to) : null;
     const attachments = deleted ? [] : (message.attachments || []);
     const images = attachments.filter(fileIsImage), documents = attachments.filter(item => !fileIsImage(item));
@@ -1270,7 +1288,7 @@
     els.documentSecurityNote.classList.toggle("read-only", !isManager);
     els.documentSecurityNote.innerHTML = isManager
       ? "<span>🔐</span><p><b>Administration documentaire</b><br>Vous pouvez créer des sous-dossiers et intégrer, modifier ou retirer les documents de ce chantier.</p>"
-      : "<span>🔒</span><p><b>Consultation en lecture seule</b><br>Seuls les administrateurs peuvent intégrer, modifier ou supprimer des documents. Aucun bouton de téléchargement n’est proposé.</p>";
+      : "<span>🔒</span><p><b>Consultation en lecture seule</b><br>Seuls les administrateurs peuvent intégrer, modifier ou supprimer des documents. Vous pouvez consulter et télécharger les documents du chantier.</p>";
     renderDocumentBreadcrumb(folder);
     els.planCount.textContent = String((app.documents || []).filter(documentItem => String(documentItem.chantier_id) === String(chantier.id)).length);
     if (folders.length) els.documentFolderGrid.innerHTML = folders.map(documentFolderCard).join("");
@@ -1546,11 +1564,11 @@
           ? `<div class="document-pdf-launch"><span class="document-pdf-icon" aria-hidden="true">PDF</span><p>${escapeHtml(name)}</p><button class="document-pdf-open" id="openDocumentPdf" type="button">Ouvrir</button><small>Consulter le PDF dans le lecteur de votre appareil.</small></div>`
           : documentIsText(documentItem)
             ? `<pre class="document-viewer-text" id="documentTextPreview">Chargement du contenu…</pre>`
-            : `<div class="document-preview-unavailable"><span>${escapeHtml(documentFileIcon(documentItem))}</span><div><b>Prévisualisation indisponible</b><p>${canManageDocuments() ? "Ce format peut être ouvert par un administrateur depuis son appareil." : "Demande une version PDF ou image à un administrateur pour le consulter dans l’application."}</p></div></div>`;
+            : `<div class="document-preview-unavailable"><span>${escapeHtml(documentFileIcon(documentItem))}</span><div><b>Prévisualisation indisponible</b><p>Ce format peut être ouvert ou téléchargé sur votre appareil.</p></div></div>`;
       openModal({
         title: name, subtitle: detail || "Document du chantier", wide: true,
         body: `${documentItem.description ? `<p class="document-viewer-description">${escapeHtml(documentItem.description)}</p>` : ""}${body}`,
-        footer: `<button class="secondary-button" id="closeDocumentViewer">Fermer</button>${canManageDocuments() ? `<button class="primary-button" id="adminOpenDocument">Ouvrir / télécharger</button>` : ""}`
+        footer: `<button class="secondary-button" id="closeDocumentViewer">Fermer</button><button class="primary-button" id="adminOpenDocument">Ouvrir / télécharger</button>`
       });
       $("closeDocumentViewer").addEventListener("click", closeModal);
       $("openDocumentPdf")?.addEventListener("click", () => { void openDocumentInBrowser(documentItem); });
@@ -1811,7 +1829,7 @@
   function isAinmPortalApp(item) {
     try {
       const url = new URL(item?.url || "");
-      return url.origin === "https://ghostbuilderdev.github.io" && url.pathname.replace(/\/$/, "") === "/rapport-journalier-ainm";
+      return (url.origin === "https://ghostbuilderdev.github.io" && url.pathname.replace(/\/$/, "") === "/rapport-journalier-ainm") || (url.origin === "https://github.com" && /^\/ghostbuilderdev\/rapport-journalier-ainm(?:\/(?:tree|blob)\/main(?:\/.*)?)?\/?$/i.test(url.pathname));
     } catch (_) { return false; }
   }
   function portalAppById(id) { if (id === "integrated-ainm") return ainmPortalApp(); if (id === 'integrated-briefing') return {id, icon_key:'briefing'}; return (app.portalApps || []).find(item => String(item.id) === String(id)) || null; }
@@ -1824,7 +1842,7 @@
     }
     if (!item?.url) return openPortalAppDialog(null, item?.name || "");
     try {
-      const destination = new URL(safePortalUrl(item.url));
+      const destination = new URL(safePortalUrl(isAinmPortalApp(item) ? ainmPortalApp().url : item.url));
       if (isAinmPortalApp(item)) {
         const chantier = currentChantier();
         if (!isCloudReady() || !app.user?.id || !chantier) throw new Error("Connectez-vous et sélectionnez un chantier avant d’ouvrir le rapport journalier.");
@@ -1965,7 +1983,7 @@
       els.inviteBtn.innerHTML = `${iconSvg("user-plus")}<span>Inviter</span>`;
     }
   }
-  function renderAll(options) { if (typeof feedback !== "undefined") feedback?.contextChanged(); renderProfile(); renderConnection(); renderAccessControls(); renderSidebar(); renderHeader(); renderPinnedMessages(); renderMessages(options); renderPlans(); renderActions(); renderPilotage(); renderApps(); renderPrintCover(); if (typeof modeChantier !== "undefined") modeChantier?.contextChanged(); }
+  function renderAll(options) { if (typeof crOff !== "undefined") crOff?.contextChanged(); if (typeof feedback !== "undefined") feedback?.contextChanged(); renderProfile(); renderConnection(); renderAccessControls(); renderSidebar(); renderHeader(); renderPinnedMessages(); renderMessages(options); renderPlans(); renderActions(); renderPilotage(); renderApps(); renderPrintCover(); if (typeof modeChantier !== "undefined") modeChantier?.contextChanged(); }
   function setActiveTab(tab) {
     app.activeTab = tab;
     $$(".tab").forEach(button => button.classList.toggle("active", button.dataset.tab === tab));
@@ -3105,7 +3123,7 @@
     });
     if (signedIn) {
       $("changePasswordBtn").addEventListener("click", openChangePasswordDialog);
-      $("signOutBtn").addEventListener("click", async () => { await modeChantier?.beforeLogout(); await app.db.auth.signOut(); closeModal(); });
+      $("signOutBtn").addEventListener("click", async () => { await crOff?.beforeLogout(); await modeChantier?.beforeLogout(); await app.db.auth.signOut(); closeModal(); });
     }
     else $("closeProfileBtn").addEventListener("click", closeModal);
   }
@@ -3456,7 +3474,8 @@
     const { data, error } = await app.db.rpc("journal_v142_administration_dashboard");
     if (error) throw error;
     if ((app.sessionVersion || 0) !== sessionVersion || !isJournalOwner()) return;
-    const accounts = (Array.isArray(data) ? data : []).sort((a, b) => String(a.full_name || a.email || "").localeCompare(String(b.full_name || b.email || ""), "fr"));
+    const accountState = a => a.access_revoked ? "blocked" : a.request_status === "en_attente" ? "pending" : (a.global_role || accountMemberships(a).length) ? "active" : "other";
+    const accounts = (Array.isArray(data) ? data : []).sort((a, b) => Number(accountState(b)==="pending")-Number(accountState(a)==="pending") || String(a.full_name || a.email || "").localeCompare(String(b.full_name || b.email || ""), "fr"));
     const counts = {
       pending: accounts.filter(item => item.request_status === "en_attente" && !item.access_revoked).length,
       accepted: accounts.filter(item => !item.access_revoked && (item.global_role || accountMemberships(item).length)).length
@@ -3466,13 +3485,13 @@
       const identity = account.full_name || account.email || "Compte sans nom";
       const header = `<div class="admin-account-identity"><span class="mini-avatar">${escapeHtml(initial(identity))}</span><span><b>${escapeHtml(identity)}</b><small>${escapeHtml(account.email || "")}${account.company ? ` · ${escapeHtml(account.company)}` : ""}</small><small>${escapeHtml(dashboardStatusLabel(account))}</small></span></div>`;
       const search = escapeHtml(directorySearchText(`${identity} ${account.email || ""} ${account.company || ""}`));
-      if (isOwner) return `<section class="dialog-item access-request admin-account-card" data-dashboard-search="${search}">${header}<p class="directory-count">Compte protégé : propriétaire principal de l’application.</p></section>`;
-      return `<section class="dialog-item access-request admin-account-card" data-dashboard-user-id="${escapeHtml(account.user_id || account.id)}" data-dashboard-search="${search}">${header}<p class="directory-count">Accès actuel : ${escapeHtml(dashboardChantiers(account))}</p><label class="form-field">Périmètre des droits<select data-dashboard-global-role><option value="" ${account.global_role === "administrateur_general" ? "" : "selected"}>Choisir les droits chantier par chantier</option><option value="administrateur_general" ${account.global_role === "administrateur_general" ? "selected" : ""}>Administrateur général — tous les chantiers</option></select></label><fieldset class="admin-membership-list" data-dashboard-memberships ${account.global_role === "administrateur_general" ? "hidden" : ""}><legend>Chantiers autorisés et rôle sur chaque chantier</legend>${dashboardMembershipMarkup(account)}</fieldset><p class="directory-count" data-dashboard-global-note ${account.global_role === "administrateur_general" ? "" : "hidden"}>Ce rôle donne accès à tous les chantiers. Les sélections ci-dessous sont conservées si tu reviens aux droits par chantier.</p><div class="admin-account-actions"><button class="danger-button" data-dashboard-delete>Supprimer le compte</button><button class="secondary-button" data-dashboard-revoke>Retirer tous les accès</button><button class="primary-button" data-dashboard-save>Enregistrer les droits</button></div></section>`;
+      if (isOwner) return `<section class="dialog-item access-request admin-account-card" data-dashboard-search="${search}" data-account-state="active"><details><summary>${header}</summary><p class="directory-count">Compte protégé : propriétaire principal de l’application.</p></details></section>`;
+      return `<section class="dialog-item access-request admin-account-card" data-dashboard-user-id="${escapeHtml(account.user_id || account.id)}" data-dashboard-search="${search}" data-account-state="${accountState(account)}"><details><summary>${header}</summary><p class="directory-count">Accès actuel : ${escapeHtml(dashboardChantiers(account))}</p><label class="form-field">Périmètre des droits<select data-dashboard-global-role><option value="" ${account.global_role === "administrateur_general" ? "" : "selected"}>Choisir les droits chantier par chantier</option><option value="administrateur_general" ${account.global_role === "administrateur_general" ? "selected" : ""}>Administrateur général — tous les chantiers</option></select></label><fieldset class="admin-membership-list" data-dashboard-memberships ${account.global_role === "administrateur_general" ? "hidden" : ""}><legend>Chantiers autorisés et rôle sur chaque chantier</legend>${dashboardMembershipMarkup(account)}</fieldset><p class="directory-count" data-dashboard-global-note ${account.global_role === "administrateur_general" ? "" : "hidden"}>Ce rôle donne accès à tous les chantiers. Les sélections ci-dessous sont conservées si tu reviens aux droits par chantier.</p><div class="admin-account-actions"><button class="danger-button" data-dashboard-delete>Supprimer le compte</button><button class="secondary-button" data-dashboard-revoke>Retirer tous les accès</button><button class="primary-button" data-dashboard-save>${accountState(account)==="pending"?"Valider le compte et ses droits":accountState(account)==="blocked"?"Débloquer et enregistrer":"Enregistrer les droits"}</button></div></details></section>`;
     }).join("") || `<p class="directory-count">Aucun compte recensé.</p>`;
     openModal({
       title: "Administration du journal",
       subtitle: "Comptes, accès et rôles sur plusieurs chantiers.",
-      body: `<section class="admin-dashboard-summary"><div><b>${accounts.length}</b><span>comptes</span></div><div class="pending"><b>${counts.pending}</b><span>en attente</span></div><div class="accepted"><b>${counts.accepted}</b><span>autorisés</span></div></section><p class="form-note">Coche tous les chantiers à attribuer à chaque personne et choisis son rôle sur chacun. Une personne peut administrer plusieurs chantiers.</p><label class="form-field">Rechercher un compte<input id="dashboardSearch" type="search" placeholder="Nom, prénom, entreprise ou e-mail" autocomplete="off"></label><p id="dashboardSearchCount" class="directory-count" aria-live="polite"></p><div class="dialog-list admin-account-list">${cards}</div>`,
+      body: `<section class="admin-dashboard-summary"><div><b>${accounts.length}</b><span>comptes</span></div><div class="pending"><b>${counts.pending}</b><span>en attente</span></div><div class="accepted"><b>${counts.accepted}</b><span>autorisés</span></div></section><p class="form-note">Les inscriptions en attente apparaissent en premier. Touchez une personne pour gérer son compte et ses chantiers.</p><label class="form-field">Rechercher un compte<input id="dashboardSearch" type="search" placeholder="Nom, prénom, entreprise ou e-mail" autocomplete="off"></label><label class="form-field">Afficher<select id="dashboardState"><option value="all">Tous les comptes</option><option value="pending">En attente (${counts.pending})</option><option value="active">Autorisés</option><option value="blocked">Bloqués</option></select></label><p id="dashboardSearchCount" class="directory-count" aria-live="polite"></p><div class="dialog-list admin-account-list">${cards}</div>`,
       footer: `<button class="secondary-button" id="dashboardPendingBtn">Demandes en attente</button>${app.chantiers.length ? `<button class="secondary-button" id="dashboardMaintenanceBtn">Maintenance chantier</button>` : ""}<button class="primary-button" id="closeAdminDashboard">Fermer</button>`,
       wide: true
     });
@@ -3483,12 +3502,13 @@
       const terms = directorySearchText($("dashboardSearch").value).split(/\s+/).filter(Boolean);
       let visible = 0;
       $$('[data-dashboard-search]').forEach(card => {
-        card.hidden = !terms.every(term => card.dataset.dashboardSearch.includes(term));
+        card.hidden = !terms.every(term => card.dataset.dashboardSearch.includes(term)) || ($("dashboardState").value!=="all" && card.dataset.accountState!==$("dashboardState").value);
         if (!card.hidden) visible += 1;
       });
       $("dashboardSearchCount").textContent = `${visible} compte${visible > 1 ? "s" : ""} sur ${accounts.length}`;
     };
     $("dashboardSearch").addEventListener("input", filterAccounts);
+    $("dashboardState").addEventListener("change", filterAccounts);
     filterAccounts();
     $$('[data-dashboard-global-role]').forEach(select => select.addEventListener("change", () => {
       const card = select.closest("[data-dashboard-user-id]");
@@ -4028,7 +4048,8 @@
     });
     $("siteInfoBtn").addEventListener("click", openSiteInfoDialog);
     $("inviteBtn").addEventListener("click", openInviteDialog);
-    $("notificationBtn").addEventListener("click", openAlertCenter);
+    $("notificationBtn").addEventListener("click", () => crOff?.openInbox().catch(error=>toast(friendlyError(error),"error")));
+    $("crOffBtn").addEventListener("click", () => crOff?.open());
     $("quickAddBtn").addEventListener("click", openQuickAddDialog);
     $("exportBtn").addEventListener("click", openExportDialog);
     $("siteMenuBtn").addEventListener("click", openSiteInfoDialog);
@@ -4148,7 +4169,7 @@
   async function initialize() {
     wireEvents();
     const callbackError = takeAuthCallbackError();
-    if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("./service-worker-v13.js?v=14.5-retours").catch(error => console.warn("Service worker", error));
+    if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("./service-worker-v13.js?v=15.0").catch(error => console.warn("Service worker", error));
     syncFromLocal();
     if (cloudConfigured()) {
       try { await initializeCloud(); }

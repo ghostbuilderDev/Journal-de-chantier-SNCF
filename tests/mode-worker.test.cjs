@@ -10,12 +10,12 @@ const id = n => `00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 const SCOPE = 'https://example.test/Journal-de-chantier-SNCF/';
 const state = patch => ({userId:id(1),deviceId:id(2),sessionId:id(3),chantierId:id(4),expiresAt:new Date(NOW+3600000).toISOString(),status:'active',pauseUntil:null,...patch});
 const payload = patch => ({version:'14.4',...state(),eventId:id(8),count:1,priority:false,title:'Chantier A',body:'DO NOT DISPLAY PRIVATE',messageId:id(9),...patch});
-function database(backing) {return {open(){const opening={};queueMicrotask(()=>{
+function database(backing) {return {open(name){const dbBacking=name==='journal-v15-notifications'?(backing.v15||(backing.v15={})):backing;const opening={};queueMicrotask(()=>{
   if(backing.fail){opening.onerror?.();return;}
   opening.result={objectStoreNames:{contains:()=>true},close(){},transaction(){const tx={objectStore(){return {
-    get(){const r={};queueMicrotask(()=>{r.result=backing.current;r.onsuccess?.();tx.oncomplete?.();});return r;},
-    put(value){const r={};queueMicrotask(()=>{backing.current=structuredClone(value);r.onsuccess?.();tx.oncomplete?.();});return r;},
-    delete(){const r={};queueMicrotask(()=>{backing.current=null;r.onsuccess?.();tx.oncomplete?.();});return r;}
+    get(){const r={};queueMicrotask(()=>{r.result=dbBacking.current;r.onsuccess?.();tx.oncomplete?.();});return r;},
+    put(value){const r={};queueMicrotask(()=>{dbBacking.current=structuredClone(value);r.onsuccess?.();tx.oncomplete?.();});return r;},
+    delete(){const r={};queueMicrotask(()=>{dbBacking.current=null;r.onsuccess?.();tx.oncomplete?.();});return r;}
   };}};return tx;}};opening.onsuccess?.();});return opening;}};}
 function harness(backing={}) {
   const events={},shows=[],closed=[],opened=[],navigated=[],messages=[],acks=[];
@@ -24,12 +24,12 @@ function harness(backing={}) {
   const registration={scope:SCOPE,getNotifications:async()=>browser.notifications,showNotification:async(title,options)=>{
     shows.push({title,...options});browser.notifications.push({tag:options.tag,close:()=>closed.push(options.tag)});
   }};
-  const self={registration,location:new URL(SCOPE),addEventListener:(name,fn)=>{events[name]=fn;},clients:{matchAll:async()=>browser.windows,openWindow:async url=>{opened.push(url);}}};
+  const self={registration,location:new URL(SCOPE),addEventListener:(name,fn)=>{(events[name]||(events[name]=[])).push(fn);},clients:{matchAll:async()=>browser.windows,openWindow:async url=>{opened.push(url);}}};
   const context=vm.createContext({self,indexedDB:database(backing),Date:Clock,URL,Response,Map,Set,Promise,MessageChannel,setTimeout,clearTimeout,
     caches:{keys:async()=>[],open:async()=>({addAll:async()=>{},put:async()=>{}})},fetch:async()=>new Response('shell')});
   vm.runInContext(SOURCE,context);
   const source={id:'page1',url:SCOPE};
-  async function emit(name,parts={}) {const waiting=[];events[name]({...parts,waitUntil:p=>waiting.push(p)});await Promise.all(waiting);}
+  async function emit(name,parts={}) {const waiting=[];for(const handler of events[name])handler({...parts,waitUntil:p=>waiting.push(p)});await Promise.all(waiting);}
   const post=async(data,src=source)=>{await emit('message',{data,source:src,ports:[{postMessage:a=>acks.push(a)}]});};
   const push=async(p=payload())=>emit('push',{data:{json:()=>p}});
   const click=async(p=payload())=>emit('notificationclick',{notification:{data:p,close:()=>closed.push('clicked')}});
@@ -97,4 +97,18 @@ test('unresponsive old/background window keeps draft and fallback opens another 
   const h=harness();await h.post({type:'JOURNAL_MODE_STATE',state:state()});
   h.browser.windows=[h.client({postMessage:(_m,ports)=>{ports?.[0]?.close();}})];
   await h.click();assert.equal(h.navigated.length,0);assert.equal(h.opened.length,1);assert.equal(new URL(h.opened[0]).origin,'https://example.test');
+});
+
+test('V15 persistent push is generic, deduplicated, identity checked and cleared on logout',async()=>{
+ const h=harness();const p={version:'15',id:id(22),userId:id(1),deviceId:id(23),expiresAt:new Date(NOW+3600000).toISOString(),body:'PRIVATE'};
+ await h.push(p);assert.equal(h.shows.length,0);
+ await h.post({type:'JOURNAL_V15_STATE',userId:id(1),deviceId:id(23)});
+ await h.push({...p,userId:id(2)});assert.equal(h.shows.length,0);
+ await h.push(p);await h.push(p);assert.equal(h.shows.length,1);assert.equal(h.shows[0].body.includes('PRIVATE'),false);
+ await h.post({type:'JOURNAL_V15_CLEAR',deviceId:id(23)});await h.push({...p,id:id(24)});assert.equal(h.shows.length,1);
+});
+test('V15 suppresses duplicate legacy alerts when permanent notifications are active',async()=>{
+ const h=harness();await h.post({type:'JOURNAL_MODE_STATE',state:state()});await h.post({type:'JOURNAL_V15_STATE',userId:id(1),deviceId:id(23)});
+ await h.push();assert.equal(h.shows.length,0);
+ await h.post({type:'JOURNAL_V15_CLEAR',deviceId:id(23)});await h.push();assert.equal(h.shows.length,1);
 });
