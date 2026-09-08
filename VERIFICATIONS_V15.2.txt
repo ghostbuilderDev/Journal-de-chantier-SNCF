@@ -1,0 +1,17 @@
+Journal de chantier V15.2
+
+Vérifications réalisées localement :
+- Migration additive et réapplication sur PostgreSQL embarqué PGlite.
+- Droits serveur, demandes réservées à l’agent, réattribution, fermeture et inhibition.
+- Rappel à H-1, absence de répétition pour la même échéance, suppression après la fin réelle, absence de poussée après inhibition.
+- Saisie atomique d’un tableau : une ligne invalide annule tout l’enregistrement ; versions concurrentes protégées.
+- Prévu réutilisé dans la même semaine, aucune reprise des horaires réels, aucune reprise du prévu dans la semaine suivante.
+- ARF : demande individuelle et une seule paire d’horaires réels.
+- Production, auteurs des faits de sécurité, conservation des copies validées, aperçu et contenu du mail.
+- Navigateur Chromium mobile 390 x 844 : configuration libre de deux SEL, fenêtres, demande sans abonnement push, saisie début/fin, production et sécurité, Gemini simulé avec choix explicite et conservation en cas d’échec.
+- Rendu email HTML avec échappement des contenus, contrôle du jeton utilisateur, contenu et destinataires issus exclusivement du serveur.
+- Installateur : phases distinctes, protection des fichiers modifiés, refus des liens symboliques, reprise d’une livraison identique.
+
+Le workflow fourni exécute aussi la migration sur PostgreSQL 17 jetable avant toute installation Supabase. Il vérifie ensuite les droits, l’activation du planificateur et le refus des appels email non authentifiés.
+
+Limites de vérification : aucune installation en production depuis cet environnement ; aucun envoi réel de mail, de push ou de texte à Gemini. La commande Termux installe la livraison. La réception sur un téléphone réel et la disponibilité de la passerelle Gemini seront à constater dans l’application installée.
