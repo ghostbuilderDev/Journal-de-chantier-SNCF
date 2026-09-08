@@ -1,0 +1,51 @@
+Journal de chantier V15.1 — vérifications du 8 septembre 2026
+
+BASE
+Version GitHub vérifiée : ea7153fd37941db2e7e2132c201b96b81a09d6f8 (V15 publiée).
+Migration additive séparée de V15. Aucun ancien fichier de migration modifié.
+
+DONNÉES ET DROITS — tests sur PostgreSQL embarqué PGlite
+- Migration V15.1 appliquée deux fois sans perte.
+- Ancien CR à horaires globaux conservé ; conversion explicite gardant les anciennes heures.
+- Catalogue et contacts privés, accessibles aux encadrants, aucune exposition directe du schéma ni de l’ancienne API.
+- Horaires indépendants par ligne ; auteurs distincts ; rejet d’une saisie avec une version périmée.
+- Responsable par rubrique ou par périmètre ; aide d’un autre contributeur autorisé.
+- Retrait d’un périmètre renseigné avec motif ; historique conservé ; réactivation possible.
+- Séparation prévu / réalisé et calcul des retards d’accord et de restitution.
+- Validation bloquée tant que des périmètres sont incomplets.
+- Copie d’envoi construite à partir de la version validée ; lignes S9/S11 et remarques présentes.
+- Rectificatif conservant la version initiale.
+- Reprise des responsables et des périmètres sans heures, remarques ou échéances de la nuit précédente.
+- Révocation d’accès prise en compte ; aucun ajout de CR dans le fil d’actualité.
+- Scénario SQL de la chaîne GitHub exécuté dans PGlite.
+- Import des données jointes testé : 57 références, 21 suggestions de destinataires.
+
+INTERFACE — Chromium, format téléphone 390 × 844
+- Création, sélection de périmètres par cases à cocher et enregistrement.
+- Sauvegarde d’une ligne préservant le brouillon d’une autre ligne.
+- Progression automatique des lignes et de la rubrique.
+- ARF limitée à deux champs d’horaires.
+- Destinataires proposés décochés ; ajout volontaire avant enregistrement.
+- Vue limitée à la rubrique autorisée ; absence de liste de destinataires pour le contributeur.
+- Notification ouvrant la bonne rubrique.
+- Aucun débordement horizontal ni erreur JavaScript pendant le parcours testé.
+- Capture du formulaire examinée et contrôles horaires ajustés pour les petits écrans.
+
+ENVOI / NOTIFICATIONS
+9 tests V15 conservés : droits, contenu et destinataires du serveur, refus des appels non autorisés,
+configuration manquante, réponse incertaine, rejet du prestataire et notification limitée aux identifiants.
+Les tests ne contactent aucun destinataire.
+
+INSTALLATION
+4 tests Python de l’installateur : fichiers attendus, reprise, refus des liens symboliques,
+séparation serveur/interface et exclusion des données privées.
+Validation syntaxique JavaScript et shell.
+Simulation locale des phases à partir de la V15, configuration existante conservée.
+Le programme d’installation attend le succès des tests et de la migration serveur avant la publication de l’interface.
+Un contrôle PostgreSQL 17 jetable est prévu dans GitHub Actions lors de l’installation.
+
+LIMITES DE CETTE VÉRIFICATION
+La base et l’application de production n’ont pas été modifiées par cette préparation.
+La chaîne GitHub, l’email réel et le push sur téléphone seront exécutés dans l’environnement de l’utilisateur.
+Les adresses reconstituées et l’inclusion des personnes dans la diffusion restent à vérifier par l’encadrant.
+Les ambiguïtés du planning sont conservées ou signalées ; aucune mesure ferroviaire n’est déduite automatiquement.

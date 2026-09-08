@@ -1,6 +1,6 @@
-const CACHE_NAME = 'journal-chantier-connecte-v15.0';
+const CACHE_NAME = 'journal-chantier-connecte-v15.1';
 const APP_SHELL = [
-  './cr-off.js?v=15.0', './cr-off.css?v=15.0',
+  './cr-off.js?v=15.1', './cr-off.css?v=15.1',
   './briefing-integration.js?v=14.6', './briefing/index.html', './briefing/journal-bridge.js',
   './briefing/vendor/html2canvas.min.js', './briefing/vendor/jspdf.umd.min.js',
   './feedback.js?v=14.5-retours', './feedback.css?v=14.5-retours',
