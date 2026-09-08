@@ -1,0 +1,8 @@
+const {test}=require('node:test'),assert=require('node:assert/strict');
+async function setup(){const {createHandler}=await import('../functions/journal-v15-push/handler.mjs');const calls=[],sent=[];let job={id:'id',user_id:'u',device_id:'d',endpoint:'https://fcm.googleapis.com/push/valid',keys:{p256dh:'key',auth:'auth'},lease:1,expires_at:'2026-09-09T10:00:00Z'};
+ const env={JOURNAL_MODE_DISPATCH_SECRET:'a'.repeat(43),JOURNAL_VAPID_PUBLIC_KEY:'public',JOURNAL_VAPID_PRIVATE_KEY:'private',JOURNAL_VAPID_SUBJECT:'https://example.com'};
+ return {calls,sent,job,handler:createHandler({env,rpc:async(name,args)=>{calls.push({name,args});return name==='journal_v15_push_jobs'?[job]:null;},sendPush:async(sub,payload)=>sent.push({sub,payload})})};}
+const request=secret=>new Request('https://project.supabase.co/functions/v1/journal-v15-push',{method:'POST',headers:secret?{'x-journal-dispatch-secret':secret}:{}});
+test('anonymous dispatcher never reads or sends notifications',async()=>{const h=await setup();assert.equal((await h.handler(request())).status,401);assert.equal(h.calls.length,0);});
+test('push sends identifiers only and records the claim lease',async()=>{const h=await setup();assert.equal((await h.handler(request('a'.repeat(43)))).status,200);assert.deepEqual(Object.keys(JSON.parse(h.sent[0].payload)).sort(),['deviceId','expiresAt','id','userId','version']);assert.equal(h.calls.at(-1).args.p_lease,1);assert.equal(h.calls.at(-1).args.p_status,'sent');});
+test('unrecognized push endpoint is refused before network access',async()=>{const h=await setup();h.job.endpoint='https://evil.test/private';await h.handler(request('a'.repeat(43)));assert.equal(h.sent.length,0);assert.equal(h.calls.at(-1).args.p_status,'gone');});
