@@ -1,0 +1,12 @@
+const assert=require('node:assert/strict');
+(async()=>{const {preserve,createHandler,INSTRUCTIONS}=await import('../supabase/functions/journal-writing-ai/handler.mjs');
+ const text='Mickaël : SEL 1 + 3, secteur Montereau V1. ITC ZEP 785 de 23:55 au 10/09/2026 à 04:30. Pose de 2 supports, à confirmer.';
+ assert.equal(preserve(text,text),text);assert.throws(()=>preserve(text,text.replace('785','786')),/technique/);assert.throws(()=>preserve(text,text.replace('à confirmer','confirmé')),/incertitude/);assert.throws(()=>preserve(text,text.replace('ITC','interception')),/technique/);assert.throws(()=>preserve(text,text.replace('2 supports','3 supports')),/technique/);assert.match(INSTRUCTIONS,/négations/);assert.match(INSTRUCTIONS,/noms propres/);
+ const request=()=>new Request('https://example.invalid',{method:'POST',headers:{Authorization:'Bearer user-token'},body:JSON.stringify({text,chantier_id:'aaaaaaaa-0000-4000-8000-000000000001'})});
+ let sent;const run=createHandler({env:{GEMINI_API_KEY:'fixture-key'},authorize:async()=>true,fetcher:async(url,args)=>{sent={url,args};return new Response(JSON.stringify({candidates:[{finishReason:'STOP',content:{parts:[{text}]}}]}));}});
+ const reply=await run(request());assert.equal(reply.status,200);assert.equal((await reply.json()).model,'gemini-3.1-pro-preview');assert.match(sent.url,/gemini-3.1-pro-preview:generateContent$/);assert.equal(JSON.parse(sent.args.body).contents[0].parts[0].text,text);assert.equal(sent.args.headers['x-goog-api-key'],'fixture-key');assert.ok(!sent.url.includes('fixture-key'));
+ let used=false;const missing=createHandler({env:{},authorize:async()=>true,fetcher:async()=>{used=true;}});assert.equal((await(await missing(request())).json()).code,'quality_not_configured');assert.equal(used,false);
+ const denied=createHandler({env:{GEMINI_API_KEY:'fixture-key'},authorize:async()=>false,fetcher:async()=>{used=true;}});assert.equal((await denied(request())).status,403);assert.equal(used,false);
+ const unsafe=createHandler({env:{GEMINI_API_KEY:'fixture-key'},authorize:async()=>true,fetcher:async()=>new Response(JSON.stringify({candidates:[{finishReason:'STOP',content:{parts:[{text:text.replace('785','666')}]}}]}))});assert.equal((await unsafe(request())).status,400);
+ console.log('Writing AI OK: protected references, uncertainty, model/prompt request, missing configuration, denied access, rejection of altered numbers. No live Gemini call.');
+})().catch(e=>{console.error(e);process.exit(1)});
