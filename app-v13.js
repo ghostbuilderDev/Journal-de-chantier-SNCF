@@ -83,7 +83,64 @@
     photoViewerImage: $("photoViewerImage"), photoViewerStatus: $("photoViewerStatus"), photoViewerClose: $("photoViewerClose"), photoViewerOpen: $("photoViewerOpen")
   };
 
-  const composer=JournalComposer.create({shell:els.composerShell,input:els.messageInput,allowed:()=>Boolean(currentChantier())&&(app.mode==='local'||app.mode==='demo'||isJournalAdmin()||app.members.some(m=>String(m.user_id)===String(ownId())&&String(m.chantier_id)===String(app.currentId)&&m.role!=='lecture')),site:()=>currentChantier()?.name||'Journal de chantier',save:rememberComposerDraft,refresh:()=>{els.messageInput.style.height='';}});
+  let messagePermission = { key: '', allowed: null, error: '', checkedAt: 0, pending: null };
+  const composer = createMessageComposer();
+  function createMessageComposer() {
+    const fallback = { open: () => els.messageInput.focus(), close: () => {}, suspend: () => {}, resume: () => {}, status: () => {}, isOpen: () => false };
+    try {
+      return window.JournalComposer?.create({
+        shell: els.composerShell, input: els.messageInput,
+        // Viewing the editor must not depend on the offline-only members array.
+        // Posting uses journal_v142_can_write, including for administrators.
+        allowed: () => Boolean(currentChantier()) && (isCloudReady() || ['local','demo'].includes(app.mode)),
+        denied: () => toast('Connecte-toi et sélectionne un chantier pour écrire.', 'warning'),
+        onOpen: () => { void refreshMessagePermission({ force: true }); },
+        onError: () => setMessageSendStatus('La rédaction agrandie est indisponible. Tu peux envoyer ton message depuis le champ du journal.', 'warning'),
+        site: () => currentChantier()?.name || 'Journal de chantier', save: rememberComposerDraft,
+        refresh: () => { els.messageInput.style.height = ''; }
+      }) || fallback;
+    } catch (error) { console.warn('Rédaction classique disponible', error); return fallback; }
+  }
+  function messagePermissionKey() { return [app.mode, ownId(), app.currentId, app.sessionVersion].join(':'); }
+  function setMessageSendStatus(text, variant = '') {
+    const node = $('messageSendStatus'); if (!node) return;
+    node.hidden = !text; node.textContent = text || ''; node.dataset.variant = variant;
+  }
+  async function refreshMessagePermission({ force = false } = {}) {
+    const key = messagePermissionKey();
+    if (messagePermission.key !== key) { messagePermission = { key, allowed: null, error: '', checkedAt: 0, pending: null }; setMessageSendStatus(''); }
+    const state = messagePermission;
+    if (!isCloudReady()) {
+      state.allowed = Boolean(currentChantier()) && ['local','demo'].includes(app.mode);
+      setComposerSendingState(); return state;
+    }
+    if (!currentChantier()) { state.allowed = false; setComposerSendingState(); return state; }
+    if (state.pending) return state.pending;
+    if (!force && state.checkedAt && Date.now() - state.checkedAt < 30000) return state;
+    const site = app.currentId, client = app.db;
+    state.pending = Promise.resolve().then(async () => {
+      const controller = new AbortController(); let timer;
+      try {
+        let request = client.rpc('journal_v142_can_write', { p_chantier_id: site });
+        if (typeof request.abortSignal === 'function') request = request.abortSignal(controller.signal);
+        const response = await Promise.race([request, new Promise((_, reject) => {
+          timer = setTimeout(() => { controller.abort(); reject(new Error('Le serveur ne répond pas. Ton brouillon est conservé. Réessaie l’envoi.')); }, 8000);
+        })]);
+        if (response.error) throw response.error;
+        if (typeof response.data !== 'boolean') throw new Error('Les droits du chantier n’ont pas pu être vérifiés. Réessaie l’envoi.');
+        if (messagePermission !== state || key !== messagePermissionKey()) return { allowed: false, error: 'Le compte ou le chantier a changé.' };
+        state.allowed = response.data; state.error = ''; state.checkedAt = Date.now();
+        if (!state.allowed) setMessageSendStatus('Lecture seule sur ce chantier. Un administrateur doit attribuer le rôle Contributeur pour autoriser l’envoi.', 'permission');
+        else if ($('messageSendStatus')?.dataset.variant === 'permission') setMessageSendStatus('');
+      } catch (error) {
+        if (messagePermission !== state || key !== messagePermissionKey()) return { allowed: false, error: 'Le compte ou le chantier a changé.' };
+        state.allowed = null; state.error = 'Vérification de l’accès impossible. Ton texte et tes fichiers sont conservés. Réessaie l’envoi.'; state.checkedAt = Date.now();
+        setMessageSendStatus(state.error, 'permission');
+      } finally { clearTimeout(timer); state.pending = null; if (messagePermission === state) setComposerSendingState(); }
+      return state;
+    });
+    return state.pending;
+  }
   const modeChantier = window.JournalModeChantier?.create({
     getContext: () => ({ ready: isCloudReady(), userId: app.user?.id || null, db: app.db,
       currentId: app.currentId, chantiers: app.chantiers, tab: app.activeTab }),
@@ -2001,7 +2058,7 @@
       els.inviteBtn.innerHTML = `${iconSvg("user-plus")}<span>Inviter</span>`;
     }
   }
-  function renderAll(options) { if (typeof crOff !== "undefined") crOff?.contextChanged(); if (typeof feedback !== "undefined") feedback?.contextChanged(); renderProfile(); renderConnection(); renderAccessControls(); renderSidebar(); renderHeader(); renderPinnedMessages(); renderMessages(options); renderPlans(); renderActions(); renderPilotage(); renderApps(); renderPrintCover(); if (typeof modeChantier !== "undefined") modeChantier?.contextChanged(); }
+  function renderAll(options) { if (typeof crOff !== "undefined") crOff?.contextChanged(); if (typeof feedback !== "undefined") feedback?.contextChanged(); renderProfile(); renderConnection(); renderAccessControls(); renderSidebar(); renderHeader(); renderPinnedMessages(); renderMessages(options); renderPlans(); renderActions(); renderPilotage(); renderApps(); renderPrintCover(); if (typeof modeChantier !== "undefined") modeChantier?.contextChanged(); void refreshMessagePermission(); }
   function setActiveTab(tab) {
     app.activeTab = tab;
     $$(".tab").forEach(button => button.classList.toggle("active", button.dataset.tab === tab));
@@ -2291,13 +2348,14 @@
   }
   function setComposerSendingState() {
     const busy = app.sendingMessage, retry = Boolean(app.composerRetry);
+    const denied = messagePermission.key === messagePermissionKey() && messagePermission.allowed === false;
     const button = $("sendBtn");
-    button.disabled = busy;
-    button.title = busy ? "Envoi en cours…" : retry ? "Réessayer les fichiers restants" : "Envoyer";
+    button.disabled = busy || denied;
+    button.title = busy ? "Envoi en cours…" : denied ? "Lecture seule" : retry ? "Réessayer les fichiers restants" : "Envoyer";
     button.setAttribute("aria-label", button.title);
-    button.textContent = busy ? "Envoi…" : retry ? "Réessayer" : "Envoyer";
-    els.messageInput.readOnly = busy || retry;
-    [els.messageType, els.messageZone, els.messageImportant].forEach(field => { field.disabled = busy || retry; });
+    button.textContent = busy ? "Envoi…" : denied ? "Lecture seule" : retry ? "Réessayer" : "Envoyer";
+    els.messageInput.readOnly = busy || retry || denied;
+    [els.messageType, els.messageZone, els.messageImportant].forEach(field => { field.disabled = busy || retry || denied; });
   }
   async function sendComposerMessage() {
     if (app.sendingMessage) return;
@@ -2306,12 +2364,19 @@
     app.sendingMessage = true;
     setComposerSendingState();
     try {
+      setMessageSendStatus('Vérification de l’accès au chantier…');
+      const permission = await refreshMessagePermission({ force: true });
+      if ((app.sessionVersion || 0) !== sessionVersion || ownId() !== senderId || app.currentId !== sendingChantierId) return;
+      if (permission.error) throw new Error(permission.error);
+      if (!permission.allowed) throw new Error('Envoi non autorisé sur ce chantier. Demande le rôle Contributeur à un administrateur.');
+      setMessageSendStatus('Envoi en cours…');
       await addMessage({
         body: els.messageInput.value, message_type: els.messageType.value, zone: els.messageZone.value,
         reply_to: app.replyTo?.id || null, is_important: els.messageImportant.checked
       }, files, {}, app.composerRetry);
       if ((app.sessionVersion || 0) !== sessionVersion || ownId() !== senderId || app.currentId !== sendingChantierId) return;
       clearComposer();
+      setMessageSendStatus('');
       composer.close({discardView:true});
       requestAnimationFrame(scrollMessagesToBottom);
       toast(files.length ? "Pièces jointes envoyées." : "Message envoyé.", "success");
@@ -2323,6 +2388,8 @@
         app.pendingFiles = error.failedFiles;
         renderPendingFiles();
       }
+      setMessageSendStatus((error.sentMessage ? 'Message enregistré, fichiers encore à envoyer : ' : 'Message non envoyé : ') + friendlyError(error) + ' Ton brouillon est conservé.', 'error');
+      rememberComposerDraft();
       toast(error.message, "error");
     } finally { if ((app.sessionVersion || 0) === sessionVersion) { app.sendingMessage = false; setComposerSendingState(); } }
   }
@@ -2332,7 +2399,8 @@
     const draft={body:els.messageInput.value,type:els.messageType.value,zone:els.messageZone.value,important:els.messageImportant.checked,files:[...app.pendingFiles],replyTo:app.replyTo,retry:app.composerRetry};
     app.composerDrafts.set(String(app.currentId),draft);
     const stored={...draft,files:draft.files.map(item=>({file:item.file}))};
-    void JournalComposer.write(draftKey(),draft.body||draft.files.length||draft.retry?stored:null).then(()=>composer.status('Brouillon conservé sur cet appareil · Entrée ajoute une ligne.')).catch(()=>composer.status('Brouillon conservé pendant cette session. Gardez l’application ouverte.'));
+    if (!window.JournalComposer?.write) return Promise.resolve(false);
+    return window.JournalComposer.write(draftKey(),draft.body||draft.files.length||draft.retry?stored:null).then(()=>{composer.status('Brouillon conservé sur cet appareil · Entrée ajoute une ligne.');return true;}).catch(()=>{composer.status('Brouillon conservé pendant cette session. Gardez l’application ouverte.');return false;});
   }
   function applyComposerDraft(draft={}){
     els.messageInput.value=draft.body||'';els.messageInput.style.height='';els.messageType.value=draft.type||'Info';els.messageZone.value=draft.zone||'';els.messageImportant.checked=Boolean(draft.important);
@@ -2342,7 +2410,7 @@
     const key=draftKey(),version=app.sessionVersion,site=String(app.currentId),draft=app.composerDrafts.get(site);
     applyComposerDraft(draft);
     if(draft||!ownId()||!app.currentId)return;
-    void JournalComposer.read(key).then(saved=>{if(!saved||draftKey()!==key||app.sessionVersion!==version||app.composerDrafts.has(site)||els.messageInput.value||app.pendingFiles.length)return;
+    void Promise.resolve(window.JournalComposer?.read?.(key)).then(saved=>{if(!saved||draftKey()!==key||app.sessionVersion!==version||app.composerDrafts.has(site)||els.messageInput.value||app.pendingFiles.length)return;
       saved.files=(saved.files||[]).map(item=>({...item,preview_url:fileIsImage(item.file)?URL.createObjectURL(item.file):''}));app.composerDrafts.set(site,saved);applyComposerDraft(saved);
     }).catch(()=>{});
   }
@@ -2354,7 +2422,7 @@
   function clearComposer() {
     app.composerRetry = null;
     app.composerDrafts.delete(String(app.currentId));
-    if(app.currentId&&ownId())void JournalComposer.write(draftKey(),null).catch(()=>{});
+    if(app.currentId&&ownId())void window.JournalComposer?.write?.(draftKey(),null).catch(()=>{});
     els.messageInput.value = "";
     els.messageInput.style.height = "";
     els.messageZone.value = "";
@@ -4198,7 +4266,7 @@
   async function initialize() {
     wireEvents();
     const callbackError = takeAuthCallbackError();
-    if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("./service-worker-v13.js?v=15.7").catch(error => console.warn("Service worker", error));
+    if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("./service-worker-v13.js?v=15.7.1").catch(error => console.warn("Service worker", error));
     syncFromLocal();
     if (cloudConfigured()) {
       try { await initializeCloud(); }

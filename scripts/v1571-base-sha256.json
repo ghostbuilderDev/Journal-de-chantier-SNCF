@@ -1,0 +1,25 @@
+{
+  "base_commit": "12b4e52a67effe1a3aae6bbe194effee64004bba",
+  "files": {
+    "app-v13.js": "e06b9257d048478e59d5d6bcb795ab5d8a8f094d530d4585e42495e4502921fb",
+    "index.html": "4fc0fe2579f2dd4dcc69dccd53d0d778787f095ec9ace1e4bcf3df88276ca122",
+    "journal-composer.js": "738925b95eb606d49178be3565adc61c19d7a0cc07326673c82758b7bb00a486",
+    "journal-v156.css": "7430e2cdc508c98e4b1593e3bbc2e49358c0beeb4e276d7454a866f31befa37a",
+    "service-worker-v13.js": "0c499fa908bc09bf0c946fa25fc10af2d794e19d687e521e1cd4a99e3e378c1c",
+    "tests/messages-v1571-browser.cjs": null,
+    "scripts/prepare-v1571-update.py": null,
+    "scripts/update-v1571-termux.sh": null,
+    "scripts/v1571-base-sha256.json": null,
+    "VERSION_V15.7.1.md": null,
+    "VERIFICATIONS_V15.7.1.txt": null
+  },
+  "dependencies": {
+    "supabase.js": "04b957f2563a40dcb02b1d9d6f7a7a23973bf8ebe4c1435be5feaf24bff91134",
+    "styles-v13.css": "190ec6dd81049f5f609ff95a822d128f851bb0af7edfdfc1daa5b181059593a4",
+    "styles-v14.3.css": "f6b76162bd48df161f899d68910c43c118e253498d84bbde5340ee95027512b4",
+    "journal-dialogs.js": "a62afa13553faf44de02c65691f02ff2d8d98def705b2a095cb32457eaf98104",
+    "cr-off.js": "3f802f56fc76cb95f001b2a681dbeba933f33669b261b42bcd504e06e0d99f5c",
+    "mode-chantier.js": "dc7af04e66cdf434e15a9779730dba9c521061371ca61de3032ee4f4e4f85ad9",
+    "journal-emoji.js": "1905ffd274eb633083398d1a1781bba529a7ad05834e25e0fa0d9a631b10efa1"
+  }
+}

@@ -29,15 +29,15 @@
   <script src="briefing-integration.js?v=15.4" defer></script>
   <link rel="stylesheet" href="cr-off.css?v=15.3">
   <script src="cr-ai.js?v=15.6" defer></script>
-  <script src="journal-composer.js?v=15.6" defer></script>
+  <script src="journal-composer.js?v=15.7.1" defer></script>
   <script src="journal-emoji.js?v=15.6" defer></script>
-  <link rel="stylesheet" href="journal-v156.css?v=15.6">
+  <link rel="stylesheet" href="journal-v156.css?v=15.7.1">
   <link rel="stylesheet" href="journal-v157.css?v=15.7">
   <script src="cr-fields.js?v=15.7" defer></script>
   <script src="cr-off.js?v=15.7" defer></script>
   <link rel="stylesheet" href="journal-v153.css?v=15.3">
   <link rel="stylesheet" href="journal-v155.css?v=15.5">
-  <script src="app-v13.js?v=15.7" defer></script>
+  <script src="app-v13.js?v=15.7.1" defer></script>
 </head>
 <body>
   <div class="app-shell" id="appShell">
@@ -148,6 +148,7 @@
           <div class="message-feed" id="messageFeed" aria-live="polite"></div>
           <button class="jump-bottom" id="jumpBottomBtn" hidden>↓ Nouveaux messages</button>
           <section class="composer-shell" id="composerShell">
+            <p id="messageSendStatus" class="message-send-status" role="status" hidden></p>
             <div class="reply-preview" id="replyPreview" hidden></div>
             <div class="attachment-preview" id="attachmentPreview" hidden></div>
             <div class="composer-meta" id="composerMeta" hidden>
@@ -182,7 +183,7 @@
               <input id="fileInput" type="file" multiple hidden accept="image/*,application/pdf,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.dwg,.dxf">
               <input id="cameraInput" type="file" hidden accept="image/*" capture="environment">
               <textarea id="messageInput" rows="1" placeholder="Message ou photo sans commentaire…"></textarea>
-              <button class="send-button" id="sendBtn" title="Envoyer"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m21 3-7 18-4-7-7-4 18-7ZM10 14 21 3"/></svg></button>
+              <button type="button" class="send-button" id="sendBtn" title="Envoyer">Envoyer</button>
             </div>
           </section>
         </section>

@@ -1,0 +1,13 @@
+V15.7.1 — vérifications locales
+
+Régression V15.7 reproduite : contributeur avec droits SQL, liste de membres locale vide, fenêtre non ouverte et bouton Envoyer masqué.
+
+PASS — Chromium : envois réels dans une base SQL jetable depuis le propriétaire, un administrateur de chantier et deux contributeurs. Lecture du message depuis un autre compte.
+PASS — lecteur, non-membre et compte révoqué : publication refusée.
+PASS — Entrée ne publie pas, double appui sans doublon, texte conservé après fermeture et après erreur.
+PASS — échec réseau de vérification des droits puis reprise ; photo seule et reprise de fichier sans recréer le message.
+PASS — module de rédaction indisponible ou dialogue natif défaillant : rédaction classique et envoi utilisables.
+PASS — syntaxe JavaScript, shell et cohérence des versions du cache.
+PASS — installation sur copie V15.7, refus d’un fichier modifié sans écrasement, deuxième application identique, contrôle du commit en attente de publication.
+
+Le transport Supabase et le stockage de fichiers sont simulés ; droits et écritures de messages/métadonnées testés en SQL. Aucun déploiement ni envoi sur le chantier réel pendant ces essais.
