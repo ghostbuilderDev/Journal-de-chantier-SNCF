@@ -1,4 +1,4 @@
-/* Journal de chantier V15.3 — horaires par périmètre et diffusion à vérifier. */
+/* Journal de chantier V15.4 — horaires par périmètre et diffusion à vérifier. */
 (function(root){
  'use strict';
  const LABELS={catenaire:'Consignation caténaire',itc:'ITC · Interceptions',arf:'ARF · RSO',technique:'Production réalisée',securite:'Sécurité · tops et flops',synthese:'Synthèse finale'};
@@ -46,6 +46,7 @@
  function create(adapter){
   const ctx=()=>adapter.getContext();let owner=null,epoch=0,dialog=null,current=null,reports=[],inbox=[],dirty=false,busy=false,timer=null,polling=false,openedFrom=null,routeDone=false;
   let sheet=null,taskPopup=null,tasks=[],shownTasks=new Set(),sheetMode=null,sheetKey=null,aiController=null;
+  let viewRequest=0,emailStatus=null;
   let mode='list',filter='all',pushReady=false,hasMore=false,catalog=[],contacts=[],configKey=null;
   const DEVICE_KEY='journal_v15_device',PUSH_KEY='journal_v15_push_user';
   let deviceId;try{deviceId=localStorage.getItem(DEVICE_KEY);if(!/^[0-9a-f-]{36}$/i.test(deviceId||'')){deviceId=crypto.randomUUID();localStorage.setItem(DEVICE_KEY,deviceId);}}catch{deviceId=crypto.randomUUID();}
@@ -60,32 +61,32 @@
    if(dialog)return;
    dialog=document.createElement('dialog');dialog.id='crOffDialog';dialog.className='cr-dialog';
    dialog.setAttribute('aria-labelledby','crTitle');
-   dialog.innerHTML='<header class="cr-head"><div><small>JOURNAL DE CHANTIER · V15.3</small><h2 id="crTitle">CR encadrement</h2></div><button type="button" id="crClose" class="secondary-button" aria-label="Fermer les CR">Fermer ×</button></header><div id="crNotice" role="status" aria-live="polite"></div><main id="crBody"></main><footer id="crFoot"></footer>';
+   dialog.innerHTML='<header class="cr-head"><div><small>JOURNAL DE CHANTIER · V15.4</small><h2 id="crTitle">CR encadrement</h2></div><button type="button" id="crClose" class="secondary-button" aria-label="Fermer les CR">Fermer ×</button></header><div id="crNotice" role="status" aria-live="polite"></div><main id="crBody"></main><footer id="crFoot"></footer>';
    document.body.append(dialog);$('crClose').onclick=close;
    dialog.addEventListener('cancel',e=>{e.preventDefault();close();});
-   dialog.addEventListener('input',e=>{if(e.target.matches('[data-cr-search]')){filterCatalog();return;}if(e.target.closest('[data-cr-edit]')){e.target.dataset.crDirty='1';dirty=true;const el=$('crSaveState');if(el)el.textContent='Modifications non enregistrées';}});
+   dialog.addEventListener('input',e=>{if(e.target.matches('[data-cr-search]')){filterCatalog();return;}if(e.target.closest('[data-cr-edit]')){e.target.dataset.crDirty='1';dirty=true;const el=$('crSaveState');if(el)el.textContent='Destinataires ou accès : modifications à enregistrer';renderReadiness();}});
    dialog.addEventListener('change',e=>{if(e.target.id==='crProgramGroup')filterCatalog();});
-   dialog.addEventListener('click',e=>{const b=e.target.closest('[data-cr]');if(!b||busy)return;void perform(b.dataset.cr,b);});
+   dialog.addEventListener('click',e=>{if(e.target.closest('.cr-pick'))return;const b=e.target.closest('[data-cr]');if(!b||busy)return;void perform(b.dataset.cr,b);});
    dialog.addEventListener('submit',e=>e.preventDefault());
    window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue='';}});
   }
   function notice(text,bad=false){if($('crNotice')){$('crNotice').textContent=text;$('crNotice').className=text?(bad?'cr-notice error':'cr-notice'):'';}}
-  function canLeave(){return !dirty||window.confirm('Des saisies ne sont pas enregistrées. Quitter cet écran ?');}
-  function close(){if(busy||!canLeave())return;closeSheet(true);dirty=false;current=null;dialog?.close();openedFrom?.focus?.();}
+  async function canLeave(){return !dirty||await JournalDialogs.confirm('Des saisies ne sont pas enregistrées. Quitter cet écran ?');}
+  async function close(){if(busy||!(await canLeave()))return;viewRequest++;closeSheet(true);dirty=false;current=null;dialog?.close();openedFrom?.focus?.();}
   function show(){shell();if(!dialog.open){openedFrom=document.activeElement;dialog.showModal();}}
   function button(action,label,extra='',primary=false){return `<button type="button" data-cr="${action}" ${extra} class="${primary?'primary':'secondary'}-button">${label}</button>`;}
-  async function open(){show();$('crBody').replaceChildren();$('crFoot').replaceChildren();mode='list';notice('Chargement…');try{reports=await rpc('list',{mine:filter==='mine'});hasMore=reports.length===200;renderList();notice('');}catch(e){notice(errorText(e),true);}}
+  async function open(){show();const request=++viewRequest;$('crBody').replaceChildren();$('crFoot').replaceChildren();mode='list';notice('Chargement…');try{const rows=await rpc('list',{mine:filter==='mine'});if(request!==viewRequest||!dialog.open)return;reports=rows;hasMore=reports.length===200;renderList();notice('');}catch(e){notice(errorText(e),true);}}
   function renderList(){
    current=null;dirty=false;mode='list';$('crTitle').textContent='CR encadrement';
    const selected=filter==='mine'?reports.filter(r=>Number(r.mine)>0):reports;
    $('crBody').innerHTML=`<p class="cr-intro">Un formulaire par chantier et par nuit. Les CR sont réservés aux personnes autorisées.</p><div class="cr-tools">${button('new','＋ Préparer une nuit')}${button('filter',filter==='mine'?'Voir tous les CR':'Mes informations à compléter')}${button('inbox','Notifications')}</div>
-    <div class="cr-report-list">${selected.map(r=>`<article class="cr-report"><label class="cr-pick"><input type="checkbox" data-report-pick value="${esc(r.id)}" ${!r.manager||r.state!=='validated'?'disabled':''} aria-label="Sélectionner ${esc(r.chantier)} pour l’envoi groupé"></label><button type="button" class="cr-report-open" data-cr="report" data-id="${esc(r.id)}"><b>${esc(r.chantier)}</b><span>Nuit du ${date(r.night)} · ${esc(STATES[r.state])} · v${r.revision}</span><small>${r.completed}/${r.total} rubriques renseignées${Number(r.mine)?` · ${r.mine} à compléter par vous`:''}</small></button><span aria-hidden="true">›</span></article>`).join('')||'<p class="cr-empty">Aucun CR à afficher. L’encadrant peut préparer la première nuit.</p>'}</div>`;
+    <div class="cr-report-list">${selected.map(r=>`<article class="cr-report" data-cr="report" data-id="${esc(r.id)}"><label class="cr-pick"><input type="checkbox" data-report-pick value="${esc(r.id)}" ${!r.manager||r.state!=='validated'?'disabled':''} aria-label="Sélectionner ${esc(r.chantier)} pour l’envoi groupé"></label><button type="button" class="cr-report-open" data-cr="report" data-id="${esc(r.id)}"><b>${esc(r.chantier)}</b><span>Nuit du ${date(r.night)} · ${esc(STATES[r.state])} · v${r.revision}</span><small>${r.completed}/${r.total} rubriques renseignées${Number(r.mine)?` · ${r.mine} à compléter par vous`:''}</small></button><span aria-hidden="true">›</span></article>`).join('')||'<p class="cr-empty">Aucun CR à afficher. L’encadrant peut préparer la première nuit.</p>'}</div>`;
    $('crFoot').innerHTML=(hasMore?button('more','Afficher les nuits précédentes'):'')+button('group','Préparer l’envoi groupé')+'<small>Mêmes destinataires uniquement · versions validées</small>';
   }
   function renderNew(){
    mode='new';$('crTitle').textContent='Préparer le CR d’une nuit';
    const localNow=parisLocal(new Date().toISOString()),today=localNow.slice(0,10),yesterday=new Date(Date.parse(today+'T12:00:00Z')-86400000).toISOString().slice(0,10);
-   $('crBody').innerHTML=`<form id="crNewForm"><label class="form-field">Chantier<select name="chantier_id">${ctx().chantiers.map(c=>`<option value="${esc(c.id)}" ${c.id===ctx().currentId?'selected':''}>${esc(c.name)}</option>`).join('')}</select></label><label class="form-field">Date de début de nuit<input name="night" type="date" required value="${Number(localNow.slice(11,13))<12?yesterday:today}"></label><p>Le CR couvre cette nuit et le matin suivant.</p><label class="cr-check"><input name="reuse" type="checkbox" checked> Reprendre les responsables, les destinataires et la configuration de la semaine</label><p class="cr-muted">Les horaires prévus enregistrés pour cette semaine seront repris. Les horaires réels et la production restent à renseigner. Création réservée à l’encadrement du chantier.</p></form>`;
+   $('crBody').innerHTML=`<form id="crNewForm"><label class="form-field">Chantier<select name="chantier_id">${ctx().chantiers.map(c=>`<option value="${esc(c.id)}" ${c.id===ctx().currentId?'selected':''}>${esc(c.name)}</option>`).join('')}</select></label><label class="form-field">Date de début de nuit<input name="night" type="date" required value="${Number(localNow.slice(11,13))<12?yesterday:today}"></label><p>Le CR couvre cette nuit et le matin suivant.</p><label class="cr-check"><input name="reuse" type="checkbox" checked> Reprendre les responsables et la configuration de la semaine</label><p class="cr-muted">Les horaires prévus enregistrés pour cette semaine seront repris. Les horaires réels et la production restent à renseigner. Création réservée à l’encadrement du chantier.</p></form>`;
    $('crFoot').innerHTML=button('back','Retour')+button('create','Créer le formulaire','',true);
   }
   function peopleOptions(people,selected){return '<option value="">Non affecté</option>'+people.map(p=>`<option value="${esc(p.id)}" ${p.id===selected?'selected':''}>${esc(p.full_name||'Utilisateur')}</option>`).join('');}
@@ -108,29 +109,53 @@
    const text=s.key==='technique'?productionText(s):s.key==='securite'?(s.notes||[]).map(n=>n.body).join(' · '):s.key==='arf'?`${shortTime(s.value.start)} → ${shortTime(s.value.end)}`:`${items.length} ${s.key==='itc'?'ZEP':'secteurs / SEL'} · ${items.filter(t=>['complete','non_concerne'].includes(t.status)).length} renseignés`;
    return `<tr id="crSection-${s.key}" class="${complete?'is-complete':''}"><td><button class="cr-row-open" data-cr="edit-section" data-key="${s.key}"><span class="cr-rubric-icon" aria-hidden="true">${{catenaire:'ϟ',itc:'⇄',arf:'✓',technique:'▤',securite:'◇'}[s.key]}</span><span><b>${LABELS[s.key]}</b><small>${esc(timing?(s.responsible_name||'À attribuer'):text.slice(0,95)||'À compléter')}</small></span></button></td><td><span class="cr-status">${complete?'✓ ':''}${STATUS[s.status]}</span>${timing&&s.key!=='arf'?`<small class="cr-block">${items.filter(t=>['complete','non_concerne'].includes(t.status)).length} / ${items.length} renseignés</small>`:''}</td><td>${button('edit-section','›',`data-key="${s.key}" aria-label="Ouvrir ${esc(LABELS[s.key])}"`)}</td></tr>`;
   }
-  async function openReport(id,focus){const detail=await rpc('detail',{id});const meta=detail.manager?await rpc('catalog',{chantier_id:detail.chantier_id}):{catalog:[],contacts:[]};current=detail;catalog=meta.catalog;contacts=meta.contacts;renderReport(focus);}
+  async function openReport(id,focus){
+   const request=++viewRequest,ticket=epoch;notice('Ouverture du CR…');
+   $('crBody').setAttribute('aria-busy','true');
+   try{const detail=await rpc('detail',{id});if(request!==viewRequest||ticket!==epoch)return;current=detail;catalog=[];contacts=[];renderReport(focus);notice('');}
+   finally{$('crBody')?.removeAttribute('aria-busy');}
+  }
+  function readiness(){
+   if(!current?.sections||current.state!=='draft')return [];
+   const missing=[];
+   if(dirty)missing.push({key:'audience',text:'Accès et destinataires : enregistrer les modifications.'});
+   for(const section of current.sections){if(section.key!=='synthese'&&!['complete','non_concerne'].includes(section.status))missing.push({key:section.key,text:LABELS[section.key]+(section.key==='technique'&&section.value?.production_sheets?.length?' : confirmer le pourcentage de chaque travail.':' : compléter la rubrique ou préciser « Non concerné ».')});}
+   if(!current.recipients?.length)missing.push({key:'audience',text:'Destinataire : renseigner et enregistrer votre adresse de test.'});
+   return missing;
+  }
+  function renderReadiness(){
+   const el=$('crReadiness');if(!el||!current?.manager||current.state!=='draft')return;
+   const missing=readiness(),n=current.sections.filter(s=>s.key!=='synthese'&&['complete','non_concerne'].includes(s.status)).length;
+   el.hidden=false;el.className='cr-readiness'+(missing.length?'':' ready');
+   el.innerHTML='<b>'+(missing.length?'Avant de valider et envoyer':'Tout est enregistré · CR prêt à valider')+'</b>'+missing.map(x=>button('missing',esc(x.text),`data-key="${x.key}"`)).join('')+`<div class="cr-progress-track"><span style="width:${n/5*100}%"></span></div>`;
+  }
+  async function getEmailStatus(site){
+   const ticket=epoch;const {data,error}=await ctx().db.functions.invoke('journal-cr-send-v154',{body:{action:'status',chantier_id:site}});
+   if(ticket!==epoch)throw new Error('La session a changé.');if(error)throw new Error('État de l’envoi indisponible. Vérifier la connexion ou terminer la mise à jour.');emailStatus=data;return data;
+  }
+  async function emailSetup(){
+   await JournalDialogs.alert('Pour activer l’envoi de test :\n\n1. Créer un compte Resend avec l’adresse qui recevra votre CR de test.\n2. Créer une clé API avec le droit « Sending access ».\n3. Dans Termux, lancer la commande de configuration fournie avec la V15.4. La clé y sera demandée en saisie masquée.\n\nVotre destinataire reste saisi à la main dans le CR. Ne collez pas la clé dans un message du journal.');
+  }
   function renderReport(focus){
    const r=current;mode='report';dirty=false;const site=ctx().chantiers.find(c=>c.id===r.chantier_id);$('crTitle').textContent=site?.name||'CR encadrement';
    $('crBody').innerHTML=`<div class="cr-tools">${button('back','‹ Tous les CR')}${button('refresh-report','Actualiser')}<span class="cr-state">${STATES[r.state]} · v${r.revision}</span></div><p class="cr-intro">Nuit du ${date(r.night)} · <b>Diffusion restreinte</b><br><small>${r.full_access?'CR privé · à relire avant envoi':'Vos rubriques et contributions'}</small></p><p id="crSaveState" class="cr-muted cr-save-status" aria-live="polite">✓ Saisies enregistrées</p>
-   <table class="cr-overview"><caption class="cr-sr">Rubriques du CR</caption><colgroup><col style="width:62%"><col style="width:28%"><col style="width:10%"></colgroup><tbody>${Object.keys(LABELS).filter(k=>k!=='synthese').map(k=>r.sections.find(s=>s.key===k)).filter(Boolean).map(s=>sectionMarkup(s,r)).join('')}</tbody></table>
-   ${r.manager?`<details class="cr-section" id="crAudience"><summary><b>Accès au CR et destinataires</b><span>${r.recipients.length} destinataire(s)</span></summary><div class="cr-section-content"><form id="crAudienceForm" data-cr-edit><fieldset ${r.state!=='draft'?'disabled':''}>${r.state==='draft'?contactSuggestions():''}<label class="form-field">Emails des destinataires<textarea name="recipients" rows="3" placeholder="Une adresse par ligne">${esc(r.recipients.join('\n'))}</textarea></label><p class="cr-muted">Seuls ces destinataires recevront la copie validée. Vérifier leur liste avant l’envoi.</p><details><summary>Collaborateurs autorisés à compléter l’ensemble du CR</summary>${peopleChecks(r.people,r.collaborators,'collaborators')}</details>${r.state==='draft'?button('audience','Enregistrer les accès et destinataires'):''}</fieldset></form></div></details>`:''}
+   <div id="crReadiness" aria-live="polite"></div><table class="cr-overview"><caption class="cr-sr">Rubriques du CR</caption><colgroup><col style="width:62%"><col style="width:28%"><col style="width:10%"></colgroup><tbody>${Object.keys(LABELS).filter(k=>k!=='synthese').map(k=>r.sections.find(s=>s.key===k)).filter(Boolean).map(s=>sectionMarkup(s,r)).join('')}</tbody></table>
+   ${r.manager?`<details class="cr-section" id="crAudience"><summary><b>Accès au CR et destinataires</b><span>${r.recipients.length} destinataire(s)</span></summary><div class="cr-section-content"><form id="crAudienceForm" data-cr-edit><fieldset ${r.state!=='draft'?'disabled':''}><label class="form-field">Adresse de test<textarea name="recipients" rows="3" placeholder="votre.adresse@sncf.fr">${esc(r.recipients.join('\n'))}</textarea></label><p class="cr-muted">Pour vos essais, renseigner uniquement votre adresse. Aucun contact n’est ajouté automatiquement. Les destinataires des anciens CR restent conservés.</p><details><summary>Collaborateurs autorisés à compléter l’ensemble du CR</summary>${peopleChecks(r.people,r.collaborators,'collaborators')}</details>${r.state==='draft'?button('audience','Enregistrer les accès et destinataires'):''}${button('email-setup','Configurer l’envoi')}</fieldset></form></div></details>`:''}
    <details class="cr-section"><summary>Historique des saisies et des versions</summary><div class="cr-section-content">${r.history.map(h=>`<p><b>${esc(h.actor_name)}</b> · ${esc({tableau:'Références et prévu',production:'Production renseignée',arf:'Horaires ARF',prevu_arf:'Prévu ARF',creation:'Création',attribution:'Attribution',saisie:'Saisie',contribution:'Contribution',validation:'Validation',diffusion:'Accès et destinataires',relance:'Relance',rectificatif:'Rectificatif',perimetres:'Sélection des périmètres',timing_save:'Horaires saisis',timing_plan:'Horaires prévus',timing_assign:'Attribution d’un périmètre'}[h.action]||h.action)}${h.section_key?' · '+LABELS[h.section_key]:''}<small class="cr-block">${time(h.created_at)}${h.detail?.after?.label?' · '+esc(h.detail.after.label):''}${h.detail?.reason?' · '+esc(h.detail.reason):''}</small></p>`).join('')}
    ${(r.snapshots||[]).map(s=>`<details><summary>Version ${s.revision} validée par ${esc(s.validated_name)} · ${time(s.validated_at)}</summary><pre class="cr-preview">${esc(emailText([s.data]))}</pre></details>`).join('')}
    ${(r.deliveries||[]).map(d=>`<p>Envoi ${esc({pending:'préparé',sent:'accepté par le service email',failed:'en échec',uncertain:'à vérifier'}[d.state])} · ${time(d.sent_at||d.created_at)}</p>`).join('')}</div></details>`;
    $('crFoot').innerHTML=r.manager?(r.state==='draft'?button('validate','Valider le CR','',true):button('preview','Préparer l’envoi','',true)+button('reopen','Créer un rectificatif')):'<small>Les contributions seront relues par l’encadrant avant envoi.</small>';
+   renderReadiness();
    if(focus&&r.sections.some(s=>s.key===focus))openSection(focus);
   }
   async function preview(ids){
-   const details=await Promise.all(ids.map(id=>rpc('detail',{id})));
-   if(details.some(r=>!r.manager||!['validated','sent'].includes(r.state)))throw new Error('Sélectionner des CR validés.');
-   const recipients=details[0].recipients;
-   if(!recipients.length)throw new Error('Renseigner les destinataires dans le CR avant validation.');
-   if(details.some(r=>JSON.stringify(r.recipients)!==JSON.stringify(recipients)))throw new Error('Ces CR n’ont pas les mêmes destinataires. Préparer des envois séparés.');
-   const snapshots=details.map(r=>r.snapshots.find(s=>s.revision===r.revision)?.data);
-   if(snapshots.some(x=>!x))throw new Error('Version validée introuvable.');
-   mode='preview';current={ids,recipients,snapshots};$('crTitle').textContent='Vérifier avant d’envoyer';
-   $('crBody').innerHTML=`<p><b>À :</b> ${esc(recipients.join(', '))}</p><p class="cr-muted">${ids.length} chantier(s). La copie envoyée correspond aux versions validées ci-dessous.</p><pre class="cr-preview">${esc(emailText(snapshots))}</pre><label class="cr-check"><input id="crConfirmSend" type="checkbox"> J’ai vérifié le contenu et les destinataires.</label>`;
+   const content=await rpc('preview',{ids});const {emailMarkup}=await import('./supabase/functions/_shared/cr-email.mjs?v=15.4');
+   const site=current?.chantier_id||ctx().currentId;
+   mode='preview';current={ids,recipients:content.recipients};$('crTitle').textContent='Vérifier avant d’envoyer';
+   $('crBody').innerHTML=`<div class="cr-mail-envelope"><p><b>À :</b> ${esc(content.recipients.join(', '))}</p><p><b>Objet :</b> ${esc(content.subject)}</p><p id="crEmailStatus" role="status">Vérification du service d’envoi…</p>${button('email-setup','Configurer l’envoi')}</div><iframe id="crEmailPreview" class="cr-email-frame" sandbox="" title="Mise en page du CR envoyé par email"></iframe><label class="cr-check"><input id="crConfirmSend" type="checkbox"> J’ai vérifié le contenu et les destinataires.</label>`;
+   $('crEmailPreview').srcdoc=emailMarkup(content.body);
    $('crFoot').innerHTML=button('back','Retour')+button('send','Envoyer depuis le journal','',true);
+   const view=current;void getEmailStatus(site).then(status=>{if(current!==view)return;$('crEmailStatus').textContent=status.configured?(status.test_mode?'Mode test · envoi uniquement à '+(status.test_recipient||'l’adresse de test à configurer'):'Service d’envoi configuré'):'Envoi à activer une fois avec la commande de configuration.';}).catch(e=>{if(current===view)$('crEmailStatus').textContent=e.message;});
   }
   async function openInbox(){show();$('crBody').replaceChildren();$('crFoot').replaceChildren();mode='inbox';current=null;dirty=false;[inbox,tasks]=await Promise.all([rpc('inbox'),rpc('tasks')]);renderInbox();}
   function renderInbox(){
@@ -166,17 +191,19 @@
   }
   async function disablePush(){await rpc('device_remove',{device_id:deviceId});await workerMessage('JOURNAL_V15_CLEAR');localStorage.removeItem(PUSH_KEY);pushReady=false;renderInbox();}
   async function perform(action,b){
-   if(['edit-section','back','new','filter','report','inbox','notification','group','preview','alerts','reopen','refresh-report','configure-scopes','configure-back'].includes(action)&&!canLeave())return;
-   busy=true;b.disabled=true;notice('');
+   if(['edit-section','back','new','filter','report','inbox','notification','group','preview','alerts','reopen','refresh-report','configure-scopes','configure-back'].includes(action)&&!(await canLeave()))return;
+   busy=true;b.disabled=true;b.setAttribute('aria-busy','true');notice('');
    try{
-    if(action==='edit-section'){openSection(b.dataset.key);}
+    if(action==='email-setup'){await emailSetup();}
+    else if(action==='missing'){const key=b.dataset.key;if(key==='audience'){$('crAudience').open=true;$('crAudience').scrollIntoView({block:'center',behavior:'smooth'});$('crAudienceForm').elements.recipients.focus();}else if(await canLeave())openSection(key);}
+    else if(action==='edit-section'){openSection(b.dataset.key);}
     else if(action==='back'){dirty=false;await open();}
     else if(action==='new'){dirty=false;renderNew();}
     else if(action==='filter'){filter=filter==='all'?'mine':'all';await open();}
     else if(action==='more'){const rows=await rpc('list',{offset:reports.length,mine:filter==='mine'});hasMore=rows.length===200;reports=reports.concat(rows.filter(r=>!reports.some(old=>old.id===r.id)));renderList();}
     else if(action==='create'){
      const form=$('crNewForm');if(!form.reportValidity())return;const data=Object.fromEntries(new FormData(form));data.reuse=form.elements.reuse.checked;
-     const r=await rpc('create',data);await openReport(r.id);
+     data.test_audience=true;const r=await rpc('create',data);await openReport(r.id);
     }else if(action==='contacts-add'){
      const f=$('crAudienceForm'),selected=[...f.querySelectorAll('[name="contact_pick"]:checked')];
      if(!selected.length)throw new Error('Sélectionner les personnes à ajouter.');
@@ -196,15 +223,15 @@
     else if(action==='preview')await preview([current.id]);
     else if(action==='send'){
      if(!$('crConfirmSend').checked)throw new Error('Vérifier puis confirmer les destinataires avant l’envoi.');
-     const c=ctx(),ticket=epoch;const {data,error}=await c.db.functions.invoke('journal-cr-send-v152',{body:{ids:current.ids}});
+     const c=ctx(),ticket=epoch;const {data,error}=await c.db.functions.invoke('journal-cr-send-v154',{body:{ids:current.ids}});
      if(ticket!==epoch)return;
      if(error){let detail;try{detail=await error.context?.json();}catch{}throw new Error(detail?.error||'Envoi non confirmé. Vérifier la configuration email et la connexion.');}
      if(data?.state!=='sent')throw new Error(data?.error||'Envoi non confirmé.');await open();notice('CR accepté par le service email. La copie envoyée est conservée dans chaque CR.');
     }else if(action==='reopen'){
-     const reason=window.prompt('Motif du rectificatif :');if(!reason)return;await rpc('reopen',{id:current.id,reason});await openReport(current.id);
+     const reason=await JournalDialogs.prompt('Motif du rectificatif :');if(!reason)return;await rpc('reopen',{id:current.id,reason});await openReport(current.id);
     }else if(action==='validate'){
-     if(dirty)throw new Error('Enregistrer toutes les saisies avant validation.');
-     if(!window.confirm('Valider et figer cette version du CR pour l’envoi ?'))return;
+     const missing=readiness();if(missing.length){renderReadiness();$('crReadiness')?.scrollIntoView({block:'center',behavior:'smooth'});throw new Error(missing.map(x=>x.text).join('\n'));}
+     if(!(await JournalDialogs.confirm('Valider et figer cette version du CR pour l’envoi ?', {accept:'Valider le CR'})))return;
      await rpc('validate',{id:current.id});await openReport(current.id);notice('Version validée. Vérifier l’aperçu avant l’envoi.');
     }else if(action==='audience'){
      const f=$('crAudienceForm');await rpc('audience',{id:current.id,recipients:f.elements.recipients.value.split(/[\s;,]+/).filter(Boolean),collaborators:[...f.querySelectorAll('[name="collaborators"]:checked')].map(x=>x.value)});await reloadPreserving();notice('Accès et destinataires enregistrés.');
@@ -223,12 +250,12 @@
      await reloadPreserving(key,action);notice(action==='assign'?'Attribution enregistrée. La demande est dans les notifications du responsable.':'Saisie enregistrée.');
     }
    }catch(e){notice(errorText(e),true);}
-   finally{busy=false;if(b.isConnected)b.disabled=false;}
+   finally{busy=false;if(b.isConnected){b.disabled=false;b.removeAttribute('aria-busy');}}
   }
   const shortTime=v=>v?parisLocal(v).slice(11,16):'—';
-  const productionText=s=>s.value?.body||s.value?.digest||(s.notes||[]).map(n=>n.body).join('\n');
-  function closeSheet(force=false){
-   if(!force&&(busy||!canLeave()))return false;
+  const productionText=s=>[s.value?.production_text,s.value?.body||s.value?.digest||(s.notes||[]).map(n=>n.body).join('\n')].filter(Boolean).join('\n');
+  async function closeSheet(force=false){
+   if(!force&&(busy||!(await canLeave())))return false;
    aiController?.abort();aiController=null;sheet?.remove();sheet=null;sheetMode=null;dirty=false;return true;
   }
   function makeSheet(title,body,foot){
@@ -237,8 +264,8 @@
    sheet.innerHTML=`<header class="cr-head"><h2 id="crSheetTitle">${esc(title)}</h2><button type="button" data-sheet="close" class="secondary-button">Fermer ×</button></header><div id="crSheetNotice" role="status" aria-live="polite"></div><main>${body}</main><footer>${foot}</footer>`;
    sheet.addEventListener('submit',e=>e.preventDefault());
    sheet.addEventListener('cancel',e=>{e.preventDefault();closeSheet();});
-   sheet.addEventListener('input',e=>{if(e.target.closest('[data-cr-edit]'))dirty=true;if(e.target.type==='date')e.target.dataset.manual='1';updateClockDays();});
-   sheet.addEventListener('change',e=>{if(e.target.closest('[data-cr-edit]'))dirty=true;if(e.target.closest('.cr-clock')&&e.target.type==='text'){const value=normalClock(e.target.value);if(value)e.target.value=value;}updateClockDays();});
+   sheet.addEventListener('input',e=>{if(e.target.closest('[data-cr-edit],[data-production-sheet]'))dirty=true;if(e.target.type==='date')e.target.dataset.manual='1';updateClockDays();});
+   sheet.addEventListener('change',e=>{if(e.target.closest('[data-cr-edit],[data-production-sheet]'))dirty=true;if(e.target.closest('.cr-clock')&&e.target.type==='text'){const value=normalClock(e.target.value);if(value)e.target.value=value;}updateClockDays();});
    sheet.addEventListener('click',e=>{const b=e.target.closest('[data-sheet]');if(b&&!busy)void sheetAction(b.dataset.sheet,b);});
    document.body.append(sheet);sheet.showModal();updateClockDays();
   }
@@ -281,7 +308,7 @@
    const locked=current.state!=='draft',manager=current.manager&&!locked,active=(s.items||[]).filter(t=>t.active),timing=['catenaire','itc'].includes(key);
    const assignee=s.responsible_name?`<span>Demande confiée à <b>${esc(s.responsible_name)}</b></span>`:'<span>Responsable à désigner</span>';
    const assignment=manager?`<label class="cr-assignee"><span>${key==='arf'?'Responsable · RSO':key==='itc'?'Responsable · RPD':'Responsable · caténaire'}</span><select name="responsible">${peopleOptions(current.people,s.responsible)}</select></label>`:`<p class="cr-assigned">${assignee}</p>`;
-   const intro=`<p class="cr-sheet-meta">Nuit du ${date(current.night)} · heure de Paris <span>Le lendemain est indiqué automatiquement.</span></p>`;
+   const intro=(!['catenaire','itc','arf'].includes(key)?`<p class="cr-sheet-meta">Nuit du ${date(current.night)}</p>`:`<p class="cr-sheet-meta">Nuit du ${date(current.night)} · heure de Paris <span>Le lendemain est indiqué automatiquement.</span></p>`);
    let body=intro,foot=sb('close','Retour au CR');
    if(timing){
     body+=`<form id="crTimingForm" data-cr-edit data-version="${s.version}"><fieldset ${locked?'disabled':''}>${assignment}<div id="crTimingRows">${(active.length?active:manager?[{}]:[]).map(t=>timingRow(t)).join('')}</div>${manager?sb('add-row',key==='itc'?'＋ Ajouter une ZEP':'＋ Ajouter un secteur / SEL')+weekCheck():''}${!active.length&&!manager?'<p class="cr-empty">Aucune référence demandée cette nuit.</p>':''}${manager&&(s.items||[]).some(t=>t.actual_start||t.actual_end)?'<details class="cr-change-reason"><summary>Motif d’un changement de référence</summary><input name="reason" maxlength="1000" placeholder="À préciser si vous retirez ou renommez une référence déjà renseignée"></details>':''}</fieldset></form>`;
@@ -290,11 +317,11 @@
     body+=`<form id="crArfForm" data-cr-edit data-version="${s.version}"><fieldset ${locked?'disabled':''}>${assignment}<section class="cr-timing-row"><div class="cr-ref-head"><b>Attestation ARF · toutes les voies</b>${sb('dates','Dates','aria-expanded="false"')}</div>${hoursTable(s,manager,key)}<div class="cr-row-bottom"><label class="cr-check"><input name="non_concerne" type="checkbox" ${s.status==='non_concerne'?'checked':''}> Non concerné</label><label class="cr-row-comment"><span class="cr-sr">Commentaire ou retard</span><input name="comment" maxlength="1000" value="${esc(s.value.precision)}" placeholder="Commentaire / retard (facultatif)"></label></div></section>${manager?weekCheck():''}</fieldset></form>`;
     if(!locked)foot+=sb('save-arf',manager?'Enregistrer et demander':'Enregistrer les horaires','',true);
    }else if(key==='technique'){
-    body+=`<form id="crProduction" data-cr-edit data-version="${s.version}"><label class="form-field">Travaux réalisés cette nuit<textarea name="body" rows="12" maxlength="8000" ${locked?'readonly':''} placeholder="Décrivez succinctement ce qui a été réalisé…">${esc(productionText(s))}</textarea></label><small>${s.updated_name?'Dernière saisie : '+esc(s.updated_name):'Les participants autorisés peuvent compléter ce texte.'}</small></form>`;
-    if(!locked)foot+=sb('improve','✨ Améliorer avec Gemini')+sb('save-production','Enregistrer la production','',true);
+    body+=`${(s.value?.production_sheets||[]).map(p=>`<section data-production-sheet data-id="${esc(p.id)}" data-version="${p.version}"><small>${esc(p.author_name)}</small><table class="cr-production-table"><thead><tr><th>Travaux prévus / ajoutés</th><th>Réalisé</th></tr></thead><tbody>${p.items.map(x=>JournalProduction.row(x,locked)).join('')}</tbody></table></section>`).join('')}<div id="crExtraProduction"></div><form id="crProduction" data-cr-edit data-version="${s.version}"><label class="form-field">${s.value?.production_sheets?.length?'Texte complémentaire (facultatif)':'Travaux réalisés cette nuit'}<textarea name="body" rows="6" maxlength="8000" ${locked?'readonly':''} placeholder="Décrivez succinctement ce qui a été réalisé…">${esc(s.value?.body||s.value?.digest||(s.notes||[]).map(n=>n.body).join('\n'))}</textarea></label><small>${s.updated_name?'Dernière saisie : '+esc(s.updated_name):'Les participants autorisés peuvent compléter ce texte.'}</small></form>`;
+    if(!locked)foot+=sb('add-production','+ Travail supplémentaire')+sb('improve','Améliorer')+sb('save-production','Enregistrer la production','',true);
    }else if(key==='securite'){
     body+=`<div class="cr-notes">${(s.notes||[]).map(n=>`<article><b>${n.category==='top'?'✓ TOP':n.category==='flop'?'! FLOP':esc(n.category)} · ${esc(n.author_name)}</b><p>${esc(n.body)}</p></article>`).join('')}</div>`;
-    if(!locked){body+=`<form id="crSafety" data-cr-edit data-version="${s.version}"><label class="form-field">Action ou fait observé<textarea name="body" maxlength="2000" rows="6" placeholder="Décrivez le fait de sécurité…"></textarea></label><div class="cr-tools"><label class="cr-check"><input type="radio" name="category" value="top" checked> ✓ Top</label><label class="cr-check"><input type="radio" name="category" value="flop"> ! Flop</label></div><small>Votre nom sera ajouté automatiquement.</small></form>`;foot+=sb('improve','✨ Améliorer')+sb('save-safety','Ajouter le fait','',true);if(!s.notes?.length)foot+=sb('safety-clear','Rien à signaler');}
+    if(!locked){body+=`<form id="crSafety" data-cr-edit data-version="${s.version}"><label class="form-field">Action ou fait observé<textarea name="body" maxlength="2000" rows="6" placeholder="Décrivez le fait de sécurité…"></textarea></label><div class="cr-tools"><label class="cr-check"><input type="radio" name="category" value="top" checked> ✓ Top</label><label class="cr-check"><input type="radio" name="category" value="flop"> ! Flop</label></div><small>Votre nom sera ajouté automatiquement.</small></form>`;foot+=sb('improve','Améliorer')+sb('save-safety','Ajouter le fait','',true);if(!s.notes?.length)foot+=sb('safety-clear','Rien à signaler');}
    }
    makeSheet(LABELS[key],body,foot);
   }
@@ -302,6 +329,7 @@
    if(action==='close'){closeSheet();return;}
    if(action==='dates'){const row=b.closest('[data-timing-row],#crArfForm');const show=b.getAttribute('aria-expanded')!=='true';b.setAttribute('aria-expanded',String(show));row.querySelectorAll('.cr-clock-date').forEach(el=>el.hidden=!show);return;}
    if(action==='add-row'){if($('crTimingRows').children.length>=40){sheetNotice('40 références maximum.',true);return;}$('crTimingRows').insertAdjacentHTML('beforeend',timingRow());dirty=true;$('crTimingRows').lastElementChild.querySelector('[name=reference]')?.focus();return;}
+   if(action==='add-production'){let table=$('crExtraProduction').querySelector('tbody');if(!table){$('crExtraProduction').innerHTML=`<section data-production-sheet data-id="${crypto.randomUUID()}" data-version="0"><table class="cr-production-table"><thead><tr><th>Travaux supplémentaires</th><th>Réalisé</th></tr></thead><tbody></tbody></table></section>`;table=$('crExtraProduction').querySelector('tbody');}table.insertAdjacentHTML('beforeend',JournalProduction.row({additional:true,progress:100}));dirty=true;return;}
    if(action==='improve'){await improveText();return;}
    if(action==='ai-apply'){const ai=$('crAiProposal');const target=sheet.querySelector('textarea[name=body]');if(ai&&target){target.value=ai.value;dirty=true;$('crAiReview').remove();target.focus();}return;}
    if(action==='ai-cancel'){$('crAiReview')?.remove();return;}
@@ -328,7 +356,7 @@
      const f=$('crArfForm');payload={...payload,version:Number(f.dataset.version),start:compactValue(f,'start'),end:compactValue(f,'end'),comment:f.elements.comment.value,non_concerne:f.elements.non_concerne.checked};
      if(current.manager)Object.assign(payload,{responsible:f.elements.responsible.value,planned_start:compactValue(f,'planned_start'),planned_end:compactValue(f,'planned_end'),remember_week:f.elements.remember_week.checked});api='arf_save';
     }else if(action==='save-production'){
-     const f=$('crProduction');payload={...payload,version:Number(f.dataset.version),body:f.elements.body.value};api='production_save';
+     const f=$('crProduction'),sheets=[...sheet.querySelectorAll('[data-production-sheet]')].map(el=>({id:el.dataset.id,version:Number(el.dataset.version),items:JournalProduction.readRows(el)}));payload={...payload,version:Number(f.dataset.version),body:f.elements.body.value,sheets};api=sheets.length?'production_progress':'production_save';
     }else if(action==='save-safety'){
      const f=$('crSafety');const body=f.elements.body.value.trim();if(!body)throw new Error('Décrivez le fait de sécurité avant de l’ajouter.');
      const category=f.elements.category.value,fingerprint=JSON.stringify([body,category]);if(f.dataset.fingerprint!==fingerprint){f.dataset.noteId=crypto.randomUUID();f.dataset.fingerprint=fingerprint;}
@@ -339,23 +367,23 @@
    }catch(e){sheetNotice(errorText(e),true);}finally{busy=false;if(b.isConnected)b.disabled=false;}
   }
   async function improveText(){
-   const target=sheet.querySelector('textarea[name=body]'),original=target?.value.trim();if(!original){sheetNotice('Écrire le texte à améliorer.',true);return;}
-   const ticket=epoch,sourceSheet=sheet;aiController?.abort();aiController=new AbortController();busy=true;sheetNotice('Gemini prépare une proposition…');
+   const target=sheet.querySelector('textarea[name=body]');let original=target?.value.trim();if(sheetKey==='technique'&&sheet.querySelector('[data-production-row]')){try{const rows=JournalProduction.readRows(sheet);original=[...rows.map(x=>x.title+' : '+(x.progress===null?'avancement non confirmé':x.progress+' % réalisé')+(x.additional?' (travail ajouté)':'')),original].filter(Boolean).join('\n');}catch(e){sheetNotice(e.message,true);return;}}if(!original){sheetNotice('Écrire le texte à améliorer.',true);return;}
+   const ticket=epoch,sourceSheet=sheet;aiController?.abort();aiController=new AbortController();busy=true;sheetNotice('Amélioration du texte en cours…');
    try{
     const text=await root.JournalCRAI.improve(original,{signal:aiController.signal});
     if(ticket!==epoch||sheet!==sourceSheet)return;
     if(text.length>target.maxLength)throw new Error('Proposition trop longue. Raccourcir le texte et réessayer.');
-    $('crAiReview')?.remove();sheet.querySelector('main').insertAdjacentHTML('beforeend',`<section id="crAiReview" class="cr-ai-review"><h3>Proposition Gemini</h3><p class="cr-muted">Vérifiez les faits et les chiffres. Le texte d’origine est conservé jusqu’à votre choix.</p><textarea id="crAiProposal" rows="8" maxlength="${target.maxLength}">${esc(text)}</textarea><div class="cr-tools">${sb('ai-apply','Utiliser cette proposition','',true)}${sb('ai-cancel','Garder mon texte')}</div></section>`);$('crAiReview').scrollIntoView({block:'nearest'});sheetNotice('Proposition à relire avant utilisation.');
+    $('crAiReview')?.remove();sheet.querySelector('main').insertAdjacentHTML('beforeend',`<section id="crAiReview" class="cr-ai-review"><h3>Proposition améliorée</h3><p class="cr-muted">Vérifiez les faits et les chiffres. Le texte d’origine est conservé jusqu’à votre choix.</p><textarea id="crAiProposal" rows="8" maxlength="${target.maxLength}">${esc(text)}</textarea><div class="cr-tools">${sb('ai-apply','Utiliser cette proposition','',true)}${sb('ai-cancel','Garder mon texte')}</div></section>`);$('crAiReview').scrollIntoView({block:'nearest'});sheetNotice('Proposition à relire avant utilisation.');
    }catch(e){if(sheet===sourceSheet)sheetNotice(errorText(e)+' Votre texte est conservé.',true);}finally{busy=false;}
   }
   function renderTaskEntry(){
-   let btn=document.getElementById('crTasksBtn');if(!btn){btn=document.createElement('button');btn.type='button';btn.id='crTasksBtn';btn.className='secondary-button';btn.onclick=()=>{if(!canLeave())return;closeSheet(true);void openInbox();};const host=document.getElementById('crOffBtn');if(host)host.after(btn);else document.body.append(btn);}
+   let btn=document.getElementById('crTasksBtn');if(!btn){btn=document.createElement('button');btn.type='button';btn.id='crTasksBtn';btn.className='secondary-button';btn.onclick=async()=>{if(!(await canLeave()))return;closeSheet(true);void openInbox();};const host=document.getElementById('crOffBtn');if(host)host.after(btn);else document.body.append(btn);}
    btn.hidden=!tasks.length;btn.textContent=`Mes demandes (${tasks.length})`;btn.setAttribute('aria-label',btn.textContent);
   }
   function taskListMarkup(){return tasks.length?`<h3>Mes horaires à renseigner</h3>${tasks.map(t=>`<article class="cr-task-item"><b>${esc(t.chantier)} · ${LABELS[t.section_key]}</b><small>Nuit du ${date(t.night)}${t.expected_end?' · fin prévue '+time(t.expected_end):''}${t.muted?' · rappels inhibés':''}</small><div class="cr-tools">${button('task-open','Renseigner',`data-id="${t.id}"`)}${t.muted?button('task-unmute','Réactiver les rappels',`data-id="${t.id}"`):''}</div></article>`).join('')}`:'';}
   async function openTask(id,muted){
    const t=tasks.find(t=>t.id===id);if(!t)throw new Error('Demande terminée ou réattribuée.');
-   if(!canLeave())return;closeSheet(true);taskPopup?.remove();taskPopup=null;show();await openReport(t.report_id,t.section_key);
+   if(!(await canLeave()))return;closeSheet(true);taskPopup?.remove();taskPopup=null;show();await openReport(t.report_id,t.section_key);
    // Reading a request does not disable its end-of-session reminder.
    await rpc('task_ack',{task_id:t.id,token:t.token,...(typeof muted==='boolean'?{muted}:{})});t.dismissed_token=t.token;
   }
@@ -388,7 +416,7 @@
   }
   function contextChanged(){
    const next=ctx().ready?ctx().userId:null;if(owner===next)return;
-   epoch++;closeSheet(true);taskPopup?.remove();taskPopup=null;tasks=[];shownTasks.clear();owner=next;inbox=[];reports=[];catalog=[];contacts=[];configKey=null;current=null;dirty=false;busy=false;pushReady=false;routeDone=false;dialog?.close();$('crBody')?.replaceChildren();$('crFoot')?.replaceChildren();notice('');clearInterval(timer);polling=false;updateBadge();renderTaskEntry();
+   epoch++;viewRequest++;emailStatus=null;closeSheet(true);taskPopup?.remove();taskPopup=null;tasks=[];shownTasks.clear();owner=next;inbox=[];reports=[];catalog=[];contacts=[];configKey=null;current=null;dirty=false;busy=false;pushReady=false;routeDone=false;dialog?.close();$('crBody')?.replaceChildren();$('crFoot')?.replaceChildren();notice('');clearInterval(timer);polling=false;updateBadge();renderTaskEntry();
    if(next){try{pushReady=localStorage.getItem(PUSH_KEY)===next;}catch{}if(!pushReady&&navigator.serviceWorker)void workerMessage('JOURNAL_V15_CLEAR').catch(()=>{});timer=setInterval(refresh,30000);void refresh();if(pushReady)void restorePush();}
    else{try{localStorage.removeItem(PUSH_KEY);}catch{}if(navigator.serviceWorker)void workerMessage('JOURNAL_V15_CLEAR').catch(()=>{});}
   }

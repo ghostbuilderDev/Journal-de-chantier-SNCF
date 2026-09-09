@@ -308,7 +308,7 @@
     }
     async function deleteThread(confirmed = false) {
       if (!thread?.can_delete || busy) return;
-      if (!confirmed && win?.confirm && !win.confirm('Supprimer cette publication et toutes ses réponses ? Cette suppression est définitive.')) return;
+      if (!confirmed && !(await win?.JournalDialogs?.confirm('Supprimer cette publication et toutes ses réponses ? Cette suppression est définitive.'))) return;
       const target = thread, db = ctx().db, serial = detailSerial, cleanupAllowed = target.author_id === owner || canManage;
       return mutation(ticket => rpc('delete_thread', { p_id: target.id, p_expected_updated_at: target.updated_at }, ticket), async (result, ticket) => {
         if (!result?.deleted) return;
@@ -349,7 +349,7 @@
     async function deleteReply(replyId, confirmed = false) {
       const reply = replies.find(item => item.id === replyId);
       if (!reply?.can_delete || busy) return;
-      if (!confirmed && win?.confirm && !win.confirm('Supprimer cette réponse ?')) return;
+      if (!confirmed && !(await win?.JournalDialogs?.confirm('Supprimer cette réponse ?'))) return;
       const target = thread.id, serial = detailSerial;
       return mutation(ticket => rpc('delete_reply', { p_id: replyId, p_expected_updated_at: reply.updated_at }, ticket), async result => { if (result?.deleted && opened && detailSerial === serial && thread?.id === target && view === 'detail') await loadThread(target, true); });
     }

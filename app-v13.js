@@ -1037,19 +1037,20 @@
     }
   }
   function messageById(id) { return currentMessages().find(message => String(message.id) === String(id)); }
+  function visibleFeedMessages() { return JournalFeed.project(currentMessages(), activeActionsFor(app.currentId), actionLinksForMessage); }
   function filteredMessages() {
     const query = app.search.trim().toLowerCase();
     const scope = { ...app.advancedFilters, ...(app.printScope || {}) };
-    return currentMessages().filter(message => {
+    return visibleFeedMessages().filter(message => {
       if (app.typeFilter && message.message_type !== app.typeFilter) return false;
-      if (app.onlyImportant && !message.is_important) return false;
+      if (app.onlyImportant && !JournalFeed.pinned(message)) return false;
       if (scope.from && new Date(message.created_at) < new Date(`${scope.from}T00:00:00`)) return false;
       if (scope.to && new Date(message.created_at) > new Date(`${scope.to}T23:59:59.999`)) return false;
       if (scope.zone && !String(message.zone || "").toLocaleLowerCase("fr").includes(String(scope.zone).toLocaleLowerCase("fr"))) return false;
       if (scope.author && !String(message.author_name || "").toLocaleLowerCase("fr").includes(String(scope.author).toLocaleLowerCase("fr"))) return false;
       if (scope.attachment && !(message.attachments || []).length) return false;
       if (!query) return true;
-      return [message.body, message.author_name, message.zone, message.message_type, ...(message.attachments || []).flatMap(file => [file.file_name, file.name, file.revision, file.plan_status])].join(" ").toLowerCase().includes(query);
+      return [...(message._history || []).map(m => m.body), message.body, message.author_name, message.zone, message.message_type, ...(message.attachments || []).flatMap(file => [file.file_name, file.name, file.revision, file.plan_status])].join(" ").toLowerCase().includes(query);
     });
   }
   function renderAttachment(attachment) {
@@ -1106,21 +1107,30 @@
     const buttons = [...grouped.values()].map(group => `<button class="reaction-chip ${group.mine ? "mine" : ""}" data-action="toggle-reaction" data-message-id="${message.id}" data-emoji="${escapeHtml(group.emoji)}" title="Réagir ${escapeHtml(group.emoji)}">${escapeHtml(group.emoji)} <b>${group.count}</b></button>`).join("");
     return `<div class="reaction-bar">${buttons}<button class="reaction-add" data-action="open-reactions" data-message-id="${message.id}" title="Ajouter une réaction">☺</button></div>`;
   }
+  let pinExpiryTimer;
   function renderPinnedMessages() {
-    const pinned = currentMessages().filter(message => !message.deleted_at && message.is_important).slice(-3).reverse();
+    clearTimeout(pinExpiryTimer);
+    const visible = visibleFeedMessages(), now = Date.now();
+    const expiry = visible.filter(m => m._completedAction).map(m => Date.parse(m.created_at) + 180000).filter(t => t > now);
+    if (expiry.length) pinExpiryTimer = setTimeout(renderPinnedMessages, Math.min(...expiry) - now + 20);
+    const pinned = visible.filter(message => JournalFeed.pinned(message, now)).slice(-3).reverse();
     if (!currentChantier() || !pinned.length) { els.pinnedMessages.hidden = true; els.pinnedMessages.innerHTML = ""; return; }
     els.pinnedMessages.hidden = false;
     els.pinnedMessages.innerHTML = `<div class="pinned-title">★ Informations épinglées</div>${pinned.map(message => `<button class="pinned-item" data-action="jump-message" data-message-id="${message.id}"><b>${escapeHtml(message.author_name || "Intervenant")}</b><span>${escapeHtml(truncate(message.body || "Pièce jointe", 120))}</span></button>`).join("")}`;
   }
-  function renderMessage(message) {
+  function renderMessage(message, historyOnly = false) {
+    if (message._completedAction) {
+      const action = message._completedAction;
+      return `<article class="message-row action-completed" data-message-row="${escapeHtml(message.id)}"><details class="completed-feed-details"><summary class="completed-feed-action"><b>✓ Action terminée</b><strong>${escapeHtml(action.title)}</strong><span>${formatTime(message.created_at)} · Voir l’historique et la preuve <i aria-hidden="true">⌄</i></span></summary><div class="completed-action-history">${message._history.map(m => renderMessage(m, true)).join("")}<button class="secondary-button" data-action="open-action" data-action-id="${escapeHtml(action.id)}">Suivre l’action</button></div></details></article>`;
+    }
     const mine = String(message.author_id) === String(ownId()), deleted = Boolean(message.deleted_at);
     const linkedActions = actionLinksForMessage(message);
-    const completed = !deleted && linkedActions.length > 0 && linkedActions.every(action => action.status === "terminee");
+    const completed = !historyOnly && !deleted && linkedActions.length > 0 && linkedActions.every(action => action.status === "terminee");
     const parent = message.reply_to ? messageById(message.reply_to) : null;
     const attachments = deleted ? [] : (message.attachments || []);
     const images = attachments.filter(fileIsImage), documents = attachments.filter(item => !fileIsImage(item));
     if (message.message_type === "Système") return `<article class="message-row system"><div class="message-bubble">${escapeHtml(message.body || "")}</div></article>`;
-    const bubble = `<div class="message-bubble ${deleted ? "deleted" : ""}"><button class="message-menu" data-action="message-menu" data-message-id="${message.id}" aria-label="Options">⋮</button><div class="message-head"><span class="author-name">${escapeHtml(message.author_name || "Intervenant")}</span>${message.message_type ? `<span class="message-tag ${typeClass(message.message_type)}">${escapeHtml(message.message_type)}</span>` : ""}${message.zone ? `<span class="zone-tag">${escapeHtml(message.zone)}</span>` : ""}${message.is_important ? `<span class="important-star">★</span>` : ""}</div>${parent ? `<button class="reply-quote" data-action="jump-message" data-message-id="${parent.id}"><b>${escapeHtml(parent.author_name || "Intervenant")}</b>${escapeHtml(truncate(parent.body || "Pièce jointe", 90))}</button>` : ""}${deleted ? `<div class="message-text">Message supprimé.</div>` : ""}${!deleted && images.length ? `<div class="attachment-grid ${images.length === 1 ? "one" : ""}">${images.map(renderAttachment).join("")}</div>` : ""}${!deleted ? documents.map(renderAttachment).join("") : ""}${!deleted && message.body ? `<div class="message-text">${renderRichText(message.body)}</div>` : ""}${!deleted && message.briefing_document_id ? `<button class="secondary-button" data-action="open-document" data-document-id="${escapeHtml(message.briefing_document_id)}">Consulter le briefing signé</button>` : ""}${!deleted ? renderMessageActionLinks(message) : ""}${!deleted ? renderReactionBar(message) : ""}<div class="message-footer"><span>${formatTime(message.created_at)}</span>${mine ? `<span class="message-status" title="${messageReadBySomeoneElse(message) ? "Lu par un interlocuteur" : "Envoyé"}">${messageReadBySomeoneElse(message) ? "✓✓" : "✓"}</span>` : ""}</div>${!deleted ? `<div class="message-actions"><button data-action="reply" data-message-id="${message.id}">↩ Répondre</button><button data-action="open-reactions" data-message-id="${message.id}">☺ Réagir</button><button data-action="make-action" data-message-id="${message.id}">✓ Action</button>${mine ? `<button data-action="toggle-important" data-message-id="${message.id}">${message.is_important ? "★ Désépingler" : "☆ Épingler"}</button>` : ""}</div>` : ""}</div>`;
+    const bubble = `<div class="message-bubble ${deleted ? "deleted" : ""}"><button class="message-menu" data-action="message-menu" data-message-id="${message.id}" aria-label="Options">⋮</button><div class="message-head"><span class="author-name">${escapeHtml(message.author_name || "Intervenant")}</span>${message.message_type ? `<span class="message-tag ${typeClass(message.message_type)}">${escapeHtml(message.message_type)}</span>` : ""}${message.zone ? `<span class="zone-tag">${escapeHtml(message.zone)}</span>` : ""}${message.is_important ? `<span class="important-star">★</span>` : ""}</div>${parent ? `<button class="reply-quote" data-action="jump-message" data-message-id="${parent.id}"><b>${escapeHtml(parent.author_name || "Intervenant")}</b>${escapeHtml(truncate(parent.body || "Pièce jointe", 90))}</button>` : ""}${deleted ? `<div class="message-text">Message supprimé.</div>` : ""}${!deleted && images.length ? `<div class="attachment-grid ${images.length === 1 ? "one" : ""}">${images.map(renderAttachment).join("")}</div>` : ""}${!deleted ? documents.map(renderAttachment).join("") : ""}${!deleted && message.body ? `<div class="message-text">${renderRichText(message.body)}</div>` : ""}${!deleted && message.briefing_document_id ? `<button class="secondary-button" data-action="open-document" data-document-id="${escapeHtml(message.briefing_document_id)}">Consulter le briefing signé</button>` : ""}${!deleted && message.production_id ? `<button class="secondary-button" data-action="production" data-production-id="${escapeHtml(message.production_id)}" data-message-id="${escapeHtml(message.id)}">Renseigner l’avancement ›</button>` : ""}${!deleted ? renderMessageActionLinks(message) : ""}${!deleted ? renderReactionBar(message) : ""}<div class="message-footer"><span>${formatTime(message.created_at)}</span>${mine ? `<span class="message-status" title="${messageReadBySomeoneElse(message) ? "Lu par un interlocuteur" : "Envoyé"}">${messageReadBySomeoneElse(message) ? "✓✓" : "✓"}</span>` : ""}</div>${!deleted ? `<div class="message-actions"><button data-action="reply" data-message-id="${message.id}">↩ Répondre</button><button data-action="open-reactions" data-message-id="${message.id}">☺ Réagir</button><button data-action="make-action" data-message-id="${message.id}">✓ Action</button>${mine ? `<button data-action="toggle-important" data-message-id="${message.id}">${message.is_important ? "★ Désépingler" : "☆ Épingler"}</button>` : ""}</div>` : ""}</div>`;
     const summary = completed ? `<details class="completed-feed-details"><summary class="completed-feed-action"><b>✓ Action terminée</b><strong>${escapeHtml(linkedActions.map(action => action.title).join(" · "))}</strong><span>${escapeHtml(message.author_name || "Intervenant")} · ${formatTime(message.created_at)} · Voir l’historique et la preuve <i aria-hidden="true">⌄</i></span></summary>${bubble}</details>` : `<span class="message-avatar">${escapeHtml(initial(message.author_name))}</span>${bubble}`;
     return `<article class="message-row ${mine ? "mine" : ""} ${completed ? "action-completed" : ""}" data-message-row="${message.id}">${summary}</article>`;
   }
@@ -1623,7 +1633,7 @@
   async function deleteDocumentFolder(folder) {
     if (!folder || isCoreDocumentRoot(folder)) return;
     const label = folder.is_root ? "dossier principal" : "sous-dossier";
-    if (!window.confirm(`Supprimer le ${label} « ${folder.name} » ? Il doit être vide.`)) return;
+    if (!(await JournalDialogs.confirm(`Supprimer le ${label} « ${folder.name} » ? Il doit être vide.`))) return;
     try {
       if (isCloudReady()) {
         const { error } = await app.db.rpc("delete_chantier_document_folder", { p_folder_id: folder.id });
@@ -1671,7 +1681,7 @@
     });
   }
   async function deleteDocument(documentItem) {
-    if (!documentItem || !window.confirm(`Supprimer définitivement « ${documentItem.file_name} » ?`)) return;
+    if (!documentItem || !(await JournalDialogs.confirm(`Supprimer définitivement « ${documentItem.file_name} » ?`))) return;
     try {
       if (isCloudReady()) {
         const { data: storagePath, error } = await app.db.rpc("delete_chantier_document", { p_document_id: documentItem.id });
@@ -1920,7 +1930,7 @@
     $("closePortalAppMenu").addEventListener("click", closeModal);
     $("editPortalApp").addEventListener("click", () => { closeModal(); openPortalAppDialog(item); });
     $("deletePortalApp").addEventListener("click", async () => {
-      if (!window.confirm(`Retirer « ${item.name} » du portail ?`)) return;
+      if (!(await JournalDialogs.confirm(`Retirer « ${item.name} » du portail ?`))) return;
       try { await deletePortalApp(item); closeModal(); toast("Application retirée du portail.", "success"); }
       catch (error) { toast(`Suppression impossible : ${friendlyError(error)}`, "error"); }
     });
@@ -2535,11 +2545,12 @@
     } catch (error) { toast(`Mise à jour impossible : ${error.message}`, "error"); }
   }
   async function editMessage(message) {
+    if (message.production_id) { closeModal(); const owner=ownId(),site=app.currentId; return JournalProduction.loadAndOpen({db:app.db,userId:owner,chantierId:site,name:currentChantier()?.name,message,valid:()=>ownId()===owner&&app.currentId===site,refresh:()=>refreshCloudCurrent()}); }
     const sessionVersion = app.sessionVersion || 0;
     const hasAttachments = Boolean(message.attachments?.length);
     openModal({
       title: "Modifier le message", subtitle: "La modification est visible dans le journal.",
-      body: `<form id="editMessageForm" class="form-grid one"><label class="form-field">${hasAttachments ? "Commentaire (facultatif)" : "Message"}<textarea name="body" ${hasAttachments ? "" : "required"}>${escapeHtml(message.body || "")}</textarea></label><label class="form-field">Type<select name="message_type">${["Info", "Journal", "Sécurité", "Incident", "Avancement", "Aléa", "Coactivité", "Décision", "Document", "Action"].map(type => `<option ${message.message_type === type ? "selected" : ""}>${type}</option>`).join("")}</select></label><label class="form-field">Zone / PK<input name="zone" value="${escapeHtml(message.zone || "")}"></label></form>`,
+      body: `<form id="editMessageForm" class="form-grid one"><label class="form-field">${hasAttachments ? "Commentaire (facultatif)" : "Message"}<textarea name="body" ${hasAttachments ? "" : "required"}>${escapeHtml(message.body || "")}</textarea></label><label class="form-field">Type<select name="message_type">${["Info", "Journal", "Sécurité", "Incident", "Technique", "Avancement", "Aléa", "Coactivité", "Décision", "Document", "Action"].map(type => `<option ${message.message_type === type ? "selected" : ""}>${type}</option>`).join("")}</select></label><label class="form-field">Zone / PK<input name="zone" value="${escapeHtml(message.zone || "")}"></label></form>`,
       footer: `<button class="secondary-button" id="cancelEditMessage">Annuler</button><button class="primary-button" id="saveEditMessage">Enregistrer</button>`
     });
     $("cancelEditMessage").addEventListener("click", closeModal);
@@ -2567,7 +2578,7 @@
     });
   }
   async function softDeleteMessage(message) {
-    if (!window.confirm("Supprimer ce message pour tous les membres du chantier ?")) return;
+    if (!(await JournalDialogs.confirm("Supprimer ce message pour tous les membres du chantier ?"))) return;
     try {
       if (isCloudReady()) {
         const { error } = await app.db.from("chantier_messages").update({ body: null, deleted_at: nowIso() }).eq("id", message.id);
@@ -3546,7 +3557,7 @@
     $$('[data-dashboard-revoke]').forEach(button => button.addEventListener("click", async () => {
       const card = button.closest("[data-dashboard-user-id]");
       const account = accounts.find(item => String(item.user_id || item.id) === card.dataset.dashboardUserId);
-      if (!window.confirm(`Retirer tous les accès de ${account?.full_name || account?.email || "ce compte"} ? La personne restera inscrite mais ne pourra plus consulter ni modifier les chantiers.`)) return;
+      if (!(await JournalDialogs.confirm(`Retirer tous les accès de ${account?.full_name || account?.email || "ce compte"} ? La personne restera inscrite mais ne pourra plus consulter ni modifier les chantiers.`))) return;
       try {
         button.disabled = true;
         const { error: revokeError } = await app.db.rpc("journal_v142_revoke_user_access", { p_user_id: card.dataset.dashboardUserId });
@@ -3619,7 +3630,7 @@
     }));
     $$('[data-refuse-access]').forEach(button => button.addEventListener("click", async () => {
       const card = button.closest("[data-request-id]");
-      if (!window.confirm("Refuser cette demande d’accès ?")) return;
+      if (!(await JournalDialogs.confirm("Refuser cette demande d’accès ?"))) return;
       try {
         button.disabled = true;
         const { error: rpcError } = await app.db.rpc("refuse_journal_access_request", { p_request_id: card.dataset.requestId, p_note: "" });
@@ -3781,15 +3792,22 @@
       }
     });
   }
+  function openProduction(record = null) {
+    if (!isCloudReady()) { toast("Se connecter pour partager la production avec le CR.", "warning"); return; }
+    const owner = ownId(), site = app.currentId;
+    JournalProduction.open({ db: app.db, userId: owner, chantierId: site, name: currentChantier()?.name, record,
+      valid: () => String(ownId()) === String(owner) && String(app.currentId) === String(site), refresh: () => refreshCloudCurrent().catch(() => {}) });
+  }
   function openQuickAddDialog() {
     if (app.mode === "cloud-guest") return openProfileDialog();
     if (!currentChantier()) return openNewChantierDialog();
     openModal({
       title: "Ajout rapide terrain",
       subtitle: "Consigne une information, une alerte ou une photo sans quitter le chantier.",
-      body: `<div class="quick-add-intro"><span>${iconSvg("terrain-note")}</span><div><b>Consignation terrain</b><p>Un fait, une alerte ou une photo est ajouté au fil du chantier avec sa zone et sa date.</p></div></div><form id="quickAddForm" class="form-grid"><label class="form-field">Type<select name="message_type"><option value="Info">Information</option><option value="Journal">Journal / poste</option><option value="Sécurité">Sécurité</option><option value="Incident">Incident / vigilance</option><option value="Avancement">Avancement</option><option value="Aléa">Aléa</option><option value="Coactivité">Coactivité</option><option value="Décision">Décision</option></select></label><label class="form-field">Zone / voie / PK<input name="zone" placeholder="Ex. V2M – PK 80,190"></label><label class="form-field span-2">Information (facultative avec une photo)<textarea name="body" placeholder="Décris le fait constaté, ou ajoute seulement une photo."></textarea></label><label class="form-field span-2">Photo / fichier (facultatif)<input name="file" type="file" accept="image/*,application/pdf,.pdf,.doc,.docx" capture="environment"><small>Une photo prise depuis le téléphone s’ouvre directement ici.</small></label><label class="form-field span-2"><span><input name="is_important" type="checkbox"> Épingler comme information permanente</span></label></form>`,
+      body: `<div class="quick-add-intro"><span>${iconSvg("terrain-note")}</span><div><b>Consignation terrain</b><p>Un fait, une alerte ou une photo est ajouté au fil du chantier avec sa zone et sa date.</p></div></div><form id="quickAddForm" class="form-grid"><label class="form-field">Type<select name="message_type"><option value="Info">Information</option><option value="Journal">Journal / poste</option><option value="Sécurité">Sécurité</option><option value="Incident">Incident / vigilance</option><option value="Production">Production</option><option value="Technique">Renseignements techniques</option><option value="Aléa">Aléa</option><option value="Coactivité">Coactivité</option><option value="Décision">Décision</option></select></label><label class="form-field">Zone / voie / PK<input name="zone" placeholder="Ex. V2M – PK 80,190"></label><label class="form-field span-2">Information (facultative avec une photo)<textarea name="body" placeholder="Décris le fait constaté, ou ajoute seulement une photo."></textarea></label><label class="form-field span-2">Photo / fichier (facultatif)<input name="file" type="file" accept="image/*,application/pdf,.pdf,.doc,.docx" capture="environment"><small>Une photo prise depuis le téléphone s’ouvre directement ici.</small></label><label class="form-field span-2"><span><input name="is_important" type="checkbox"> Épingler comme information permanente</span></label></form>`,
       footer: `<button class="secondary-button" id="cancelQuickAdd">Annuler</button><button class="primary-button" id="saveQuickAdd">Ajouter au journal</button>`
     });
+    $("quickAddForm").elements.message_type.addEventListener("change", e => { if (e.target.value === "Production") { closeModal(); openProduction(); } });
     let resumeMessage = null;
     $("cancelQuickAdd").addEventListener("click", closeModal);
     $("saveQuickAdd").addEventListener("click", async () => {
@@ -3817,31 +3835,19 @@
     openModal({
       title: "Créer le carnet PDF",
       subtitle: "Une édition structurée du chantier, prête à archiver ou à transmettre.",
-      body: `<div class="export-book-preview"><span>${iconSvg("journal-book")}</span><div><b>Un véritable carnet de chantier</b><p>Couverture, repères chiffrés, registre documentaire, photos et chronologie sont mis en page automatiquement.</p></div></div><form id="exportForm" class="form-grid"><p class="form-note span-2">Le carnet contient <b>toute la discussion du chantier</b> et la liste des documents classés. À l’étape suivante, sélectionne « Enregistrer au format PDF » dans l’écran d’impression du téléphone ou du navigateur.</p><label class="form-field">Du<input name="from" type="date"></label><label class="form-field">Au<input name="to" type="date"></label><label class="form-field span-2">Contenu<select name="scope"><option value="all">Tous les messages</option><option value="important">Messages importants uniquement</option></select></label><label class="form-field span-2"><span><input name="include_pilotage" type="checkbox" checked> Ajouter les indicateurs de pilotage dans le carnet</span></label></form>`,
+      body: `<div class="export-book-preview"><span>${iconSvg("journal-book")}</span><div><b>Un véritable carnet de chantier</b><p>Couverture, repères chiffrés, registre documentaire, photos et chronologie sont mis en page automatiquement.</p></div></div><form id="exportForm" class="form-grid"><p class="form-note span-2">Le carnet contient <b>toute la discussion du chantier</b> et la liste des documents classés. À l’étape suivante, sélectionne « Enregistrer au format PDF » dans l’écran d’impression du téléphone ou du navigateur.</p><label class="form-field">Du<input name="from" type="date"></label><label class="form-field">Au<input name="to" type="date"></label><label class="form-field span-2">Contenu<select name="scope"><option value="all">Tous les messages</option><option value="important">Messages importants uniquement</option></select></label><label class="form-field span-2">Photos<select name="photos"><option value="included">Photos optimisées pour le PDF</option><option value="none">Texte et liste des pièces jointes seulement</option></select></label><label class="form-field span-2"><span><input name="include_pilotage" type="checkbox" checked> Ajouter les indicateurs de pilotage dans le carnet</span></label></form>`,
       footer: `<button class="secondary-button" id="cancelExport">Annuler</button><button class="primary-button" id="runExport">Créer le PDF</button>`
     });
     $("cancelExport").addEventListener("click", closeModal);
     $("runExport").addEventListener("click", () => {
-      const values = Object.fromEntries(new FormData($("exportForm")).entries()), before = { search: app.search, type: app.typeFilter, important: app.onlyImportant };
-      app.printScope = values;
-      app.search = "";
-      app.typeFilter = "";
-      app.onlyImportant = values.scope === "important";
-      setActiveTab("chat");
-      renderMessages();
-      renderPrintCover();
-      closeModal();
-      setTimeout(() => {
-        window.print();
-        app.search = before.search;
-        app.typeFilter = before.type;
-        app.onlyImportant = before.important;
-        app.printScope = null;
-        els.messageSearch.value = before.search;
-        els.typeFilter.value = before.type;
-        els.importantFilterBtn.setAttribute("aria-pressed", String(before.important));
-        renderMessages();
-      }, 120);
+      const form = $("exportForm"), values = Object.fromEntries(new FormData(form).entries());
+      if (values.from && values.to && values.from > values.to) { toast("La date de fin doit suivre la date de début.", "warning"); return; }
+      const chantier = currentChantier();
+      const site = {...chantier, lineTrack:chantierLineTrackLabel(chantier),pkRange:chantierPkLabel(chantier),companies:chantierCompanies(chantier).join(" · ")}, messages = visibleFeedMessages();
+      const documents = (app.documents || []).filter(d=>String(d.chantier_id)===String(chantier.id)&&!d.deleted_at).map(d=>({...d,folderLabel:documentAncestors(documentFolderById(d.folder_id)).map(f=>f.name).join(" › ")}));
+      const actions = activeActionsFor(site.id), open = actions.filter(a => a.status !== "terminee");
+      const pilotage = `<h2>Suivi opérationnel</h2><p>${open.length} actions ouvertes · ${open.filter(actionIsLate).length} en retard · ${actions.filter(a => a.status === "terminee").length} terminées</p>`;
+      closeModal(); JournalExport.open({site,messages,documents,scope:values,pilotage});
     });
   }
   function findAttachment(id) { return allCurrentAttachments().find(item => String(item.id) === String(id)) || null; }
@@ -3940,6 +3946,7 @@
   function jumpToMessage(id) {
     const node = document.querySelector(`[data-message-row="${String(id)}"]`);
     if (!node) return;
+    const history = node.closest(".completed-feed-details"); if (history) history.open = true;
     node.scrollIntoView({ behavior: "smooth", block: "center" });
     node.querySelector(".message-bubble")?.animate([
       { boxShadow: "0 0 0 0 rgba(130,0,90,0)" },
@@ -3978,7 +3985,7 @@
     } else if (action === "message-menu") {
       const message = messageById(element.dataset.messageId);
       if (message) openMessageMenu(message);
-    } else if (action === "jump-message") {
+    } else if (action === "production") { const message = messageById(element.dataset.messageId); if (message) { const owner=ownId(),site=app.currentId; void JournalProduction.loadAndOpen({db:app.db,userId:owner,chantierId:site,name:currentChantier()?.name,message,valid:()=>ownId()===owner&&app.currentId===site,refresh:()=>refreshCloudCurrent()}); } return; } else if (action === "jump-message") {
       jumpToMessage(element.dataset.messageId);
     } else if (action === "open-image") {
       // Ne laisse pas ce toucher remonter aux actions générales du message ou

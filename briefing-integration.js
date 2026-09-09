@@ -63,8 +63,8 @@ window.JournalBriefing = {
    } finally { busy = false; close.disabled = false; }
   }
   window.addEventListener('message', receive);
-  close.onclick = () => {
-   if (busy || !confirm('Revenir au journal ? Enregistrez le briefing avant de fermer cette page.')) return;
+  close.onclick = async () => {
+   if (busy || !(await JournalDialogs.confirm('Revenir au journal ? Enregistrez le briefing avant de fermer cette page.'))) return;
    window.removeEventListener('message', receive); overlay.remove();
   };
   document.body.append(overlay);

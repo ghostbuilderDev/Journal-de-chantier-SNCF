@@ -1,0 +1,18 @@
+Correctif d’installation V15.4 — 9 septembre 2026
+- Erreur ValueError reproduite sur le fichier SQL de la première livraison : enveloppe BEGIN / COMMIT absente.
+- Sept tests du vrai script de déploiement : construction SQL, refus local avant connexion, sortie de la transaction sans secrets, conservation des prérequis et reprises après interruption.
+- Transaction exacte produite par l’installateur exécutée dans une base jetable ; panne SQL injectée : modifications et inscription au registre annulées ensemble, ancienne API conservée. Après correction, migration inscrite une seule fois.
+- Reprise des fichiers vérifiée depuis le commit serveur bdf9aa7 et depuis la V15.3 ; modifications personnelles refusées et configuration conservée.
+- Tests SQL de production partagée et de conservation des CR V15.3 repassés avec le fichier SQL corrigé.
+
+Vérifications locales de l’interface V15.4 (inchangée par ce correctif)
+- Base SQL jetable : migration répétable, conservation des heures et des CR V15.3, mêmes emails historiques, droits privés et anonymes refusés.
+- Production : deux lignes distinctes conservées, pourcentages 0 à 100, reprises sans double message, conflits entre collègues, annulation complète d’un enregistrement partiellement invalide, CR figés conservés.
+- Email : aperçu et contenu envoyé identiques ; test limité à une adresse avant réservation d’envoi ; absence de clé détectée ; refus fournisseur et délai d’attente signalés ; référence unique pour les tentatives répétées.
+- Navigateur 390 et 320 pixels : signalements, rubriques horaires, affectations individuelles, carte verte unique, retrait d’épingle après trois minutes, production partagée, bandeau explicite, aperçu HTML, confirmation interne.
+- Export : 1 000 événements texte préparés en moins de sept secondes sur le banc d’essai ; vrai PDF avec trois photos optimisées, aucune modification des originaux. La vitesse réelle dépend du téléphone et des photos disponibles.
+- PDF briefing : photo et légende présentes après les modifications des fenêtres de confirmation ; photo invalide signalée sans effacer le briefing.
+- Régressions : sessions et droits, reprise des photos, modification de messages, 34 tests de signalements, 9 groupes de scénarios d’actions, intégration briefing et SharePoint.
+- Installation : contrôle des empreintes V15.3, phases serveur/interface, reprise sans écrasement des changements personnels.
+
+Aucun envoi email réel, aucune notification à un utilisateur, aucune requête Gemini réelle et aucune modification de la base en production pendant ces essais. Le workflow d’installation exécute également ses contrôles PostgreSQL 17 avant publication de l’interface.

@@ -1,0 +1,24 @@
+(function(root){
+ 'use strict';
+ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ function nightNow(){const s=JournalCR.parisLocal(new Date().toISOString()),d=s.slice(0,10);return Number(s.slice(11,13))<12?new Date(Date.parse(d+'T12:00Z')-864e5).toISOString().slice(0,10):d;}
+ function row(item={},locked=false){return `<tr data-production-row><td><textarea aria-label="Travail prévu ou ajouté" maxlength="500" rows="2" ${locked?'readonly':''} placeholder="Ex. Pose d’un appareil tendeur">${esc(item.title)}</textarea><label><input type="checkbox" name="additional" ${item.additional?'checked':''} ${locked?'disabled':''}> Travail ajouté</label></td><td><input type="number" aria-label="Pourcentage réalisé" min="0" max="100" step="1" value="${item.progress??''}" ${locked?'readonly':''} placeholder="—"><small>% réalisé</small></td></tr>`;}
+ function readRows(container){return [...container.querySelectorAll('[data-production-row]')].map(r=>{const title=r.querySelector('textarea').value.trim(),value=r.querySelector('input[type=number]').value,progress=value===''?null:Number(value);if(!title)throw new Error('Précisez l’intitulé de chaque travail.');if(progress!==null&&(!Number.isFinite(progress)||progress<0||progress>100))throw new Error('Le pourcentage doit être compris entre 0 et 100.');return{title,progress,additional:r.querySelector('[name=additional]').checked};});}
+ async function api(c,action,payload){if(c.valid&&!c.valid())throw new Error('Le compte ou le chantier a changé.');const {data,error}=await c.db.rpc('journal_production_api',{p_action:action,p_payload:{chantier_id:c.chantierId,...payload}});if(c.valid&&!c.valid())throw new Error('Le compte ou le chantier a changé.');if(error)throw error;return data;}
+ function open(c){
+  const record=c.record||{},d=document.createElement('dialog');d.className='production-dialog';d.id='productionDialog';let busy=false,dirty=false;const id=record.id||crypto.randomUUID();
+  d.innerHTML=`<header><div><small>${esc(c.name||'Journal de chantier')}</small><h2>Production</h2></div><button class="secondary-button" data-production="close">Fermer ×</button></header><main><label>Séance du <input id="productionNight" type="date" value="${record.night||nightNow()}" ${record.id?'readonly':''}></label><p>Saisir les travaux prévus une seule fois. En fin de séance, compléter le pourcentage réalisé. Ces lignes alimentent le CR off de cette nuit.</p><table class="cr-production-table"><thead><tr><th>Travaux</th><th>Réalisé</th></tr></thead><tbody id="productionRows">${(record.items||[{}]).map(x=>row(x)).join('')}</tbody></table><button class="secondary-button" data-production="add">＋ Ajouter un travail</button>${record.history?.length?`<details class="production-history"><summary>Historique des saisies</summary>${record.history.map(h=>`<p><b>${esc(h.actor_name)}</b> · version ${h.version}<br>${h.items.map(i=>esc(i.title)+' : '+(i.progress??'à confirmer')+' %').join('<br>')}</p>`).join('')}</details>`:''}<p id="productionStatus" class="production-error" role="status"></p></main><footer><button class="primary-button" data-production="save">Enregistrer la production</button></footer>`;
+  const close=async()=>{if(busy)return;if(dirty&&!(await JournalDialogs.confirm('Des travaux ne sont pas enregistrés. Quitter cette saisie ?')))return;d.remove();};
+  d.addEventListener('input',()=>dirty=true);d.addEventListener('cancel',e=>{e.preventDefault();void close();});
+  d.addEventListener('click',async e=>{const b=e.target.closest('[data-production]');if(!b||busy)return;
+   if(b.dataset.production==='close')return close();
+   if(b.dataset.production==='add'){if(d.querySelectorAll('[data-production-row]').length>=60)return;d.querySelector('#productionRows').insertAdjacentHTML('beforeend',row({additional:Boolean(record.id)}));dirty=true;return;}
+   busy=true;b.disabled=true;b.textContent='Enregistrement…';
+   try{const items=readRows(d),night=d.querySelector('#productionNight').value;if(!night)throw new Error('Indiquez la date de la séance.');await api(c,'save',{id,night,version:record.version||0,items});dirty=false;d.remove();await c.refresh?.();}
+   catch(error){if(d.isConnected)d.querySelector('#productionStatus').textContent=error.message;}
+   finally{busy=false;b.disabled=false;b.textContent='Enregistrer la production';}
+  });document.body.append(d);d.showModal();
+ }
+ async function loadAndOpen(c){try{const night=c.message.production_night;if(!night)throw new Error('Date de la production introuvable.');const records=await api(c,'list',{night});const record=records.find(r=>r.id===c.message.production_id);if(!record)throw new Error('Production introuvable.');open({...c,record});}catch(e){await JournalDialogs.alert(e.message);}}
+ root.JournalProduction={open,loadAndOpen,row,readRows,nightNow};
+})(window);

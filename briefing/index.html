@@ -1372,6 +1372,8 @@ color:#666;
 @media print{#pwaInstallOverlay{display:none!important}}
 </style>
 <!-- /PWA BRIEFING SNCF -->
+<link rel="stylesheet" href="../journal-v154.css?v=15.4">
+<script src="../journal-dialogs.js?v=15.4"></script>
 </head>
 <body>
 
@@ -2775,7 +2777,7 @@ toggleTravauxType();
       localStorage.setItem(KEY, JSON.stringify({participants:participants, fields:collectFields()}));
       const st=id("presenceStatus"); if(st) st.textContent="Sauvegardé : "+new Date().toLocaleTimeString();
       return true;
-    }catch(e){ alert("Erreur pendant la sauvegarde : "+e.message); return false; }
+    }catch(e){ JournalDialogs.alert("Erreur pendant la sauvegarde : "+e.message); return false; }
   }
   function restore(){
     try{
@@ -2816,7 +2818,7 @@ toggleTravauxType();
   window.presenceRemove = function(i){ participants.splice(i,1); render(); save(); };
   window.presenceSave = function(){ updateTrace(); return save(); };
   window.presencePrint = function(){ updateTrace(); render(); save(); setTimeout(()=>window.print(),250); };
-  window.presenceReset = function(){ if(confirm("Réinitialiser toute la saisie et les signatures enregistrées sur ce téléphone ?")){ localStorage.removeItem(KEY); location.reload(); } };
+  window.presenceReset = async function(){ if(await JournalDialogs.confirm("Réinitialiser toute la saisie et les signatures enregistrées sur ce téléphone ?")){ localStorage.removeItem(KEY); location.reload(); } };
 
   // V52 : purge fiable des signatures uniquement, en conservant les participants.
   window.__nativeClearOnlySignaturesV52 = function(){
@@ -3609,7 +3611,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
     const indexes = getCheckedLamIndexes();
 
     if(!indexes.length){
-      alert("Aucune LAM cochée dans les voies.");
+      JournalDialogs.alert("Aucune LAM cochée dans les voies.");
       refreshGlobalLamButton();
       return;
     }
@@ -3617,7 +3619,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
     if(typeof openLamPopup === "function"){
       openLamPopup(indexes[0]);
     }else{
-      alert("La fenêtre de configuration LAM n’est pas disponible dans cette version.");
+      JournalDialogs.alert("La fenêtre de configuration LAM n’est pas disponible dans cette version.");
     }
   };
 
@@ -3729,8 +3731,8 @@ document.addEventListener("DOMContentLoaded", ()=>{
   };
 
   // Corriger la réinitialisation complète : nettoyage des champs visibles + localStorage + reload.
-  window.presenceReset = function(){
-    if(!confirm("Réinitialiser toute la saisie, les participants et les signatures enregistrées sur ce téléphone ?")) return;
+  window.presenceReset = async function(){
+    if(!await JournalDialogs.confirm("Réinitialiser toute la saisie, les participants et les signatures enregistrées sur ce téléphone ?")) return;
 
     try{
       Object.keys(localStorage).forEach(k=>{
@@ -3759,8 +3761,8 @@ document.addEventListener("DOMContentLoaded", ()=>{
   };
 
   // Réinitialiser uniquement les signatures, en conservant nom/prénom/entreprise.
-  window.presenceResetSignaturesOnly = function(){
-    if(!confirm("Effacer uniquement les signatures en conservant les noms, prénoms et entreprises ?")) return;
+  window.presenceResetSignaturesOnly = async function(){
+    if(!await JournalDialogs.confirm("Effacer uniquement les signatures en conservant les noms, prénoms et entreprises ?")) return;
 
     // 1) Dans le tableau affiché : supprimer les images de signature
     document.querySelectorAll("#presenceRows tr").forEach(row=>{
@@ -4614,7 +4616,7 @@ function fullResetApplication(){
 
  }catch(e){
 
-   alert('Erreur pendant la réinitialisation : '+e);
+   JournalDialogs.alert('Erreur pendant la réinitialisation : '+e);
 
  }
 
@@ -6251,8 +6253,8 @@ window.updatePhotoComment=function(index,value){
   savePhotos();
 };
 
-window.removePhoto=function(index){
-  if(!confirm('Supprimer cette photo du briefing ?')) return;
+window.removePhoto=async function(index){
+  if(!await JournalDialogs.confirm('Supprimer cette photo du briefing ?')) return;
   window.briefingPhotos.splice(index,1);
   savePhotos();
   renderPhotos();
@@ -6533,10 +6535,10 @@ setTimeout(function(){
     });
   }
 
-  function resetSignaturesImmediate(){
+  async function resetSignaturesImmediate(){
     closePopups();
 
-    const ok = confirm(
+    const ok = await JournalDialogs.confirm(
       'Effacer toutes les signatures numériques ?\n\n' +
       'Les noms, prénoms et entreprises seront conservés.'
     );
@@ -6978,10 +6980,10 @@ setTimeout(function(){
 
   window.fullResetApplication = doFullResetWithoutReload;
 
-  window.openFullResetConfirm = function(){
+  window.openFullResetConfirm = async function(){
     hide("actionsOverlay");
 
-    const ok = confirm(
+    const ok = await JournalDialogs.confirm(
       "⚠️ Attention :\n\n" +
       "Cette action va supprimer l’ensemble du briefing :\n" +
       "- toutes les saisies ;\n" +
@@ -7233,7 +7235,7 @@ setTimeout(function(){
 
   if(typeof originalConfirm === 'function' && !originalConfirm._v45Wrapped){
 
-    window.openFullResetConfirm = function(){
+    window.openFullResetConfirm = async function(){
 
       clearAllPhotos();
 
@@ -7370,9 +7372,9 @@ setTimeout(function(){
 
   window.fullResetApplication = doResetAllV47;
 
-  window.openFullResetConfirm = function(){
+  window.openFullResetConfirm = async function(){
     hide("actionsOverlay");
-    const ok = confirm("⚠️ Attention :\n\nCette action va supprimer l’ensemble du briefing :\n- toutes les saisies ;\n- les participants ;\n- les entreprises ;\n- toutes les signatures ;\n- toutes les photos et leurs légendes ;\n- les données sauvegardées localement.\n\nSouhaitez-vous vraiment continuer ?");
+    const ok = await JournalDialogs.confirm("⚠️ Attention :\n\nCette action va supprimer l’ensemble du briefing :\n- toutes les saisies ;\n- les participants ;\n- les entreprises ;\n- toutes les signatures ;\n- toutes les photos et leurs légendes ;\n- les données sauvegardées localement.\n\nSouhaitez-vous vraiment continuer ?");
     if(ok) doResetAllV47();
   };
 
@@ -8030,7 +8032,7 @@ setTimeout(function(){
     const indexes = getCheckedLamIndexesV64();
 
     if(!indexes.length){
-      alert("Aucune voie avec LAM cochée.");
+      JournalDialogs.alert("Aucune voie avec LAM cochée.");
       return;
     }
 
@@ -8590,7 +8592,7 @@ window.updateLamBriefing=function(){let target=document.getElementById("oMiseVoi
     }
     const status = byId("presenceStatus");
     if(status) status.textContent = message;
-    else window.alert(message);
+    else JournalDialogs.alert(message);
   }
 
   function setBusy(active, message){
@@ -9188,7 +9190,7 @@ window.updateLamBriefing=function(){let target=document.getElementById("oMiseVoi
   function notify(message){
     if(typeof window.showToast === "function") window.showToast(message);
     else if(document.getElementById("presenceStatus")) document.getElementById("presenceStatus").textContent = message;
-    else window.alert(message);
+    else JournalDialogs.alert(message);
   }
 
   function configuredGatewayUrl(){
