@@ -1,0 +1,17 @@
+JOURNAL DE CHANTIER V15.6 — Vérifications locales, 09/09/2026
+
+Base : V15.5, commit 0e7142c.
+
+Vérifié :
+- Classeur lu sans modification ; 124 lignes Petit/Dahmani, 53 références techniques, sources/cellules conservées. Horaires, téléphones et lignes d’autres demandeurs exclus.
+- Syntaxe JavaScript des modules modifiés et scripts Bash.
+- Tests serveur sur PostgreSQL embarqué jetable : rôles, 53 suggestions, relations SEL/secteur, suppression en cascade, demandes devenues inaccessibles, absence de restauration, nouveau CR vierge, anciennes productions conservées dans le journal mais exclues du nouveau CR, suppression chantier.
+- Transaction réelle produite par le script de déploiement : BEGIN/COMMIT, verrou, migration enregistrée, assertions SQL.
+- Tests navigateur sur l’index et les modules réels, téléphone 390×844 et tablette 1024×768 : fenêtre de rédaction, retours à la ligne sans envoi, texte, photo PNG décodée et fichier PDF conservés après fermeture/rechargement, proposition modifiable sans envoi, sélecteur complet d’emojis, référence libre/choisie, horaires masqués mais enregistrés, demandes agent, suppression/recréation.
+- 5 tests de préparation d’installation et 6 tests du script de déploiement : respect des fichiers existants, reprise, limites des phases, refus des migrations mal encadrées avant connexion.
+- Tests du moteur IA avec service Gemini simulé : modèle Pro demandé, consignes techniques, rejet d’une valeur numérique modifiée ou d’une incertitude supprimée, contrôle des accès et clé absente.
+- Vérification visuelle des fenêtres de rédaction et de consignation sur téléphone et tablette.
+
+Les modules PDF/export/production de V15.5 sont conservés et leurs empreintes contrôlées par l’installateur. Aucun nouveau test d’impression physique n’a été effectué.
+
+Aucune donnée réelle modifiée ; aucun chantier ni CR réel supprimé ; aucun push GitHub, email ou appel Gemini facturé exécuté. La clé et les accès du projet Gemini ne sont pas disponibles ici : la qualité d’une réponse réelle du fournisseur et le clavier tactile des appareils seront à contrôler après installation.

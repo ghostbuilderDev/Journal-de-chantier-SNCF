@@ -83,11 +83,12 @@
     photoViewerImage: $("photoViewerImage"), photoViewerStatus: $("photoViewerStatus"), photoViewerClose: $("photoViewerClose"), photoViewerOpen: $("photoViewerOpen")
   };
 
+  const composer=JournalComposer.create({shell:els.composerShell,input:els.messageInput,allowed:()=>Boolean(currentChantier())&&(app.mode==='local'||app.mode==='demo'||isJournalAdmin()||app.members.some(m=>String(m.user_id)===String(ownId())&&String(m.chantier_id)===String(app.currentId)&&m.role!=='lecture')),site:()=>currentChantier()?.name||'Journal de chantier',save:rememberComposerDraft,refresh:()=>{els.messageInput.style.height='';}});
   const modeChantier = window.JournalModeChantier?.create({
     getContext: () => ({ ready: isCloudReady(), userId: app.user?.id || null, db: app.db,
       currentId: app.currentId, chantiers: app.chantiers, tab: app.activeTab }),
     toast, openModal, closeModal,
-    isOverlayOpen: () => !els.modalBackdrop.hidden || !els.photoViewer.hidden || Boolean(feedback?.isOpen()) || Boolean(crOff?.isOpen()),
+    isOverlayOpen: () => composer.isOpen() || !els.modalBackdrop.hidden || !els.photoViewer.hidden || Boolean(feedback?.isOpen()) || Boolean(crOff?.isOpen()),
     async navigate({ chantierId, messageId, actionId }) {
       if (!isCloudReady() || !app.chantiers.some(item => String(item.id) === chantierId)) return false;
       if (app.sendingMessage) { toast("Attends la fin de l’envoi avant d’ouvrir cet événement.", "warning"); return false; }
@@ -352,6 +353,7 @@
       history.pushState({ ...(history.state || {}), journalModal: true }, document.title, location.href);
       app.modalHistoryActive = true;
     }
+    composer?.suspend();
     app.modalLocked = locked;
     els.modalTitle.textContent = title;
     els.modalSubtitle.textContent = subtitle;
@@ -377,6 +379,7 @@
     // jamais quitter le journal pendant une saisie dans une fenêtre.
     app.modalHistoryActive = false;
     app.closingModal = false;
+    if (!force) composer?.resume();
   }
   function hasRecoveryLink() {
     const fromHash = new URLSearchParams(String(location.hash || "").replace(/^#/, ""));
@@ -751,7 +754,7 @@
     const chantiers = await hydrateChantierCovers(data || []);
     if (!isCloudReady() || userId !== app.user?.id) return;
     app.chantiers = chantiers;
-    if (!app.currentId || !app.chantiers.some(item => String(item.id) === String(app.currentId))) app.currentId = app.chantiers[0]?.id || null;
+    if (!app.currentId || !app.chantiers.some(item => String(item.id) === String(app.currentId))) { composer.close(); app.currentId = app.chantiers[0]?.id || null; restoreComposerDraft(); }
     await refreshCloudCurrent();
     await refreshCloudPortalApps();
     renderApps();
@@ -795,6 +798,8 @@
   function clearSessionPrivateState() {
     if (typeof feedback !== "undefined") feedback?.clear();
     if (typeof modeChantier !== "undefined") void modeChantier?.clear();
+    composer?.close({discardView:true});
+    JournalEmoji.closeAll();
     app.sessionVersion = (app.sessionVersion || 0) + 1;
     app.sendingMessage = false;
     ++app.cloudRefreshSequence;
@@ -1105,7 +1110,7 @@
       grouped.set(reaction.emoji, group);
     });
     const buttons = [...grouped.values()].map(group => `<button class="reaction-chip ${group.mine ? "mine" : ""}" data-action="toggle-reaction" data-message-id="${message.id}" data-emoji="${escapeHtml(group.emoji)}" title="Réagir ${escapeHtml(group.emoji)}">${escapeHtml(group.emoji)} <b>${group.count}</b></button>`).join("");
-    return `<div class="reaction-bar">${buttons}<button class="reaction-add" data-action="open-reactions" data-message-id="${message.id}" title="Ajouter une réaction">☺</button></div>`;
+    return buttons ? `<div class="reaction-bar">${buttons}</div>` : "";
   }
   let pinExpiryTimer;
   function renderPinnedMessages() {
@@ -2011,6 +2016,7 @@
   async function selectChantier(id) {
     if (String(id) === String(app.currentId)) { els.appShell.classList.remove("sidebar-open"); return; }
     if (app.sendingMessage) return toast("L’envoi est en cours. Attends sa fin avant de changer de chantier.", "warning");
+    composer.close();
     rememberComposerDraft();
     app.currentId = id;
     restoreComposerDraft();
@@ -2289,7 +2295,7 @@
     button.disabled = busy;
     button.title = busy ? "Envoi en cours…" : retry ? "Réessayer les fichiers restants" : "Envoyer";
     button.setAttribute("aria-label", button.title);
-    button.textContent = busy ? "…" : retry ? "↻" : "➤";
+    button.textContent = busy ? "Envoi…" : retry ? "Réessayer" : "Envoyer";
     els.messageInput.readOnly = busy || retry;
     [els.messageType, els.messageZone, els.messageImportant].forEach(field => { field.disabled = busy || retry; });
   }
@@ -2306,6 +2312,7 @@
       }, files, {}, app.composerRetry);
       if ((app.sessionVersion || 0) !== sessionVersion || ownId() !== senderId || app.currentId !== sendingChantierId) return;
       clearComposer();
+      composer.close({discardView:true});
       requestAnimationFrame(scrollMessagesToBottom);
       toast(files.length ? "Pièces jointes envoyées." : "Message envoyé.", "success");
     } catch (error) {
@@ -2319,19 +2326,25 @@
       toast(error.message, "error");
     } finally { if ((app.sessionVersion || 0) === sessionVersion) { app.sendingMessage = false; setComposerSendingState(); } }
   }
+  function draftKey(){return String(ownId())+':'+String(app.currentId);}
   function rememberComposerDraft() {
-    if (!app.currentId) return;
-    app.composerDrafts.set(String(app.currentId), { body: els.messageInput.value, type: els.messageType.value,
-      zone: els.messageZone.value, important: els.messageImportant.checked, files: app.pendingFiles,
-      replyTo: app.replyTo, retry: app.composerRetry });
+    if (!app.currentId || !ownId()) return;
+    const draft={body:els.messageInput.value,type:els.messageType.value,zone:els.messageZone.value,important:els.messageImportant.checked,files:[...app.pendingFiles],replyTo:app.replyTo,retry:app.composerRetry};
+    app.composerDrafts.set(String(app.currentId),draft);
+    const stored={...draft,files:draft.files.map(item=>({file:item.file}))};
+    void JournalComposer.write(draftKey(),draft.body||draft.files.length||draft.retry?stored:null).then(()=>composer.status('Brouillon conservé sur cet appareil · Entrée ajoute une ligne.')).catch(()=>composer.status('Brouillon conservé pendant cette session. Gardez l’application ouverte.'));
   }
-  function restoreComposerDraft() {
-    const draft = app.composerDrafts.get(String(app.currentId)) || {};
-    els.messageInput.value = draft.body || ""; els.messageInput.style.height = "";
-    els.messageType.value = draft.type || "Info"; els.messageZone.value = draft.zone || "";
-    els.messageImportant.checked = Boolean(draft.important);
-    app.pendingFiles = draft.files || []; app.replyTo = draft.replyTo || null; app.composerRetry = draft.retry || null;
-    renderPendingFiles(); renderReplyPreview(); setComposerSendingState();
+  function applyComposerDraft(draft={}){
+    els.messageInput.value=draft.body||'';els.messageInput.style.height='';els.messageType.value=draft.type||'Info';els.messageZone.value=draft.zone||'';els.messageImportant.checked=Boolean(draft.important);
+    app.pendingFiles=draft.files||[];app.replyTo=draft.replyTo||null;app.composerRetry=draft.retry||null;renderPendingFiles();renderReplyPreview();setComposerSendingState();
+  }
+  function restoreComposerDraft(){
+    const key=draftKey(),version=app.sessionVersion,site=String(app.currentId),draft=app.composerDrafts.get(site);
+    applyComposerDraft(draft);
+    if(draft||!ownId()||!app.currentId)return;
+    void JournalComposer.read(key).then(saved=>{if(!saved||draftKey()!==key||app.sessionVersion!==version||app.composerDrafts.has(site)||els.messageInput.value||app.pendingFiles.length)return;
+      saved.files=(saved.files||[]).map(item=>({...item,preview_url:fileIsImage(item.file)?URL.createObjectURL(item.file):''}));app.composerDrafts.set(site,saved);applyComposerDraft(saved);
+    }).catch(()=>{});
   }
   function clearPendingFiles() {
     app.pendingFiles.forEach(item => item.preview_url && URL.revokeObjectURL(item.preview_url));
@@ -2341,6 +2354,7 @@
   function clearComposer() {
     app.composerRetry = null;
     app.composerDrafts.delete(String(app.currentId));
+    if(app.currentId&&ownId())void JournalComposer.write(draftKey(),null).catch(()=>{});
     els.messageInput.value = "";
     els.messageInput.style.height = "";
     els.messageZone.value = "";
@@ -2365,6 +2379,8 @@
       else app.pendingFiles.push({ file, preview_url: fileIsImage(file) ? URL.createObjectURL(file) : "" });
     });
     renderPendingFiles();
+    rememberComposerDraft();
+    composer.open();
   }
   function openImageAnnotationDialog(index) {
     if (app.sendingMessage || app.composerRetry) return;
@@ -2413,7 +2429,7 @@
       const replacement = new File([blob], `${base}-annotee.png`, { type: "image/png", lastModified: Date.now() });
       if (item.preview_url) URL.revokeObjectURL(item.preview_url);
       app.pendingFiles[Number(index)] = { file: replacement, preview_url: URL.createObjectURL(replacement) };
-      closeModal(); renderPendingFiles(); toast("Photo annotée prête à être envoyée.", "success");
+      closeModal(); renderPendingFiles(); rememberComposerDraft(); toast("Photo annotée prête à être envoyée.", "success");
     }, "image/png"));
   }
   function renderReplyPreview() {
@@ -2440,27 +2456,26 @@
     });
     return ["équipe", ...[...entries.values()].sort((a, b) => a.localeCompare(b, "fr"))];
   }
-  function openEmojiPicker() {
-    const emojis = ["👍", "✅", "⚠️", "📌", "👀", "👏", "🚧", "📷", "🛠️", "❗", "💬", "🙂"];
-    openModal({ title: "Ajouter un émoji", subtitle: "Inséré dans ton message, avant l’envoi.", body: `<div class="emoji-picker">${emojis.map(emoji => `<button data-emoji-insert="${emoji}" aria-label="${emoji}">${emoji}</button>`).join("")}</div>`, footer: `<button class="secondary-button" id="closeEmojiPicker">Fermer</button>` });
-    $("closeEmojiPicker").addEventListener("click", closeModal);
-    $$('[data-emoji-insert]', els.modalBody).forEach(button => button.addEventListener("click", () => { insertInComposer(button.dataset.emojiInsert); closeModal(); }));
-  }
+  function openEmojiPicker(){const identity=draftKey(),session=app.sessionVersion;const start=els.messageInput.selectionStart,end=els.messageInput.selectionEnd;void JournalEmoji.open({title:'Ajouter un emoji',onSelect:emoji=>{if(draftKey()!==identity||app.sessionVersion!==session)return;els.messageInput.setSelectionRange(start,end);insertInComposer(emoji);rememberComposerDraft();composer.open();}});}
   function openMentionPicker() {
     const mentions = knownMentions();
     openModal({ title: "Mentionner", subtitle: "La mention est visible par tous les membres du chantier.", body: `<div class="menu-list">${mentions.map(name => `<button data-mention="${escapeHtml(name)}">@${escapeHtml(name)}</button>`).join("")}</div>`, footer: `<button class="secondary-button" id="closeMentionPicker">Fermer</button>` });
     $("closeMentionPicker").addEventListener("click", closeModal);
     $$('[data-mention]', els.modalBody).forEach(button => button.addEventListener("click", () => { insertInComposer(`@${button.dataset.mention}`); closeModal(); }));
   }
-  function polishComposerText() {
-    const source = els.messageInput.value.trim();
-    if (!source) return toast("Écris ou dicte d’abord un message.", "warning");
-    let result = source.replace(/\s+/g, " ").replace(/\s+([,.;:!?])/g, "$1").replace(/([,.;:!?])(?=[^\s])/g, "$1 ");
-    result = result.replace(/(^|[.!?]\s+)([a-zà-ÿ])/gu, (_, prefix, letter) => `${prefix}${letter.toLocaleUpperCase("fr-FR")}`);
-    if (result.length > 18 && !/[.!?]$/.test(result)) result += ".";
-    els.messageInput.value = result;
-    els.messageInput.dispatchEvent(new Event("input", { bubbles: true }));
-    toast("Formulation améliorée localement.", "success");
+  async function polishComposerText(){
+    const source=els.messageInput.value,key=draftKey(),version=app.sessionVersion;
+    if(!source.trim())return toast('Écris ou dicte d’abord un message.','warning');
+    if(app.sendingMessage||app.composerRetry)return;
+    composer.open();rememberComposerDraft();
+    openModal({title:'Améliorer le message',body:'<p role="status">Préparation de la proposition… Votre texte et vos fichiers sont conservés.</p>',footer:'<button id="cancelWritingAI" class="secondary-button">Garder mon texte</button>'});
+    const marker=$('cancelWritingAI'),controller=new AbortController();marker.onclick=()=>{controller.abort();closeModal();};
+    try{const text=await JournalCRAI.improve(source,{signal:controller.signal,db:app.db,chantierId:app.currentId});
+      if(!marker.isConnected||key!==draftKey()||version!==app.sessionVersion)return;
+      els.modalBody.innerHTML=`<details><summary>Texte d’origine</summary><p style="white-space:pre-wrap">${escapeHtml(source)}</p></details><label class="form-field">Proposition à relire et modifier<textarea id="writingAIProposal" rows="10" maxlength="8000">${escapeHtml(text)}</textarea></label>`;
+      els.modalFoot.insertAdjacentHTML('beforeend','<button id="applyWritingAI" class="primary-button">Appliquer la proposition</button>');
+      $('applyWritingAI').onclick=()=>{if(key!==draftKey()||version!==app.sessionVersion)return closeModal(true);if(els.messageInput.value!==source)return toast('Votre texte a changé. Conservez-le ou relancez une nouvelle proposition.','warning');els.messageInput.value=$('writingAIProposal').value;els.messageInput.dispatchEvent(new Event('input',{bubbles:true}));rememberComposerDraft();closeModal();};
+    }catch(error){if(marker.isConnected)els.modalBody.textContent=error.message+' Votre texte reste conservé.';}
   }
   function setComposerToolTray(open) {
     const visible = Boolean(open);
@@ -2528,12 +2543,7 @@
       }
     } catch (error) { toast(`Réaction indisponible : ${friendlyError(error)}`, "warning"); }
   }
-  function openReactionPicker(message) {
-    const emojis = ["👍", "✅", "⚠️", "📌", "👀", "👏", "🚧", "❗"];
-    openModal({ title: "Réagir au message", subtitle: "La réaction est visible par les membres du chantier.", body: `<div class="emoji-picker">${emojis.map(emoji => `<button data-reaction-emoji="${emoji}" aria-label="Réagir ${emoji}">${emoji}</button>`).join("")}</div>`, footer: `<button class="secondary-button" id="closeReactionPicker">Fermer</button>` });
-    $("closeReactionPicker").addEventListener("click", closeModal);
-    $$('[data-reaction-emoji]', els.modalBody).forEach(button => button.addEventListener("click", async () => { closeModal(); await toggleReaction(message, button.dataset.reactionEmoji); }));
-  }
+  function openReactionPicker(message){const identity=ownId(),site=app.currentId;void JournalEmoji.open({title:'Réagir au message',onSelect:emoji=>{if(ownId()===identity&&app.currentId===site)void toggleReaction(message,emoji);}});}
   async function toggleImportant(message) {
     try {
       const value = !message.is_important;
@@ -3390,7 +3400,7 @@
     const confirmationWord = deleting ? "SUPPRIMER" : resettingActions ? "ACTIONS" : "RÉINITIALISER";
     const title = deleting ? "Supprimer définitivement le chantier" : resettingActions ? "Réinitialiser les actions du chantier" : "Réinitialiser le fil du chantier";
     const consequences = deleting
-      ? "Cette opération efface le chantier, tous ses membres, messages, photos, documents et actions. Elle est définitive."
+      ? "Cette opération efface le chantier, tous ses membres, messages, photos, documents, actions, productions et CR off. Elle est définitive."
       : resettingActions
         ? "Cette opération supprime toutes les actions de ce chantier, y compris les actions terminées, les responsables, échéances et preuves de clôture. Les messages, photos, documents et journaux quotidiens restent inchangés."
         : "Cette opération efface tous les messages, photos, documents, réactions et accusés de lecture. Le chantier et ses actions restent en place ; les éventuelles preuves liées aux messages sont retirées.";
@@ -3423,7 +3433,7 @@
           await removeOwnerChantierFiles(paths);
         }
         result.textContent = deleting ? "Suppression du chantier…" : resettingActions ? "Réinitialisation des actions…" : "Réinitialisation du fil…";
-        const rpc = deleting ? "delete_journal_chantier" : resettingActions ? "reset_journal_chantier_actions" : "reset_journal_chantier_feed";
+        const rpc = deleting ? "journal_delete_site_v156" : resettingActions ? "reset_journal_chantier_actions" : "reset_journal_chantier_feed";
         const { error } = await app.db.rpc(rpc, { p_chantier_id: chantier.id });
         if (error) throw error;
         closeModal(true);
@@ -3971,6 +3981,7 @@
       const [removed] = app.pendingFiles.splice(Number(element.dataset.index), 1);
       if (removed?.preview_url) URL.revokeObjectURL(removed.preview_url);
       renderPendingFiles();
+      rememberComposerDraft();
     } else if (action === "annotate-pending") {
       openImageAnnotationDialog(element.dataset.index);
     } else if (action === "cancel-reply") {
@@ -4114,7 +4125,7 @@
       els.messageInput.style.height = `${Math.min(els.messageInput.scrollHeight, 108)}px`;
     });
     els.messageInput.addEventListener("keydown", event => {
-      if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); sendComposerMessage(); }
+      if (event.key === "Enter") event.stopPropagation(); // Native newline, including IME; never publish.
     });
     [els.messageFeed, els.attachmentPreview, els.replyPreview, els.documentBreadcrumb, els.documentFolderGrid, els.documentFileGrid, els.actionBoard, els.pinnedMessages, els.pilotageAlerts, els.dailyLogList, els.riskList, els.portalAppsGrid, els.modalBody].forEach(target => target.addEventListener("click", handleDynamicClick));
     // Si une URL signée arrive en fin de vie, on ne remonte pas tout le fil :
@@ -4187,13 +4198,14 @@
   async function initialize() {
     wireEvents();
     const callbackError = takeAuthCallbackError();
-    if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("./service-worker-v13.js?v=15.5").catch(error => console.warn("Service worker", error));
+    if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("./service-worker-v13.js?v=15.6").catch(error => console.warn("Service worker", error));
     syncFromLocal();
     if (cloudConfigured()) {
       try { await initializeCloud(); }
       catch (error) { console.error(error); syncFromLocal(); toast(`Connexion collaborative indisponible : ${friendlyError(error)}`, "warning"); }
     }
     renderAll();
+    restoreComposerDraft();
     if (callbackError) toast(callbackError, "warning");
     if (app.currentId && !new URL(location.href).searchParams.has("message")) setTimeout(scrollMessagesToBottom, 50);
   }

@@ -1,17 +1,18 @@
-const CACHE_NAME = 'journal-chantier-connecte-v15.5';
+const CACHE_NAME = 'journal-chantier-connecte-v15.6';
 const APP_SHELL = [
+  './journal-composer.js?v=15.6', './journal-emoji.js?v=15.6', './data/emojis.json', './journal-v156.css?v=15.6',
   './journal-pdf.js?v=15.5', './journal-v155.css?v=15.5',
   './vendor/pdfjs/standard_fonts/LiberationSans-Regular.ttf', './vendor/pdfjs/standard_fonts/LiberationSans-Bold.ttf',
   './vendor/pdfjs/pdf.min.mjs', './vendor/pdfjs/pdf.worker.min.mjs',
   './journal-v154.css?v=15.4', './journal-dialogs.js?v=15.4', './journal-feed.js?v=15.4', './journal-production.js?v=15.4', './journal-export.js?v=15.5', './supabase/functions/_shared/cr-email.mjs?v=15.4',
   './journal-v153.css?v=15.3',
-  './cr-off.js?v=15.5', './cr-ai.js?v=15.2', './cr-off.css?v=15.3',
+  './cr-off.js?v=15.6', './cr-ai.js?v=15.6', './cr-off.css?v=15.3',
   './briefing-integration.js?v=15.4', './briefing/index.html', './briefing/journal-bridge.js',
   './briefing/vendor/html2canvas.min.js', './briefing/vendor/jspdf.umd.min.js',
   './feedback.js?v=15.4', './feedback.css?v=15.3',
   './', './index.html', './styles-v13.css?v=14.7-pdf',
   './styles-v14.3.css?v=14.3-design', './mode-chantier.css?v=14.4-mode-chantier',
-  './mode-chantier.js?v=15.0', './app-v13.js?v=15.5',
+  './mode-chantier.js?v=15.0', './app-v13.js?v=15.6',
   './supabase.js?v=14.2-collaborateurs', './config.js?v=14.2-collaborateurs',
   './manifest.webmanifest', './journal-chantier-logo-v14.png'
 ];
