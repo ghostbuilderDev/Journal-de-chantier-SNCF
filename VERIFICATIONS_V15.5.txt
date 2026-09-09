@@ -1,0 +1,19 @@
+V15.5 — contrôles de livraison
+
+OK — Rôles serveur : propriétaire et administrateurs des chantiers ; contributeurs et lecteurs exclus du CR complet.
+OK — Demandes privées : un seul destinataire, brouillon serveur séparé, confirmation d’envoi, fermeture définitive, nouvelle demande pour correction.
+OK — Envoi réessayé après réponse perdue : pas de double saisie.
+OK — Responsable lecteur explicitement désigné : accès limité au formulaire attribué.
+OK — Suppression récupérable, restauration, conservation des versions validées.
+OK — Production seule reconnue dans la liste des nuits et synchronisée avec le CR.
+OK — Texte libre de production ; lignes et pourcentages conservés.
+OK — Formulaires en tableaux, dates visibles, voie ITC, préparation sans heures prévues.
+OK — PDF réel de CR et journal ; police embarquée ; extraction des textes et 20 photos dans un journal de 220 événements.
+OK — Prévisualisation des vrais octets PDF et appel du partage de fichier depuis un clic utilisateur (interface de partage simulée en test).
+OK — Écrans Chromium 320 px, 390 px et 800 px ; contrôle visuel des PDF et captures d’interface.
+OK — Transaction identique à celle de l’installateur : retour arrière du schéma et du registre en cas d’erreur.
+OK — Installateur : intégrité des fichiers de départ, conservation des modifications inconnues, phases serveur puis interface.
+
+Les PDF de test contiennent des données fictives.
+Aucun email réel envoyé. Aucun changement appliqué au serveur de production par ces tests.
+Partage natif Android et imprimante physique : à vérifier sur les appareils après installation.

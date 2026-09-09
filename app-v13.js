@@ -3835,7 +3835,7 @@
     openModal({
       title: "Créer le carnet PDF",
       subtitle: "Une édition structurée du chantier, prête à archiver ou à transmettre.",
-      body: `<div class="export-book-preview"><span>${iconSvg("journal-book")}</span><div><b>Un véritable carnet de chantier</b><p>Couverture, repères chiffrés, registre documentaire, photos et chronologie sont mis en page automatiquement.</p></div></div><form id="exportForm" class="form-grid"><p class="form-note span-2">Le carnet contient <b>toute la discussion du chantier</b> et la liste des documents classés. À l’étape suivante, sélectionne « Enregistrer au format PDF » dans l’écran d’impression du téléphone ou du navigateur.</p><label class="form-field">Du<input name="from" type="date"></label><label class="form-field">Au<input name="to" type="date"></label><label class="form-field span-2">Contenu<select name="scope"><option value="all">Tous les messages</option><option value="important">Messages importants uniquement</option></select></label><label class="form-field span-2">Photos<select name="photos"><option value="included">Photos optimisées pour le PDF</option><option value="none">Texte et liste des pièces jointes seulement</option></select></label><label class="form-field span-2"><span><input name="include_pilotage" type="checkbox" checked> Ajouter les indicateurs de pilotage dans le carnet</span></label></form>`,
+      body: `<div class="export-book-preview"><span>${iconSvg("journal-book")}</span><div><b>Un véritable carnet de chantier</b><p>Couverture, repères chiffrés, registre documentaire, photos et chronologie sont mis en page automatiquement.</p></div></div><form id="exportForm" class="form-grid"><p class="form-note span-2">Le carnet contient <b>toute la discussion du chantier</b> et la liste des documents classés. Le PDF sera affiché dans l’application. Tu pourras ensuite le télécharger ou l’ouvrir pour l’imprimer.</p><label class="form-field">Du<input name="from" type="date"></label><label class="form-field">Au<input name="to" type="date"></label><label class="form-field span-2">Contenu<select name="scope"><option value="all">Tous les messages</option><option value="important">Messages importants uniquement</option></select></label><label class="form-field span-2">Photos<select name="photos"><option value="included">Photos optimisées pour le PDF</option><option value="none">Texte et liste des pièces jointes seulement</option></select></label><label class="form-field span-2"><span><input name="include_pilotage" type="checkbox" checked> Ajouter les indicateurs de pilotage dans le carnet</span></label></form>`,
       footer: `<button class="secondary-button" id="cancelExport">Annuler</button><button class="primary-button" id="runExport">Créer le PDF</button>`
     });
     $("cancelExport").addEventListener("click", closeModal);
@@ -3847,7 +3847,15 @@
       const documents = (app.documents || []).filter(d=>String(d.chantier_id)===String(chantier.id)&&!d.deleted_at).map(d=>({...d,folderLabel:documentAncestors(documentFolderById(d.folder_id)).map(f=>f.name).join(" › ")}));
       const actions = activeActionsFor(site.id), open = actions.filter(a => a.status !== "terminee");
       const pilotage = `<h2>Suivi opérationnel</h2><p>${open.length} actions ouvertes · ${open.filter(actionIsLate).length} en retard · ${actions.filter(a => a.status === "terminee").length} terminées</p>`;
-      closeModal(); JournalExport.open({site,messages,documents,scope:values,pilotage});
+      const exportUser = app.user?.id, exportDb = app.db;
+      closeModal(); JournalExport.open({site,messages,documents,scope:values,pilotage,
+        valid:()=>app.user?.id===exportUser && app.db===exportDb,
+        resolvePhoto:async(file)=>{
+          if(app.user?.id!==exportUser || app.db!==exportDb) throw new Error("La session a changé.");
+          if(file.storage_path && exportDb){const {data,error}=await exportDb.storage.from(CONFIG.STORAGE_BUCKET || "chantier-files").createSignedUrl(file.storage_path,3600);if(error)throw error;return data.signedUrl;}
+          return file.full_signed_url||file.signed_url||file.data_url||file.url;
+        }
+      });
     });
   }
   function findAttachment(id) { return allCurrentAttachments().find(item => String(item.id) === String(id)) || null; }
@@ -4179,7 +4187,7 @@
   async function initialize() {
     wireEvents();
     const callbackError = takeAuthCallbackError();
-    if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("./service-worker-v13.js?v=15.3").catch(error => console.warn("Service worker", error));
+    if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("./service-worker-v13.js?v=15.5").catch(error => console.warn("Service worker", error));
     syncFromLocal();
     if (cloudConfigured()) {
       try { await initializeCloud(); }
