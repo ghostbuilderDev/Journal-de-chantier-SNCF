@@ -1,0 +1,68 @@
+name: Installer le Journal V15.4 - production et envoi CR
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/20260909000200_v15_4_production_email.sql'
+      - 'supabase/functions/journal-cr-send-v154/**'
+      - 'supabase/functions/_shared/cr-email.mjs'
+      - 'supabase/tests/cr-v154-*'
+      - 'scripts/deploy-v154-release.py'
+      - '.github/workflows/deploy-v154.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: supabase-production
+  cancel-in-progress: false
+jobs:
+  install:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: journal-ci-only
+          POSTGRES_DB: journal_v154_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d journal_v154_test"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Vérifier les tables et les droits sur PostgreSQL 17 jetable
+        shell: bash
+        run: |
+          set -euo pipefail
+          test_container="${{ job.services.postgres.id }}"
+          for file in supabase/tests/backend-fixture.sql supabase/tests/backend-production-shape.sql supabase/migrations/20260906000300_v14_2_contraintes_reelles.sql supabase/tests/feedback-backend-fixture.sql supabase/migrations/20260907000500_v14_5_retours_application.sql supabase/migrations/20260908000100_v15_cr_encadrement.sql supabase/migrations/20260908000200_v15_1_cr_perimetres.sql supabase/migrations/20260908000300_v15_2_cr_simple.sql supabase/migrations/20260909000100_v15_3_cr_tables.sql supabase/migrations/20260909000200_v15_4_production_email.sql supabase/migrations/20260909000200_v15_4_production_email.sql supabase/tests/cr-v154-postgres.sql; do
+            docker exec -i "$test_container" psql -U postgres -d journal_v154_test -v ON_ERROR_STOP=1 < "$file"
+          done
+      - name: Tester la conservation des données et les signalements
+        run: |
+          npm install --prefix /tmp/journal-v154-tests @electric-sql/pglite@0.5.8 --ignore-scripts --no-audit --no-fund
+          PGLITE_MODULE=/tmp/journal-v154-tests/node_modules/@electric-sql/pglite node supabase/tests/cr-v154-backend.cjs
+          PGLITE_MODULE=/tmp/journal-v154-tests/node_modules/@electric-sql/pglite node supabase/tests/cr-v154-retrofit.cjs
+          node --test supabase/tests/cr-v154-email.test.cjs
+          python3 tests/v154-installation.test.py
+      - name: Installer le client PostgreSQL
+        run: |
+          if ! command -v psql >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y postgresql-client
+          fi
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Appliquer V15.4 et contrôler les droits
+        env:
+          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: python3 scripts/deploy-v154-release.py
