@@ -1,4 +1,4 @@
-/* Améliorer l’application · V14.5. Independent feed; no push and no persistent drafts. */
+/* Améliorer l’application · V15.3. Independent feed; no push and no persistent drafts. */
 (function (root, factory) {
   const api = factory();
   if (typeof module === 'object' && module.exports) module.exports = api;
@@ -57,6 +57,7 @@
       if (!online()) return 'Vous êtes hors connexion. Votre brouillon reste disponible ici ; reconnectez-vous pour l’envoyer.';
       const message = String(err?.message || '');
       if (/modifi[ée].*Rechargez|avant de réessayer/i.test(message)) return 'Ce retour a été modifié par une autre personne. Revenez à sa fiche puis rouvrez la modification ; votre saisie actuelle reste affichée.';
+      if (['PGRST202','42883','PGRST205'].includes(String(err?.code))) return 'Le service des signalements n’est pas à jour. Votre brouillon est conservé ; terminez la mise à jour puis réessayez.';
       if (/not found|introuvable|supprim[ée]/i.test(message)) return 'Cette publication n’est plus disponible. Actualisez la liste.';
       if (/permission|accès|not allowed|forbidden|JWT/i.test(message)) return 'Vos droits ne permettent plus cette opération. Actualisez ou reconnectez-vous.';
       return /hors connexion|HTTPS|capture|image|caractères|publication|titre|description|réponse/i.test(message) && message.length < 260 ? message : fallback;
@@ -71,7 +72,7 @@
         const button = doc?.getElementById(name);
         if (!button) continue;
         button.hidden = !ctx().ready || !ctx().userId;
-        if (!bindings.has(button)) { button.addEventListener('click', () => void open()); bindings.add(button); }
+        if (!bindings.has(button)) { button.addEventListener('click', () => { void open().catch(err => toast(friendly(err), 'error')); }); bindings.add(button); }
       }
     }
     function clear() {
@@ -92,10 +93,10 @@
       if (dialog || !doc?.createElement) return;
       dialog = doc.createElement('dialog'); dialog.id = 'feedbackDialog'; dialog.className = 'feedback-dialog';
       dialog.setAttribute('aria-labelledby', 'feedbackTitle');
-      dialog.innerHTML = `<div class="feedback-shell"><header class="feedback-header"><div><span class="feedback-eyebrow">ESPACE COMMUN</span><h1 id="feedbackTitle">Améliorer l’application</h1></div><button type="button" class="feedback-close" data-feedback-action="close" aria-label="Fermer l’espace améliorations">Fermer <span aria-hidden="true">×</span></button></header><p class="feedback-intro">Un problème ou une idée par publication. Cet espace est commun à tous les utilisateurs.</p><div class="feedback-offline" id="feedbackOffline" role="status" hidden>Hors connexion. L’envoi sera possible une fois la connexion rétablie.</div><p class="feedback-notice" id="feedbackNotice" role="alert" hidden></p><button type="button" id="feedbackFresh" class="feedback-fresh" data-feedback-action="refresh" hidden>Nouveaux retours — actualiser</button><main class="feedback-content" id="feedbackContent"></main></div>`;
+      dialog.innerHTML = `<div class="feedback-shell"><header class="feedback-header"><div><span class="feedback-eyebrow">ESPACE COMMUN</span><h1 id="feedbackTitle">Améliorer l’application</h1></div><button type="button" class="feedback-close" data-feedback-action="close" aria-label="Fermer l’espace améliorations">Fermer <span aria-hidden="true">×</span></button></header><p class="feedback-intro">Un problème ou une idée par publication. Cet espace est commun à tous les utilisateurs.</p><div class="feedback-offline" id="feedbackOffline" role="status" hidden>Hors connexion. L’envoi sera possible une fois la connexion rétablie.</div><p class="feedback-notice" id="feedbackNotice" role="alert" hidden></p><button type="button" id="feedbackFresh" class="feedback-fresh" data-feedback-action="refresh" hidden>Nouveaux retours — actualiser</button><main class="feedback-content" id="feedbackContent"></main><footer class="feedback-entry-footer" id="feedbackEntryFooter"><button type="button" class="feedback-primary" data-feedback-action="compose">＋ Signaler un problème / proposer une idée</button></footer></div>`;
       doc.body.appendChild(dialog);
       content = doc.getElementById('feedbackContent'); notice = doc.getElementById('feedbackNotice'); freshButton = doc.getElementById('feedbackFresh');
-      dialog.addEventListener('click', event => { const button = event.target.closest?.('[data-feedback-action]'); if (button && !button.disabled) void action(button.dataset.feedbackAction, button.dataset.id, button); });
+      dialog.addEventListener('click', event => { const button = event.target.closest?.('[data-feedback-action]'); if (button && !button.disabled) void action(button.dataset.feedbackAction, button.dataset.id, button).catch(err => setError(friendly(err))); });
       dialog.addEventListener('submit', event => { event.preventDefault(); if (event.target.id === 'feedbackCompose') void submit(); else if (event.target.id === 'feedbackReplyForm') void sendReply(); else if (event.target.id === 'feedbackEditForm') void saveThread(); else if (event.target.id === 'feedbackEditReplyForm') void saveReply(editDraft?.id, editDraft?.body); });
       dialog.addEventListener('input', event => {
         const target = event.target;
@@ -124,8 +125,11 @@
       if (!owner) { toast('Connectez-vous pour accéder aux améliorations de l’application.'); return false; }
       if (opened) return true;
       ensureDialog(); returnFocus = doc?.activeElement; opened = true; view = 'list'; error = ''; newContent = false;
-      adapter.onVisibilityChange?.();
-      if (dialog) { if (typeof dialog.showModal === 'function') dialog.showModal(); else { dialog.setAttribute('open', ''); dialog.setAttribute('role', 'dialog'); dialog.setAttribute('aria-modal', 'true'); } }
+      try { adapter.onVisibilityChange?.(); } catch { /* Presence cannot block this independent form. */ }
+      try {
+        adapter.beforeOpen?.();
+        if (dialog) { if (typeof dialog.showModal === 'function') dialog.showModal(); else { dialog.setAttribute('open', ''); dialog.setAttribute('role', 'dialog'); dialog.setAttribute('aria-modal', 'true'); } }
+      } catch (err) { opened = false; throw err; }
       try { historyToken = id(); win?.history?.pushState?.({ ...(win.history.state || {}), journalFeedback: historyToken }, ''); } catch { historyToken = null; }
       startPolling(); render();
       const ticket = epoch;
@@ -141,7 +145,7 @@
     function close(fromHistory = false) {
       if (!opened) return;
       opened = false; stopPolling(); ++listSerial; ++detailSerial; loading = false; checking = false;
-      adapter.onVisibilityChange?.();
+      try { adapter.onVisibilityChange?.(); } catch { /* Presence cannot block this independent form. */ }
       if (dialog) { if (typeof dialog.close === 'function') dialog.close(); else dialog.removeAttribute('open'); }
       if (!fromHistory && historyToken && win?.history?.state?.journalFeedback === historyToken) win.history.back?.();
       historyToken = null;
@@ -254,7 +258,7 @@
       if (!body.trim() || body.trim().length > 4000) throw new Error('Décrivez votre retour en 1 à 4 000 caractères.');
       if (!CATEGORIES[category]) throw new Error('Choisissez le type de votre publication.');
     }
-    function definite(err) { return Boolean(err?.code && /^(?:P0001|22\w{3}|23\w{3}|42501)$/.test(String(err.code))); }
+    function definite(err) { return Boolean(err?.code && /^(?:P0001|22\w{3}|23\w{3}|42501|PGRST202|PGRST205|42883)$/.test(String(err.code))); }
     async function submit() {
       if (busy || !valid(epoch)) return;
       const ticket = epoch, thisDraft = draft, userId = owner, db = ctx().db, serial = detailSerial; busy = true; setError(''); renderBusy();
@@ -373,11 +377,14 @@
     function options(values, selected, all = '') { return `${all ? `<option value="">${escape(all)}</option>` : ''}${Object.entries(values).map(([value, label]) => `<option value="${value}"${value === selected ? ' selected' : ''}>${escape(label)}</option>`).join('')}`; }
     function navBack(label = 'Tous les retours') { return `<button type="button" class="feedback-back" data-feedback-action="back"><span aria-hidden="true">←</span> ${label}</button>`; }
     function render() { if (!opened || !content) return; offlineNotice(); renderNotice(); renderFresh(); if (view === 'list') renderList(); else if (view === 'compose') renderCompose(); else if (view === 'detail') renderDetail(); else renderEdit(); }
+    function renderEntry() { const footer = doc?.getElementById('feedbackEntryFooter'); if (footer) footer.hidden = view !== 'list'; }
     function renderList() {
+      renderEntry();
       if (!opened || !content || view !== 'list') return;
       content.innerHTML = `<div class="feedback-toolbar"><div><h2>Les retours de l’équipe</h2><p>Pour améliorer l’outil, ensemble.</p></div><button type="button" class="feedback-primary" data-feedback-action="compose">Partager un retour</button></div><div class="feedback-filters"><label>Type<select data-filter="category" aria-label="Filtrer par type">${options(CATEGORIES, filters.category, 'Tous les types')}</select></label><label>Suivi<select data-filter="status" aria-label="Filtrer par statut">${options(STATUSES, filters.status, 'Tous les statuts')}</select></label><button type="button" class="feedback-secondary" data-feedback-action="refresh"${loading ? ' disabled' : ''}>${loading ? 'Chargement…' : 'Actualiser'}</button></div><div class="feedback-list">${list.map(item => `<button type="button" class="feedback-card" data-feedback-action="open" data-id="${escape(item.id)}"><div class="feedback-card-meta"><span class="feedback-category feedback-category-${item.category === 'bug' ? 'bug' : 'improvement'}">${escape(CATEGORIES[item.category] || 'Retour')}</span><span class="feedback-status feedback-status-${Object.hasOwn(STATUSES, item.status) ? item.status : 'new'}">${escape(STATUSES[item.status] || 'À étudier')}</span></div><h3>${escape(item.title)}</h3><p>${escape(item.body)}</p><div class="feedback-card-footer"><span>${escape(item.author_name || 'Collaborateur')} · ${escape(date(item.created_at))}</span><span>${Number(item.reply_count) || 0} réponse${Number(item.reply_count) === 1 ? '' : 's'}${item.image_path ? ' · Capture jointe' : ''}</span></div></button>`).join('') || `<div class="feedback-empty"><span class="feedback-empty-mark" aria-hidden="true">+</span><h3>${loading ? 'Chargement des retours…' : 'Votre expérience fait avancer l’application'}</h3><p>${loading ? 'Le fil commun se prépare.' : 'Signalez un problème rencontré ou proposez une amélioration utile sur le terrain.'}</p>${loading ? '' : '<button type="button" class="feedback-secondary" data-feedback-action="compose">Écrire le premier retour</button>'}</div>`}</div>${cursor ? `<button type="button" class="feedback-more" data-feedback-action="more"${loading ? ' disabled' : ''}>${loading ? 'Chargement…' : 'Afficher les retours précédents'}</button>` : ''}`;
     }
     function renderCompose() {
+      renderEntry();
       if (!content) return;
       content.innerHTML = `${navBack()}<div class="feedback-form-heading"><h2>Partager un retour</h2><p>Indiquez ce qui s’est passé, ou ce qui vous aiderait.</p></div><form id="feedbackCompose" class="feedback-form"><label>Type de retour<select data-draft="category">${options(CATEGORIES, draft.category)}</select></label><label>Un titre clair<input id="feedbackDraftTitle" data-draft="title" value="${escape(draft.title)}" maxlength="100" required placeholder="Ex. La photo ne s’affiche pas après l’envoi"></label><label>Description<textarea data-draft="body" rows="6" maxlength="4000" required placeholder="Décrivez les étapes, le résultat obtenu et ce que vous attendiez.">${escape(draft.body)}</textarea><small>4 000 caractères maximum. Évitez les informations confidentielles du chantier.</small></label><div class="feedback-upload"><label for="feedbackFile">Capture d’écran <span>facultative</span></label><input id="feedbackFile" type="file" accept="image/jpeg,image/png,image/webp"><small>JPEG, PNG ou WebP · 5 Mo maximum · une image</small><div id="feedbackFilePreview"></div></div><p class="feedback-pending" id="feedbackPending" hidden>Envoi non confirmé. Réessayez avec ce même retour pour éviter un doublon.</p><div class="feedback-form-actions"><span>Visible par tous les utilisateurs de l’application.</span><button type="submit" class="feedback-primary" id="feedbackSubmit">Publier mon retour</button></div></form>`;
       renderFile(); renderBusy();
@@ -387,6 +394,7 @@
       host.innerHTML = draft.file ? `${preview ? `<img class="feedback-upload-preview" src="${escape(preview)}" alt="Aperçu de votre capture">` : ''}<div class="feedback-file-name"><span>${escape(draft.file.name || 'Capture d’écran')}</span><button type="button" class="feedback-text-button" data-feedback-action="remove-file"${busy || draft.pending ? ' disabled' : ''}>Retirer</button></div>` : '';
     }
     function renderDetail() {
+      renderEntry();
       if (!content || !opened || view !== 'detail') return;
       if (!thread) { content.innerHTML = `${navBack()}<p class="feedback-empty">${loading ? 'Chargement de la publication…' : 'La publication n’est plus disponible.'}</p>`; return; }
       const item = thread;
@@ -404,6 +412,7 @@
       host.innerHTML = `${replyCursor ? '<button type="button" class="feedback-more" data-feedback-action="older-replies">Afficher les réponses précédentes</button>' : ''}${replies.map(reply => `<article class="feedback-reply"><div class="feedback-reply-meta"><strong>${escape(reply.author_name || 'Collaborateur')}</strong><time>${escape(date(reply.created_at))}${reply.created_at !== reply.updated_at ? ' · modifiée' : ''}</time></div><div class="feedback-body">${escape(reply.body)}</div><div class="feedback-thread-actions">${reply.can_edit ? `<button type="button" class="feedback-text-button" data-feedback-action="edit-reply" data-id="${escape(reply.id)}">Modifier</button>` : ''}${reply.can_delete ? `<button type="button" class="feedback-text-button feedback-danger" data-feedback-action="delete-reply" data-id="${escape(reply.id)}">Supprimer</button>` : ''}</div></article>`).join('') || '<p class="feedback-no-replies">Une précision à apporter ? Lancez la discussion.</p>'}`;
     }
     function renderEdit() {
+      renderEntry();
       if (!content || !editDraft) return;
       const reply = editDraft.kind === 'reply';
       content.innerHTML = `${navBack('Revenir à la publication')}<div class="feedback-form-heading"><h2>${reply ? 'Modifier votre réponse' : 'Modifier votre retour'}</h2></div><form id="${reply ? 'feedbackEditReplyForm' : 'feedbackEditForm'}" class="feedback-form">${reply ? '' : `<label>Type<select data-edit="category">${options(CATEGORIES, editDraft.category)}</select></label><label>Titre<input data-edit="title" value="${escape(editDraft.title)}" maxlength="100" required></label>`}<label>${reply ? 'Réponse' : 'Description'}<textarea data-edit="body" rows="7" maxlength="${reply ? '2000' : '4000'}" required>${escape(editDraft.body)}</textarea></label>${!reply && thread?.image_path ? '<p class="feedback-help">La capture jointe est conservée.</p>' : ''}<div class="feedback-form-actions"><button type="button" class="feedback-secondary" data-feedback-action="back">Annuler</button><button type="submit" class="feedback-primary" id="feedbackSave">Enregistrer</button></div></form>`;

@@ -1,4 +1,4 @@
-/* Journal de chantier V15.2 — horaires par périmètre et diffusion à vérifier. */
+/* Journal de chantier V15.3 — horaires par périmètre et diffusion à vérifier. */
 (function(root){
  'use strict';
  const LABELS={catenaire:'Consignation caténaire',itc:'ITC · Interceptions',arf:'ARF · RSO',technique:'Production réalisée',securite:'Sécurité · tops et flops',synthese:'Synthèse finale'};
@@ -17,6 +17,8 @@
   if(!valid.includes(chosen))throw new Error('Le décalage été/hiver ne correspond pas à cette date.');
   return new Date(local+chosen).toISOString();
  }
+ function normalClock(value){const raw=String(value||'').trim();let m=raw.match(/^(\d{1,2}):(\d{2})$/)||raw.match(/^(\d{2})(\d{2})$/);return m&&Number(m[1])<24&&Number(m[2])<60?m[1].padStart(2,'0')+':'+m[2]:null;}
+ function splitReference(label='',key='catenaire'){const text=String(label||'').trim();const m=text.match(key==='itc'?/^ZEP\s+(.+)$/i:/^(SEL|Secteur)\s+(.+)$/i);if(key==='itc')return {type:'ZEP',reference:m?m[1]:text};return m?{type:m[1].toLowerCase()==='sel'?'SEL':'Secteur',reference:m[2]}:{type:text?'':'SEL',reference:text};}
  function legacyEmailText(reports){
   return 'CR ENCADREMENT — diffusion restreinte\n\n'+reports.map(r=>`${r.chantier} · nuit du ${date(r.night)} · v${r.revision}\n`+Object.keys(LABELS).map(k=>{
    const s=r.sections.find(x=>x.key===k);if(!s)return '';
@@ -34,6 +36,7 @@
     if(key==='technique')lines.push(s.value.body||s.value.digest||(s.notes||[]).map(n=>n.body).join('\n'));
     else if(key==='securite')lines.push((s.notes||[]).map(n=>` • ${n.category.toUpperCase()} — ${n.body} (${n.author_name})`).join('\n')||s.value.digest||'');
     else if(s.value.mode==='perimeters')lines.push((s.items||[]).filter(t=>t.active).map(t=>` • ${t.label}\n   Prévu : ${time(t.planned_start)||'—'} → ${time(t.planned_end)||'—'}\n   Réel : ${t.status==='non_concerne'?'Non pris':`${time(t.actual_start)||'—'} → ${time(t.actual_end)||'—'}`}${t.comment?'\n   Commentaire : '+t.comment:''}`).join('\n'));
+    else if(key==='arf'&&Object.hasOwn(s.value,'planned_start'))lines.push(` • ARF\n   Prévu : ${time(s.value.planned_start)||'—'} → ${time(s.value.planned_end)||'—'}\n   Réel : ${time(s.value.start)||'—'} → ${time(s.value.end)||'—'}${s.value.precision?'\n   Commentaire : '+s.value.precision:''}`);
     else lines.push(`Début : ${time(s.value.start)||'—'} · Fin : ${time(s.value.end)||'—'}${s.value.precision?'\n'+s.value.precision:''}`);
    }
    return lines.join('\n')+'\n\nHoraires en heure de Paris.';
@@ -57,7 +60,7 @@
    if(dialog)return;
    dialog=document.createElement('dialog');dialog.id='crOffDialog';dialog.className='cr-dialog';
    dialog.setAttribute('aria-labelledby','crTitle');
-   dialog.innerHTML='<header class="cr-head"><div><small>JOURNAL DE CHANTIER · V15.2</small><h2 id="crTitle">CR encadrement</h2></div><button type="button" id="crClose" class="secondary-button" aria-label="Fermer les CR">Fermer ×</button></header><div id="crNotice" role="status" aria-live="polite"></div><main id="crBody"></main><footer id="crFoot"></footer>';
+   dialog.innerHTML='<header class="cr-head"><div><small>JOURNAL DE CHANTIER · V15.3</small><h2 id="crTitle">CR encadrement</h2></div><button type="button" id="crClose" class="secondary-button" aria-label="Fermer les CR">Fermer ×</button></header><div id="crNotice" role="status" aria-live="polite"></div><main id="crBody"></main><footer id="crFoot"></footer>';
    document.body.append(dialog);$('crClose').onclick=close;
    dialog.addEventListener('cancel',e=>{e.preventDefault();close();});
    dialog.addEventListener('input',e=>{if(e.target.matches('[data-cr-search]')){filterCatalog();return;}if(e.target.closest('[data-cr-edit]')){e.target.dataset.crDirty='1';dirty=true;const el=$('crSaveState');if(el)el.textContent='Modifications non enregistrées';}});
@@ -103,15 +106,15 @@
   function sectionMarkup(s,r){
    const timing=['catenaire','itc','arf'].includes(s.key),items=(s.items||[]).filter(t=>t.active),complete=['complete','non_concerne'].includes(s.status);
    const text=s.key==='technique'?productionText(s):s.key==='securite'?(s.notes||[]).map(n=>n.body).join(' · '):s.key==='arf'?`${shortTime(s.value.start)} → ${shortTime(s.value.end)}`:`${items.length} ${s.key==='itc'?'ZEP':'secteurs / SEL'} · ${items.filter(t=>['complete','non_concerne'].includes(t.status)).length} renseignés`;
-   return `<tr id="crSection-${s.key}" class="${complete?'is-complete':''}"><td><button class="cr-row-open" data-cr="edit-section" data-key="${s.key}"><b>${LABELS[s.key]}</b><small>${esc(timing?(s.responsible_name||'Responsable à désigner'):text.slice(0,100)||'À compléter')}</small></button></td><td><span class="cr-status">${STATUS[s.status]}</span>${timing?`<small class="cr-block">${esc(text)}</small>`:''}</td><td>${button('edit-section','Ouvrir',`data-key="${s.key}"`)}</td></tr>`;
+   return `<tr id="crSection-${s.key}" class="${complete?'is-complete':''}"><td><button class="cr-row-open" data-cr="edit-section" data-key="${s.key}"><span class="cr-rubric-icon" aria-hidden="true">${{catenaire:'ϟ',itc:'⇄',arf:'✓',technique:'▤',securite:'◇'}[s.key]}</span><span><b>${LABELS[s.key]}</b><small>${esc(timing?(s.responsible_name||'À attribuer'):text.slice(0,95)||'À compléter')}</small></span></button></td><td><span class="cr-status">${complete?'✓ ':''}${STATUS[s.status]}</span>${timing&&s.key!=='arf'?`<small class="cr-block">${items.filter(t=>['complete','non_concerne'].includes(t.status)).length} / ${items.length} renseignés</small>`:''}</td><td>${button('edit-section','›',`data-key="${s.key}" aria-label="Ouvrir ${esc(LABELS[s.key])}"`)}</td></tr>`;
   }
   async function openReport(id,focus){const detail=await rpc('detail',{id});const meta=detail.manager?await rpc('catalog',{chantier_id:detail.chantier_id}):{catalog:[],contacts:[]};current=detail;catalog=meta.catalog;contacts=meta.contacts;renderReport(focus);}
   function renderReport(focus){
    const r=current;mode='report';dirty=false;const site=ctx().chantiers.find(c=>c.id===r.chantier_id);$('crTitle').textContent=site?.name||'CR encadrement';
-   $('crBody').innerHTML=`<div class="cr-tools">${button('back','‹ Tous les CR')}${button('refresh-report','Actualiser')}<span class="cr-state">${STATES[r.state]} · v${r.revision}</span></div><p class="cr-intro">Nuit du ${date(r.night)} · <b>Diffusion restreinte</b><br><small>Horaires en heure de Paris. ${r.full_access?'Vous consultez le CR complet.':'Seules vos rubriques autorisées sont visibles.'}</small></p><p id="crSaveState" class="cr-muted" aria-live="polite">Saisies enregistrées dans le journal</p>
-   <table class="cr-overview"><caption class="cr-sr">Rubriques du CR</caption><tbody>${Object.keys(LABELS).filter(k=>k!=='synthese').map(k=>r.sections.find(s=>s.key===k)).filter(Boolean).map(s=>sectionMarkup(s,r)).join('')}</tbody></table>
+   $('crBody').innerHTML=`<div class="cr-tools">${button('back','‹ Tous les CR')}${button('refresh-report','Actualiser')}<span class="cr-state">${STATES[r.state]} · v${r.revision}</span></div><p class="cr-intro">Nuit du ${date(r.night)} · <b>Diffusion restreinte</b><br><small>${r.full_access?'CR privé · à relire avant envoi':'Vos rubriques et contributions'}</small></p><p id="crSaveState" class="cr-muted cr-save-status" aria-live="polite">✓ Saisies enregistrées</p>
+   <table class="cr-overview"><caption class="cr-sr">Rubriques du CR</caption><colgroup><col style="width:62%"><col style="width:28%"><col style="width:10%"></colgroup><tbody>${Object.keys(LABELS).filter(k=>k!=='synthese').map(k=>r.sections.find(s=>s.key===k)).filter(Boolean).map(s=>sectionMarkup(s,r)).join('')}</tbody></table>
    ${r.manager?`<details class="cr-section" id="crAudience"><summary><b>Accès au CR et destinataires</b><span>${r.recipients.length} destinataire(s)</span></summary><div class="cr-section-content"><form id="crAudienceForm" data-cr-edit><fieldset ${r.state!=='draft'?'disabled':''}>${r.state==='draft'?contactSuggestions():''}<label class="form-field">Emails des destinataires<textarea name="recipients" rows="3" placeholder="Une adresse par ligne">${esc(r.recipients.join('\n'))}</textarea></label><p class="cr-muted">Seuls ces destinataires recevront la copie validée. Vérifier leur liste avant l’envoi.</p><details><summary>Collaborateurs autorisés à compléter l’ensemble du CR</summary>${peopleChecks(r.people,r.collaborators,'collaborators')}</details>${r.state==='draft'?button('audience','Enregistrer les accès et destinataires'):''}</fieldset></form></div></details>`:''}
-   <details class="cr-section"><summary>Historique des saisies et des versions</summary><div class="cr-section-content">${r.history.map(h=>`<p><b>${esc(h.actor_name)}</b> · ${esc({creation:'Création',attribution:'Attribution',saisie:'Saisie',contribution:'Contribution',validation:'Validation',diffusion:'Accès et destinataires',relance:'Relance',rectificatif:'Rectificatif',perimetres:'Sélection des périmètres',timing_save:'Horaires saisis',timing_plan:'Horaires prévus',timing_assign:'Attribution d’un périmètre'}[h.action]||h.action)}${h.section_key?' · '+LABELS[h.section_key]:''}<small class="cr-block">${time(h.created_at)}${h.detail?.after?.label?' · '+esc(h.detail.after.label):''}${h.detail?.reason?' · '+esc(h.detail.reason):''}</small></p>`).join('')}
+   <details class="cr-section"><summary>Historique des saisies et des versions</summary><div class="cr-section-content">${r.history.map(h=>`<p><b>${esc(h.actor_name)}</b> · ${esc({tableau:'Références et prévu',production:'Production renseignée',arf:'Horaires ARF',prevu_arf:'Prévu ARF',creation:'Création',attribution:'Attribution',saisie:'Saisie',contribution:'Contribution',validation:'Validation',diffusion:'Accès et destinataires',relance:'Relance',rectificatif:'Rectificatif',perimetres:'Sélection des périmètres',timing_save:'Horaires saisis',timing_plan:'Horaires prévus',timing_assign:'Attribution d’un périmètre'}[h.action]||h.action)}${h.section_key?' · '+LABELS[h.section_key]:''}<small class="cr-block">${time(h.created_at)}${h.detail?.after?.label?' · '+esc(h.detail.after.label):''}${h.detail?.reason?' · '+esc(h.detail.reason):''}</small></p>`).join('')}
    ${(r.snapshots||[]).map(s=>`<details><summary>Version ${s.revision} validée par ${esc(s.validated_name)} · ${time(s.validated_at)}</summary><pre class="cr-preview">${esc(emailText([s.data]))}</pre></details>`).join('')}
    ${(r.deliveries||[]).map(d=>`<p>Envoi ${esc({pending:'préparé',sent:'accepté par le service email',failed:'en échec',uncertain:'à vérifier'}[d.state])} · ${time(d.sent_at||d.created_at)}</p>`).join('')}</div></details>`;
    $('crFoot').innerHTML=r.manager?(r.state==='draft'?button('validate','Valider le CR','',true):button('preview','Préparer l’envoi','',true)+button('reopen','Créer un rectificatif')):'<small>Les contributions seront relues par l’encadrant avant envoi.</small>';
@@ -234,38 +237,58 @@
    sheet.innerHTML=`<header class="cr-head"><h2 id="crSheetTitle">${esc(title)}</h2><button type="button" data-sheet="close" class="secondary-button">Fermer ×</button></header><div id="crSheetNotice" role="status" aria-live="polite"></div><main>${body}</main><footer>${foot}</footer>`;
    sheet.addEventListener('submit',e=>e.preventDefault());
    sheet.addEventListener('cancel',e=>{e.preventDefault();closeSheet();});
-   sheet.addEventListener('input',e=>{if(e.target.closest('[data-cr-edit]'))dirty=true;if(e.target.name==='label'){const preview=e.target.closest('td')?.querySelector('[data-label-preview]');if(preview)preview.textContent=e.target.value;}});
-   sheet.addEventListener('change',e=>{if(e.target.matches('[type=time]')){const holder=e.target.closest('.cr-clock');const day=holder?.querySelector('select[data-day]');if(day&&!day.dataset.manual&&!holder.dataset.fixedDay)day.value=e.target.value&&e.target.value<'12:00'?'1':'0';}if(e.target.matches('[data-day]'))e.target.dataset.manual='1';});
+   sheet.addEventListener('input',e=>{if(e.target.closest('[data-cr-edit]'))dirty=true;if(e.target.type==='date')e.target.dataset.manual='1';updateClockDays();});
+   sheet.addEventListener('change',e=>{if(e.target.closest('[data-cr-edit]'))dirty=true;if(e.target.closest('.cr-clock')&&e.target.type==='text'){const value=normalClock(e.target.value);if(value)e.target.value=value;}updateClockDays();});
    sheet.addEventListener('click',e=>{const b=e.target.closest('[data-sheet]');if(b&&!busy)void sheetAction(b.dataset.sheet,b);});
-   document.body.append(sheet);sheet.showModal();
+   document.body.append(sheet);sheet.showModal();updateClockDays();
   }
   function sb(action,label,attrs='',primary=false){return `<button type="button" data-sheet="${action}" ${attrs} class="${primary?'primary':'secondary'}-button">${label}</button>`;}
   function sheetNotice(message,error=false){const el=$('crSheetNotice');if(el){el.textContent=message;el.className=message?'cr-notice'+(error?' error':''):'';}}
+  function clockDate(day){return new Date(Date.parse(current.night+'T12:00Z')+day*86400000).toISOString().slice(0,10);}
   function compactClock(name,value,label,defaultValue){
-   const local=parisLocal(value),hint=parisLocal(defaultValue),offset=local?Math.round((Date.parse(local.slice(0,10)+'T12:00Z')-Date.parse(current.night+'T12:00Z'))/86400000):hint?Math.round((Date.parse(hint.slice(0,10)+'T12:00Z')-Date.parse(current.night+'T12:00Z'))/86400000):name.includes('end')?1:0;
-   const dst=current.night.slice(5,7)==='10'&&Number(current.night.slice(8))>=23;
-   return `<span class="cr-clock" ${value||defaultValue?'data-fixed-day="1"':''}><input type="time" name="${name}" aria-label="${esc(label)}" value="${local.slice(11,16)}"><select name="${name}_day" data-day aria-label="Jour ${esc(label)}">${[0,1,2].map(d=>`<option value="${d}" ${d===offset?'selected':''}>${d===0?'Soir':'J+'+d}</option>`).join('')}</select>${dst?`<select name="${name}_offset" aria-label="Changement d’heure ${esc(label)}"><option value="auto">Paris</option><option value="+02:00">Été</option><option value="+01:00">Hiver</option></select>`:''}</span>`;
+   const local=parisLocal(value),hint=parisLocal(value||defaultValue),dst=current.night.slice(5,7)==='10'&&Number(current.night.slice(8))>=23;
+   return `<span class="cr-clock" data-clock="${name}" data-hint="${hint}"><span class="cr-clock-main"><input type="text" inputmode="numeric" autocomplete="off" name="${name}" aria-label="${esc(label)}" placeholder="hh:mm" maxlength="5" value="${local.slice(11,16)}"><small data-clock-day></small></span><span class="cr-clock-date" hidden><input type="date" name="${name}_date" aria-label="Date ${esc(label)}" value="${hint.slice(0,10)||current.night}"></span>${dst?`<span class="cr-clock-dst"><select name="${name}_offset" aria-label="Changement d’heure ${esc(label)}"><option value="auto">Paris</option><option value="+02:00">Heure d’été</option><option value="+01:00">Heure d’hiver</option></select></span>`:''}</span>`;
   }
-  function compactValue(el,name){const value=el.querySelector(`[name="${name}"]`)?.value;if(!value)return null;const day=Number(el.querySelector(`[name="${name}_day"]`).value);const d=new Date(Date.parse(current.night+'T12:00Z')+day*86400000).toISOString().slice(0,10);return parisISO(d+'T'+value,el.querySelector(`[name="${name}_offset"]`)?.value||'auto');}
-  function weekCheck(){return '<label class="cr-check"><input type="checkbox" name="remember_week" checked> Réutiliser ce prévu pour les prochaines nuits de cette semaine</label>';}
+  function clockLocal(el,name){
+   const input=el.querySelector(`[name="${name}"]`),value=String(input?.value||'').trim();if(!value)return '';
+   const clock=normalClock(value);if(!clock)throw new Error(`${input.getAttribute('aria-label')} : saisir une heure entre 00:00 et 23:59.`);
+   const holder=input.closest('.cr-clock'),manual=holder.querySelector(`[name="${name}_date"]`),hint=holder.dataset.hint;
+   if(manual.dataset.manual==='1'){if(!manual.value)throw new Error('Précisez la date de cet horaire.');return manual.value+'T'+clock;}
+   let day=hint?Math.round((Date.parse(hint.slice(0,10)+'T12:00Z')-Date.parse(current.night+'T12:00Z'))/86400000):clock<'12:00'?1:0;
+   if(name.endsWith('end')){
+    const start=clockLocal(el,name==='planned_end'?'planned_start':'start');
+    if(start){const sd=Math.round((Date.parse(start.slice(0,10)+'T12:00Z')-Date.parse(current.night+'T12:00Z'))/86400000);day=Math.max(day,sd);if(day===sd&&clock<start.slice(11,16))day++;}
+   }
+   return clockDate(day)+'T'+clock;
+  }
+  function compactValue(el,name){const local=clockLocal(el,name);return local?parisISO(local,el.querySelector(`[name="${name}_offset"]`)?.value||'auto'):null;}
+  function updateClockDays(scope=sheet){
+   scope?.querySelectorAll('[data-clock]').forEach(holder=>{try{const local=clockLocal(holder.closest('[data-timing-row],#crArfForm'),holder.dataset.clock);const day=local?Math.round((Date.parse(local.slice(0,10)+'T12:00Z')-Date.parse(current.night+'T12:00Z'))/86400000):null;holder.querySelector('[data-clock-day]').textContent=day===null?'':day===0?'soir':'+ '+day+' j';const input=holder.querySelector('[type=date]');if(!input.dataset.manual&&local)input.value=local.slice(0,10);}catch{holder.querySelector('[data-clock-day]').textContent='';}});
+  }
+  function readClock(value){return `<span class="cr-read-clock">${shortTime(value)}${value?`<small>${date(parisLocal(value).slice(0,10)).slice(0,5)}</small>`:''}</span>`;}
+  function weekCheck(){return '<label class="cr-check cr-week"><input type="checkbox" name="remember_week" checked> Garder les références et le prévu pour les prochaines nuits de la semaine</label>';}
+  function hoursTable(t,manager,key){
+   const arf=key==='arf',v=arf?t.value||{}:t;
+   return `<table class="cr-hours"><caption class="cr-sr">${arf?'Horaires ARF':esc(t.label||'Horaires de la référence')} · prévu et réel</caption><thead><tr><th scope="col">Horaires</th><th scope="col">Début</th><th scope="col">Fin</th></tr></thead><tbody><tr class="cr-hours-plan"><th scope="row">Prévu</th><td>${manager?compactClock('planned_start',v.planned_start,'Début prévu'):readClock(v.planned_start)}</td><td>${manager?compactClock('planned_end',v.planned_end,'Fin prévue'):readClock(v.planned_end)}</td></tr><tr class="cr-hours-actual"><th scope="row">Réel</th><td>${compactClock('start',arf?v.start:t.actual_start,'Début réel',v.planned_start)}</td><td>${compactClock('end',arf?v.end:t.actual_end,'Fin réelle',v.planned_end)}</td></tr></tbody></table>`;
+  }
+  function timingRow(t={}){
+   const manager=current.manager&&current.state==='draft',type=splitReference(t.label,sheetKey);
+   return `<section class="cr-timing-row" data-timing-row data-row-id="${esc(t.id||'')}" data-version="${t.version||0}"><div class="cr-ref-head">${manager?`<label class="cr-selected"><input name="selected" type="checkbox" ${t.active!==false?'checked':''} aria-label="Demander cette référence"></label>${sheetKey==='catenaire'?`<select name="ref_type" aria-label="Type de consignation"><option value="SEL" ${type.type==='SEL'?'selected':''}>SEL</option><option value="Secteur" ${type.type==='Secteur'?'selected':''}>Secteur</option>${!type.type?'<option value="" selected>Type…</option>':''}</select>`:'<span class="cr-ref-tag">ZEP</span>'}<input name="reference" aria-label="${sheetKey==='itc'?'Référence ZEP':'Numéro ou nom du secteur ou SEL'}" maxlength="480" value="${esc(type.reference)}" placeholder="Numéro ou nom…">`:`<b>${esc(t.label)}</b>`}${sb('dates','Dates', 'aria-expanded="false"')}</div>${hoursTable(t,manager,sheetKey)}<div class="cr-row-bottom"><label class="cr-check"><input name="non_concerne" type="checkbox" ${t.status==='non_concerne'?'checked':''}> Non pris</label><label class="cr-row-comment"><span class="cr-sr">Commentaire ou retard</span><input name="comment" maxlength="1000" value="${esc(t.comment||'')}" placeholder="Commentaire / retard (facultatif)"></label></div>${t.updated_name?`<small class="cr-author">Dernière saisie · ${esc(t.updated_name)}</small>`:''}</section>`;
+  }
   function openSection(key,configure=false){
-   sheetKey=key;sheetMode=configure?'config':'edit';dirty=false;
+   sheetKey=key;sheetMode='edit';dirty=false;
    const s=current.sections.find(s=>s.key===key);if(!s)return;
-   const locked=current.state!=='draft',active=(s.items||[]).filter(t=>t.active),timing=['catenaire','itc'].includes(key);
-   const assignee=s.responsible_name?`<span>Demande : <b>${esc(s.responsible_name)}</b></span>`:'<span>Responsable à désigner</span>';
-   const intro=`<p class="cr-sheet-meta">Nuit du ${date(current.night)} · heure de Paris</p>`;
+   const locked=current.state!=='draft',manager=current.manager&&!locked,active=(s.items||[]).filter(t=>t.active),timing=['catenaire','itc'].includes(key);
+   const assignee=s.responsible_name?`<span>Demande confiée à <b>${esc(s.responsible_name)}</b></span>`:'<span>Responsable à désigner</span>';
+   const assignment=manager?`<label class="cr-assignee"><span>${key==='arf'?'Responsable · RSO':key==='itc'?'Responsable · RPD':'Responsable · caténaire'}</span><select name="responsible">${peopleOptions(current.people,s.responsible)}</select></label>`:`<p class="cr-assigned">${assignee}</p>`;
+   const intro=`<p class="cr-sheet-meta">Nuit du ${date(current.night)} · heure de Paris <span>Le lendemain est indiqué automatiquement.</span></p>`;
    let body=intro,foot=sb('close','Retour au CR');
-   if(configure&&timing){
-    body+=`<form id="crTableConfig" data-cr-edit data-version="${s.version}"><label class="form-field">${key==='itc'?'Responsable ITC · RPD':'Responsable consignation caténaire'}<select name="responsible">${peopleOptions(current.people,s.responsible)}</select></label><p class="cr-muted">Cocher les lignes à demander. Modifier ou écrire librement les références. Tout décocher si non concerné.</p><datalist id="crOwnChoices">${(current.choices||[]).filter(c=>c.section_key===key).map(c=>`<option value="${esc(c.label)}">`).join('')}</datalist><div class="cr-table-scroll"><table class="cr-field-table"><thead><tr><th>${key==='itc'?'ZEP prise':'Secteur / SEL'}</th><th>Début prévu</th><th>Fin prévue</th></tr></thead><tbody id="crConfigRows">${(s.items?.length?s.items:[{}]).map(t=>configRow(t)).join('')}</tbody></table></div>${sb('add-row','＋ Ajouter une ligne')}${weekCheck()}<label class="form-field">Motif si vous retirez ou renommez une ligne déjà renseignée<input name="reason" maxlength="1000"></label></form>`;
-    foot+=sb('save-config','Enregistrer et demander','',true);
-   }else if(timing){
-    body+=`<div class="cr-tools">${assignee}${current.manager&&!locked?sb('configure','Configurer les lignes et le responsable'):''}</div>`;
-    if(s.value?.mode!=='perimeters')body+='<p class="cr-notice">Anciennes heures globales conservées. Configurez les références pour passer au tableau.</p>';
-    body+=`<form id="crActualTable" data-cr-edit data-version="${s.version}"><fieldset ${locked?'disabled':''}><div class="cr-table-scroll"><table class="cr-field-table"><thead><tr><th>${key==='itc'?'ZEP prise':'Secteur / SEL'}</th><th>Prévu<br><small>Début / fin</small></th><th>Réel<br><small>Début / fin</small></th></tr></thead><tbody>${active.map(t=>`<tr data-row-id="${t.id}" data-version="${t.version}"><td><b>${esc(t.label)}</b><small>${esc(t.updated_name||'')}</small><label class="cr-small-check"><input type="checkbox" name="non_concerne" ${t.status==='non_concerne'?'checked':''}> Non pris</label></td><td class="cr-planned"><span>${shortTime(t.planned_start)}</span><span>${shortTime(t.planned_end)}</span></td><td>${compactClock('start',t.actual_start,'Début réel '+t.label,t.planned_start)}${compactClock('end',t.actual_end,'Fin réelle '+t.label,t.planned_end)}</td></tr><tr class="cr-comment-row" data-comment-for="${t.id}"><td colspan="3"><label>Commentaire / retard<input name="comment" maxlength="1000" value="${esc(t.comment)}" placeholder="Facultatif · motif si non pris"></label></td></tr>`).join('')}</tbody></table></div>${!active.length?'<p class="cr-empty">Aucune ligne sélectionnée pour cette nuit.</p>':''}</fieldset></form>`;
-    if(active.length&&!locked)foot+=sb('save-times','Enregistrer les horaires','',true);
+   if(timing){
+    body+=`<form id="crTimingForm" data-cr-edit data-version="${s.version}"><fieldset ${locked?'disabled':''}>${assignment}<div id="crTimingRows">${(active.length?active:manager?[{}]:[]).map(t=>timingRow(t)).join('')}</div>${manager?sb('add-row',key==='itc'?'＋ Ajouter une ZEP':'＋ Ajouter un secteur / SEL')+weekCheck():''}${!active.length&&!manager?'<p class="cr-empty">Aucune référence demandée cette nuit.</p>':''}${manager&&(s.items||[]).some(t=>t.actual_start||t.actual_end)?'<details class="cr-change-reason"><summary>Motif d’un changement de référence</summary><input name="reason" maxlength="1000" placeholder="À préciser si vous retirez ou renommez une référence déjà renseignée"></details>':''}</fieldset></form>`;
+    if(!locked&&(manager||active.length))foot+=sb('save-sheet',manager?'Enregistrer et demander':'Enregistrer les horaires','',true);
    }else if(key==='arf'){
-    body+=`<form id="crArfForm" data-cr-edit data-version="${s.version}"><fieldset ${locked?'disabled':''}>${current.manager?`<label class="form-field">Responsable ARF · RSO<select name="responsible">${peopleOptions(current.people,s.responsible)}</select></label><label class="form-field">Fin prévue · rappel une heure avant${compactClock('planned_end',s.value.planned_end,'Fin prévue ARF')}</label>${weekCheck()}`:assignee}<table class="cr-field-table"><thead><tr><th>Début réel ARF</th><th>Fin réelle ARF</th></tr></thead><tbody><tr><td>${compactClock('start',s.value.start,'Début réel ARF')}</td><td>${compactClock('end',s.value.end,'Fin réelle ARF',s.value.planned_end)}</td></tr></tbody></table><label class="form-field">Commentaire / retard<input name="comment" maxlength="1000" value="${esc(s.value.precision)}" placeholder="Facultatif"></label><label class="cr-check"><input name="non_concerne" type="checkbox" ${s.status==='non_concerne'?'checked':''}> ARF non concernée cette nuit</label></fieldset></form>`;
-    if(!locked)foot+=sb('save-arf','Enregistrer','',true);
+    body+=`<form id="crArfForm" data-cr-edit data-version="${s.version}"><fieldset ${locked?'disabled':''}>${assignment}<section class="cr-timing-row"><div class="cr-ref-head"><b>Attestation ARF · toutes les voies</b>${sb('dates','Dates','aria-expanded="false"')}</div>${hoursTable(s,manager,key)}<div class="cr-row-bottom"><label class="cr-check"><input name="non_concerne" type="checkbox" ${s.status==='non_concerne'?'checked':''}> Non concerné</label><label class="cr-row-comment"><span class="cr-sr">Commentaire ou retard</span><input name="comment" maxlength="1000" value="${esc(s.value.precision)}" placeholder="Commentaire / retard (facultatif)"></label></div></section>${manager?weekCheck():''}</fieldset></form>`;
+    if(!locked)foot+=sb('save-arf',manager?'Enregistrer et demander':'Enregistrer les horaires','',true);
    }else if(key==='technique'){
     body+=`<form id="crProduction" data-cr-edit data-version="${s.version}"><label class="form-field">Travaux réalisés cette nuit<textarea name="body" rows="12" maxlength="8000" ${locked?'readonly':''} placeholder="Décrivez succinctement ce qui a été réalisé…">${esc(productionText(s))}</textarea></label><small>${s.updated_name?'Dernière saisie : '+esc(s.updated_name):'Les participants autorisés peuvent compléter ce texte.'}</small></form>`;
     if(!locked)foot+=sb('improve','✨ Améliorer avec Gemini')+sb('save-production','Enregistrer la production','',true);
@@ -275,25 +298,35 @@
    }
    makeSheet(LABELS[key],body,foot);
   }
-  function configRow(t={}){return `<tr data-row-id="${esc(t.id||'')}" data-version="${t.version||0}"><td><label class="cr-config-label"><input type="checkbox" name="selected" ${t.active!==false?'checked':''} aria-label="Demander cette ligne"><input name="label" list="crOwnChoices" aria-label="${sheetKey==='itc'?'ZEP prise':'Secteur ou SEL'}" maxlength="500" value="${esc(t.label)}" placeholder="${sheetKey==='itc'?'ZEP…':'SEL ou secteur…'}"></label><small data-label-preview>${esc(t.label)}</small></td><td>${compactClock('planned_start',t.planned_start,'Début prévu')}</td><td>${compactClock('planned_end',t.planned_end,'Fin prévue')}</td></tr>`;}
   async function sheetAction(action,b){
    if(action==='close'){closeSheet();return;}
-   if(action==='configure'){if(canLeave())openSection(sheetKey,true);return;}
-   if(action==='add-row'){if($('crConfigRows').children.length>=40){sheetNotice('40 lignes maximum.',true);return;}$('crConfigRows').insertAdjacentHTML('beforeend',configRow());dirty=true;return;}
+   if(action==='dates'){const row=b.closest('[data-timing-row],#crArfForm');const show=b.getAttribute('aria-expanded')!=='true';b.setAttribute('aria-expanded',String(show));row.querySelectorAll('.cr-clock-date').forEach(el=>el.hidden=!show);return;}
+   if(action==='add-row'){if($('crTimingRows').children.length>=40){sheetNotice('40 références maximum.',true);return;}$('crTimingRows').insertAdjacentHTML('beforeend',timingRow());dirty=true;$('crTimingRows').lastElementChild.querySelector('[name=reference]')?.focus();return;}
    if(action==='improve'){await improveText();return;}
    if(action==='ai-apply'){const ai=$('crAiProposal');const target=sheet.querySelector('textarea[name=body]');if(ai&&target){target.value=ai.value;dirty=true;$('crAiReview').remove();target.focus();}return;}
    if(action==='ai-cancel'){$('crAiReview')?.remove();return;}
    busy=true;b.disabled=true;sheetNotice('');const reportId=current.id,key=sheetKey;
    try{
     let payload={id:reportId,key},api;
-    if(action==='save-config'){
-     const f=$('crTableConfig');payload={...payload,version:Number(f.dataset.version),responsible:f.elements.responsible.value,remember_week:f.elements.remember_week.checked,reason:f.elements.reason.value,
-      rows:[...f.querySelectorAll('tr[data-row-id]')].map(tr=>({id:tr.dataset.rowId||null,version:Number(tr.dataset.version),selected:tr.querySelector('[name=selected]').checked,label:tr.querySelector('[name=label]').value,planned_start:compactValue(tr,'planned_start'),planned_end:compactValue(tr,'planned_end')}))};api='timing_table';
-    }else if(action==='save-times'){
-     const f=$('crActualTable');payload.version=Number(f.dataset.version);payload.rows=[...f.querySelectorAll('tr[data-row-id]')].map(tr=>({timing_id:tr.dataset.rowId,version:Number(tr.dataset.version),start:compactValue(tr,'start'),end:compactValue(tr,'end'),status:tr.querySelector('[name=non_concerne]').checked?'non_concerne':'auto',comment:f.querySelector(`[data-comment-for="${tr.dataset.rowId}"] input`).value}));api='timing_batch';
+    if(action==='save-sheet'){
+     const f=$('crTimingForm'),s=current.sections.find(s=>s.key===key),manager=current.manager;
+     const rows=[...f.querySelectorAll('[data-timing-row]')].map(el=>{
+      const old=s.items.find(t=>t.id===el.dataset.rowId),selected=manager?el.querySelector('[name=selected]').checked:true;
+      const reference=manager?el.querySelector('[name=reference]').value.trim():'';
+      const type=key==='itc'?'ZEP':manager?el.querySelector('[name=ref_type]').value:'';
+      if(manager&&selected&&(!reference||!type))throw new Error('Choisissez le type et indiquez le numéro ou le nom de chaque référence.');
+      const label=manager?type+' '+reference:old.label;
+      const start=compactValue(el,'start'),end=compactValue(el,'end'),non=el.querySelector('[name=non_concerne]').checked;
+      if(non&&(start||end))throw new Error('Une référence « Non pris » ne peut pas conserver d’horaires réels. Décochez « Non pris » ou effacez ces heures.');
+      return {id:el.dataset.rowId||null,version:Number(el.dataset.version),selected,label,planned_start:manager?compactValue(el,'planned_start'):old.planned_start,planned_end:manager?compactValue(el,'planned_end'):old.planned_end,start,end,status:non?'non_concerne':'auto',comment:el.querySelector('[name=comment]').value};
+     });
+     const sameTime=(a,b)=>!a&&!b||a&&b&&Date.parse(a)===Date.parse(b);
+     const changed=manager&&(String(s.responsible||'')!==f.elements.responsible.value||(s.items||[]).filter(t=>t.active).length!==rows.filter(t=>t.selected).length||rows.some(row=>{const old=s.items.find(t=>t.id===row.id);return !old||row.label!==old.label||row.selected!==old.active||!sameTime(row.planned_start,old.planned_start)||!sameTime(row.planned_end,old.planned_end);}));
+     payload={...payload,version:Number(f.dataset.version),rows,configure:Boolean(changed),responsible:manager?f.elements.responsible.value:undefined,remember_week:manager&&f.elements.remember_week.checked,reason:f.elements.reason?.value||''};
+     api='timing_sheet';
     }else if(action==='save-arf'){
      const f=$('crArfForm');payload={...payload,version:Number(f.dataset.version),start:compactValue(f,'start'),end:compactValue(f,'end'),comment:f.elements.comment.value,non_concerne:f.elements.non_concerne.checked};
-     if(current.manager)Object.assign(payload,{responsible:f.elements.responsible.value,planned_end:compactValue(f,'planned_end'),remember_week:f.elements.remember_week.checked});api='arf_save';
+     if(current.manager)Object.assign(payload,{responsible:f.elements.responsible.value,planned_start:compactValue(f,'planned_start'),planned_end:compactValue(f,'planned_end'),remember_week:f.elements.remember_week.checked});api='arf_save';
     }else if(action==='save-production'){
      const f=$('crProduction');payload={...payload,version:Number(f.dataset.version),body:f.elements.body.value};api='production_save';
     }else if(action==='save-safety'){
@@ -301,7 +334,8 @@
      const category=f.elements.category.value,fingerprint=JSON.stringify([body,category]);if(f.dataset.fingerprint!==fingerprint){f.dataset.noteId=crypto.randomUUID();f.dataset.fingerprint=fingerprint;}
      payload={...payload,note_id:f.dataset.noteId,body,category};api='note';
     }else if(action==='safety-clear'){payload.version=Number($('crSafety').dataset.version);api='safety_clear';}else return;
-    await rpc(api,payload);dirty=false;closeSheet(true);await openReport(reportId);void refresh();notice(action==='save-config'?'Configuration enregistrée. La demande est accessible au responsable dans « Mes demandes ».':'Saisie enregistrée.');
+    if(action==='save-arf'&&payload.non_concerne&&(payload.start||payload.end))throw new Error('Effacez les horaires réels ou décochez « Non concerné ».');
+    await rpc(api,payload);dirty=false;closeSheet(true);await openReport(reportId);void refresh();notice(action==='save-sheet'&&payload.configure?'Configuration enregistrée. La demande est accessible au responsable dans « Mes demandes ».':'Saisie enregistrée.');
    }catch(e){sheetNotice(errorText(e),true);}finally{busy=false;if(b.isConnected)b.disabled=false;}
   }
   async function improveText(){
@@ -369,5 +403,5 @@
   navigator.serviceWorker?.addEventListener('message',e=>{if(e.data?.type==='JOURNAL_V15_OPEN'&&owner){if(dirty){adapter.toast('Une notification vous attend. Enregistrez la saisie en cours.','warning');return;}void routeNotification(e.data.id).catch(err=>adapter.toast(errorText(err),'error'));}if(e.data?.type==='JOURNAL_V15_EVENT')void refresh();});
   return {open,openInbox,contextChanged,beforeLogout,isOpen:()=>Boolean(dialog?.open||sheet?.open||taskPopup?.open)};
  }
- root.JournalCR={create,parisLocal,parisISO,emailText};
+ root.JournalCR={create,parisLocal,parisISO,emailText,normalClock,splitReference};
 })(typeof window==='undefined'?globalThis:window);

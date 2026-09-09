@@ -6206,7 +6206,8 @@ setTimeout(updateV24, 1000);
 (function(){
 
 function byId(id){return document.getElementById(id);}
-window.briefingPhotos=window.briefingPhotos||[];
+window.briefingPhotos=Array.isArray(window.briefingPhotos)?window.briefingPhotos:[];
+const pendingPhotos=new Set();let photoLoadError=null;
 
 function savePhotos(){
   try{localStorage.setItem('briefingPhotos',JSON.stringify(window.briefingPhotos));}catch(e){}
@@ -6215,7 +6216,7 @@ function savePhotos(){
 function loadPhotos(){
   try{
     const raw=localStorage.getItem('briefingPhotos');
-    if(raw) window.briefingPhotos=JSON.parse(raw)||[];
+    if(raw){const photos=JSON.parse(raw);window.briefingPhotos=Array.isArray(photos)?photos:[];}
   }catch(e){window.briefingPhotos=[];}
 }
 
@@ -6234,11 +6235,11 @@ function renderPhotos(){
     const card=document.createElement('div');
     card.className='photo-card';
 
-    card.innerHTML=`
-      <img src="${p.src}">
-      <textarea placeholder="Ajouter une légende / observation..." onchange="updatePhotoComment(${index}, this.value)">${p.comment||''}</textarea>
-      <button type="button" onclick="removePhoto(${index})">Supprimer la photo</button>
-    `;
+    const image=document.createElement('img');image.src=p.src;image.alt='Photo du briefing '+(index+1);
+    const caption=document.createElement('textarea');caption.value=p.comment||'';caption.placeholder='Ajouter une légende / observation…';
+    caption.addEventListener('input',()=>window.updatePhotoComment(index,caption.value));
+    const remove=document.createElement('button');remove.type='button';remove.textContent='Supprimer la photo';remove.addEventListener('click',()=>window.removePhoto(index));
+    card.append(image,caption,remove);
 
     grid.appendChild(card);
   });
@@ -6259,26 +6260,29 @@ window.removePhoto=function(index){
 };
 
 function handleFiles(files){
-  Array.from(files).forEach(file=>{
-    if(!file.type.startsWith('image/')) return;
-
-    const reader=new FileReader();
-
-    reader.onload=function(e){
-      window.briefingPhotos.push({
-        src:e.target.result,
-        comment:''
-      });
-
-      savePhotos();
-      renderPhotos();
-
-      if(typeof generate==='function') generate();
-    };
-
-    reader.readAsDataURL(file);
-  });
+  const selected=Array.from(files);if(!selected.length)return;
+  photoLoadError=null;
+  for(const file of selected){
+    const job=new Promise((resolve,reject)=>{
+      if(!file.type.startsWith('image/')){reject(new Error('Le fichier sélectionné n’est pas une photo.'));return;}
+      const reader=new FileReader();
+      reader.onerror=()=>reject(new Error('Lecture de la photo impossible. Sélectionnez-la à nouveau.'));
+      reader.onabort=()=>reject(new Error('Lecture de la photo interrompue. Sélectionnez-la à nouveau.'));
+      reader.onload=async()=>{try{
+        const image=new Image();image.src=reader.result;await image.decode();
+        if(!image.naturalWidth)throw new Error('Photo vide');
+        window.briefingPhotos.push({src:reader.result,comment:''});savePhotos();renderPhotos();injectPhotosIntoPreview();resolve();
+      }catch{reject(new Error('Photo illisible. Utilisez une photo JPEG, PNG ou WebP.'));}};
+      reader.readAsDataURL(file);
+    });
+    pendingPhotos.add(job);
+    job.catch(error=>{photoLoadError=error;window.showToast?.(error.message);}).finally(()=>pendingPhotos.delete(job));
+  }
 }
+window.BriefingPhotos={
+  async ready(){await Promise.all([...pendingPhotos]);if(photoLoadError)throw photoLoadError;injectPhotosIntoPreview();return window.briefingPhotos.map(p=>({src:p.src,comment:String(p.comment||'')}));},
+  refresh:injectPhotosIntoPreview
+};
 
 function injectPhotoSection(){
 
@@ -6357,21 +6361,14 @@ function injectPhotosIntoPreview(){
     return;
   }
 
-  container.innerHTML=`
-    <div class="block">
-      <div class="block-title">Photos chantier / briefing</div>
-      <div class="block-content">
-        <div class="photo-grid">
-          ${window.briefingPhotos.map(p=>`
-            <div class="photo-card">
-              <img src="${p.src}">
-              ${p.comment ? `<div style="padding:10px;font-size:13px;">${p.comment}</div>` : ''}
-            </div>
-          `).join('')}
-        </div>
-      </div>
-    </div>
-  `;
+  container.replaceChildren();
+  const heading=document.createElement('h3');heading.textContent='Photos chantier / briefing';container.append(heading);
+  const grid=document.createElement('div');grid.className='photo-grid';container.append(grid);
+  window.briefingPhotos.forEach((p,index)=>{
+    const card=document.createElement('figure');card.className='photo-card';
+    const image=document.createElement('img');image.src=p.src;image.alt='Photo du briefing '+(index+1);image.style.objectFit='contain';
+    const caption=document.createElement('figcaption');caption.textContent=p.comment||'';caption.style.cssText='padding:10px;font-size:13px;white-space:pre-wrap';card.append(image,caption);grid.append(card);
+  });
 }
 
 const oldGenerate=window.generate;
@@ -6379,7 +6376,7 @@ const oldGenerate=window.generate;
 if(typeof oldGenerate==='function' && !oldGenerate._v28Wrapped){
   window.generate=function(){
     oldGenerate.apply(this,arguments);
-    setTimeout(function(){injectPhotosIntoPreview();},80);
+    injectPhotosIntoPreview();
   };
   window.generate._v28Wrapped=true;
 }
@@ -8644,6 +8641,31 @@ window.updateLamBriefing=function(){let target=document.getElementById("oMiseVoi
     return clone;
   }
 
+  async function waitImage(image){
+    if(image.complete&&image.naturalWidth)return;
+    let timer;
+    try{await Promise.race([image.decode(),new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('Une image du briefing ne peut pas être chargée. Réessayez avant de partager le PDF.')),15000);})]);}
+    finally{clearTimeout(timer);}
+    if(!image.naturalWidth)throw new Error('Une image du briefing est illisible.');
+  }
+  async function appendPhoto(pdf,photo,index,hasPage){
+    const image=new Image();image.src=photo.src;await waitImage(image);
+    const canvas=document.createElement('canvas'),scale=Math.min(1,2200/Math.max(image.naturalWidth,image.naturalHeight));
+    canvas.width=Math.max(1,Math.round(image.naturalWidth*scale));canvas.height=Math.max(1,Math.round(image.naturalHeight*scale));
+    const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(image,0,0,canvas.width,canvas.height);
+    if(hasPage)pdf.addPage();
+    pdf.setFont('helvetica','bold');pdf.setFontSize(14);pdf.setTextColor(32,43,55);pdf.text('Photos chantier / briefing',10,14);
+    pdf.setFont('helvetica','normal');pdf.setFontSize(10);pdf.text('Photo '+(index+1),10,21);
+    const ratio=Math.min(190/canvas.width,235/canvas.height),width=canvas.width*ratio,height=canvas.height*ratio;
+    pdf.addImage(canvas.toDataURL('image/jpeg',.92),'JPEG',(210-width)/2,26,width,height,undefined,'FAST');
+    if(photo.comment){
+      const lines=pdf.splitTextToSize(photo.comment,190);let y=height+33;
+      for(const line of lines){if(y>286){pdf.addPage();y=15;}pdf.text(line,10,y);y+=5;}
+    }
+    canvas.width=canvas.height=1;
+    return true;
+  }
+
   async function capture(source){
     const stage = document.createElement("div");
     stage.style.cssText =
@@ -8654,7 +8676,7 @@ window.updateLamBriefing=function(){let target=document.getElementById("oMiseVoi
 
     try{
       if(document.fonts && document.fonts.ready) await document.fonts.ready;
-      await new Promise(function(resolve){ setTimeout(resolve, 100); });
+      await Promise.all(Array.from(stage.querySelectorAll('img')).map(waitImage));
       return await window.html2canvas(stage, {
         backgroundColor: "#ffffff",
         scale: Math.min(2, Math.max(1, window.devicePixelRatio || 1)),
@@ -8758,6 +8780,7 @@ window.updateLamBriefing=function(){let target=document.getElementById("oMiseVoi
     exportInProgress = true;
     setBusy(true, "Génération du PDF en cours…");
     try{
+      const photos=window.BriefingPhotos?await window.BriefingPhotos.ready():[];
       prepareData();
       const mainSheet = document.querySelector(".preview .sheet") || document.querySelector(".sheet");
       const signatureSheet = byId("signatureSheet");
@@ -8774,6 +8797,7 @@ window.updateLamBriefing=function(){let target=document.getElementById("oMiseVoi
         hasPage = appendCanvas(pdf, canvas, hasPage);
       }
 
+      for(let index=0;index<photos.length;index++)hasPage=await appendPhoto(pdf,photos[index],index,hasPage);
       const currentMeta = meta();
       return {
         blob: pdf.output("blob"),

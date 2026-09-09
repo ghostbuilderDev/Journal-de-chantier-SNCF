@@ -1,0 +1,35 @@
+Journal V15.3 — vérifications locales
+Base de travail : origin/main 862b23055a51c621e586d08dcf9af7faae62d322 (V15.2)
+
+PASS — tests/cr-v153-browser.cjs : index et modules réels, backend SQL jetable.
+390 px et 320 px ; pas de débordement horizontal du formulaire ; colonnes lisibles.
+SEL et Secteur libres, ZEP, responsable, heures prévues/réelles, nuit traversant minuit.
+Demande visible uniquement à l’agent affecté ; accès par Mes demandes ; saisie conservée.
+Publication de signalement, réponse et reprise d’une réponse réseau perdue sans doublon.
+Origine, annonce et preuve d’action vertes/repliées ; historique ouvert conservé ; réouverture.
+
+PASS — supabase/tests/cr-v153-backend.cjs : migration réexécutable, tableau atomique,
+annulation complète si une ligne est invalide, conflits, conservation de l’auteur réel,
+ARF prévu/réel, réutilisation hebdomadaire sans heures réelles, droits privés,
+rétablissement du droit de publication des signalements et refus des anonymes.
+
+PASS — supabase/tests/cr-v153-retrofit.cjs : horaires historiques, auteurs, destinataires
+et versions validées conservés ; texte d’un email ancien identique ; nouvelle ARF en tableau.
+
+PASS — tests/briefing-v153-pdf.cjs : véritable export PDF local de 4 pages avec photo test
+et légende ; page photo rendue et inspectée, quatre quadrants complets détectés.
+Une image invalide bloque l’export et conserve le briefing. Aucun partage lancé.
+PASS — tests/briefing-integration.test.cjs : PDF, origine du cadre, archivage et reprise simulés.
+
+PASS — 52 tests existants : fil, messages, signalements, comptes, droits et coupures réseau.
+PASS — tests/actions.cjs : 9 groupes de scénarios existants.
+PASS — tests/v153-installation.test.py : garde des fichiers, reprise, nouvelles ressources,
+liens symboliques, séparation serveur/interface.
+PASS — installation des deux phases sur une extraction réelle du commit V15.2,
+réexécution et refus de remplacer une modification personnelle.
+PASS — chaîne SQL GitHub Actions exécutée dans PGlite, contrôle des droits des signalements.
+
+Le PostgreSQL 17 de GitHub Actions et les tests sur téléphones réels ne sont pas déclarés
+exécutés localement. L’installation attend les contrôles serveur avant de publier l’interface.
+Pas de déploiement de production ni d’envoi réel de notification, d’email ou de texte à Gemini
+pendant ces vérifications.

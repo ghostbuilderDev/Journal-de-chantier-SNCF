@@ -1,0 +1,16 @@
+/* Completed actions only: the discussion keeps its existing visual identity. */
+.message-row.action-completed .completed-feed-details{width:min(620px,100%);min-width:0}
+.message-row.action-completed .completed-feed-action{box-sizing:border-box;list-style:none;padding:12px 15px;border:1px solid #bcdcc9;border-left:4px solid #239563;border-radius:12px;background:#edf8f1;color:#215f43;cursor:pointer}
+.completed-feed-action::-webkit-details-marker{display:none}
+.message-row.action-completed .completed-feed-action>b{display:block;font-size:11px;letter-spacing:.035em;text-transform:uppercase;color:#1a784d}
+.message-row.action-completed .completed-feed-action>strong{display:block;margin:5px 0;font-size:14px;font-weight:700;line-height:1.4;overflow-wrap:anywhere}
+.message-row.action-completed .completed-feed-action span{display:block;font-size:11px;color:#567463;line-height:1.5}
+.message-row.action-completed .completed-feed-action i{font-style:normal;float:right;font-size:16px}
+.completed-feed-details[open]>.completed-feed-action i{transform:rotate(180deg)}
+.message-row.action-completed .message-bubble{box-sizing:border-box;margin-top:6px;width:100%;max-width:none;background:#f7fcf9;border-color:#cce4d6}
+.message-row.action-completed .message-tag{background:#d9f0e3;color:#216347}
+.message-action-link.is-complete,.action-card.is-complete{background:#edf8f1;border-color:#c5e1d0;border-left:4px solid #239563;color:#215f43}
+.message-action-link.is-complete :is(b,small),.action-card.is-complete .action-title-link{color:#215f43}
+.action-card.is-complete .action-priority{background:#d9eee2;color:#245e42}
+.completed-feed-action:focus-visible{outline:3px solid #26704b;outline-offset:3px}
+@media(max-width:600px){.message-row.action-completed{margin-block:9px}.message-row.action-completed .completed-feed-details{width:100%}.message-row.action-completed .completed-feed-action>strong{font-size:13px}}

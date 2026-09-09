@@ -132,3 +132,9 @@
 }
 @media (prefers-reduced-motion: reduce) { .feedback-dialog *, .feedback-dialog *::before, .feedback-dialog *::after { transition: none !important; scroll-behavior: auto !important; } }
 @media print { .feedback-dialog, .feedback-entry, .feedback-topbar { display: none !important; } }
+
+/* Entry remains reachable after reading a long list on a phone. */
+.feedback-entry-footer{flex-shrink:0;padding:12px 24px;border-top:1px solid #e3e7ee;background:#fff}
+.feedback-entry-footer .feedback-primary{width:100%;min-height:46px;font-size:13px!important}
+.feedback-dialog .feedback-form-actions{position:sticky;bottom:-24px;padding:14px 0;background:#f7f7fa}
+@media(max-width:600px){.feedback-entry-footer{padding:10px 16px;padding-bottom:max(10px,env(safe-area-inset-bottom))}.feedback-header{padding-top:16px}.feedback-header h1{font-size:21px}.feedback-intro{padding-bottom:14px}.feedback-dialog .feedback-form-actions{bottom:-20px}.feedback-content{scroll-padding-bottom:80px}}

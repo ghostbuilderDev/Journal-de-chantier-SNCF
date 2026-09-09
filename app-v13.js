@@ -122,6 +122,7 @@
     getContext: () => ({ ready: isCloudReady(), userId: app.user?.id || null,
       db: app.db, profileName: app.profile?.full_name || "" }),
     toast,
+    beforeOpen: () => els.appShell.classList.remove("sidebar-open"),
     onVisibilityChange: () => modeChantier?.presence()
   });
 
@@ -1113,15 +1114,15 @@
   }
   function renderMessage(message) {
     const mine = String(message.author_id) === String(ownId()), deleted = Boolean(message.deleted_at);
-    const linkedActions = activeActionsFor(app.currentId).filter(a => a.message_id === message.id);
-    if (!deleted && linkedActions.length && linkedActions.every(a => a.status === "terminee")) {
-      return `<article class="message-row ${mine ? "mine" : ""}" data-message-row="${message.id}"><details class="completed-feed-details"><summary class="completed-feed-action">✓ Terminée · ${escapeHtml(linkedActions.map(a=>a.title).join(" · "))}<span>${escapeHtml(message.author_name||"Intervenant")} · ${formatTime(message.created_at)} · toucher pour les détails</span></summary><div class="message-bubble"><div class="message-text">${renderRichText(message.body||"")}</div>${(message.attachments||[]).map(renderAttachment).join("")}${renderMessageActionLinks(message)}${renderReactionBar(message)}</div></details></article>`;
-    }
+    const linkedActions = actionLinksForMessage(message);
+    const completed = !deleted && linkedActions.length > 0 && linkedActions.every(action => action.status === "terminee");
     const parent = message.reply_to ? messageById(message.reply_to) : null;
     const attachments = deleted ? [] : (message.attachments || []);
     const images = attachments.filter(fileIsImage), documents = attachments.filter(item => !fileIsImage(item));
     if (message.message_type === "Système") return `<article class="message-row system"><div class="message-bubble">${escapeHtml(message.body || "")}</div></article>`;
-    return `<article class="message-row ${mine ? "mine" : ""}" data-message-row="${message.id}"><span class="message-avatar">${escapeHtml(initial(message.author_name))}</span><div class="message-bubble ${deleted ? "deleted" : ""}"><button class="message-menu" data-action="message-menu" data-message-id="${message.id}" aria-label="Options">⋮</button><div class="message-head"><span class="author-name">${escapeHtml(message.author_name || "Intervenant")}</span>${message.message_type ? `<span class="message-tag ${typeClass(message.message_type)}">${escapeHtml(message.message_type)}</span>` : ""}${message.zone ? `<span class="zone-tag">${escapeHtml(message.zone)}</span>` : ""}${message.is_important ? `<span class="important-star">★</span>` : ""}</div>${parent ? `<button class="reply-quote" data-action="jump-message" data-message-id="${parent.id}"><b>${escapeHtml(parent.author_name || "Intervenant")}</b>${escapeHtml(truncate(parent.body || "Pièce jointe", 90))}</button>` : ""}${deleted ? `<div class="message-text">Message supprimé.</div>` : ""}${!deleted && images.length ? `<div class="attachment-grid ${images.length === 1 ? "one" : ""}">${images.map(renderAttachment).join("")}</div>` : ""}${!deleted ? documents.map(renderAttachment).join("") : ""}${!deleted && message.body ? `<div class="message-text">${renderRichText(message.body)}</div>` : ""}${!deleted && message.briefing_document_id ? `<button class="secondary-button" data-action="open-document" data-document-id="${escapeHtml(message.briefing_document_id)}">Consulter le briefing signé</button>` : ""}${!deleted ? renderMessageActionLinks(message) : ""}${!deleted ? renderReactionBar(message) : ""}<div class="message-footer"><span>${formatTime(message.created_at)}</span>${mine ? `<span class="message-status" title="${messageReadBySomeoneElse(message) ? "Lu par un interlocuteur" : "Envoyé"}">${messageReadBySomeoneElse(message) ? "✓✓" : "✓"}</span>` : ""}</div>${!deleted ? `<div class="message-actions"><button data-action="reply" data-message-id="${message.id}">↩ Répondre</button><button data-action="open-reactions" data-message-id="${message.id}">☺ Réagir</button><button data-action="make-action" data-message-id="${message.id}">✓ Action</button>${mine ? `<button data-action="toggle-important" data-message-id="${message.id}">${message.is_important ? "★ Désépingler" : "☆ Épingler"}</button>` : ""}</div>` : ""}</div></article>`;
+    const bubble = `<div class="message-bubble ${deleted ? "deleted" : ""}"><button class="message-menu" data-action="message-menu" data-message-id="${message.id}" aria-label="Options">⋮</button><div class="message-head"><span class="author-name">${escapeHtml(message.author_name || "Intervenant")}</span>${message.message_type ? `<span class="message-tag ${typeClass(message.message_type)}">${escapeHtml(message.message_type)}</span>` : ""}${message.zone ? `<span class="zone-tag">${escapeHtml(message.zone)}</span>` : ""}${message.is_important ? `<span class="important-star">★</span>` : ""}</div>${parent ? `<button class="reply-quote" data-action="jump-message" data-message-id="${parent.id}"><b>${escapeHtml(parent.author_name || "Intervenant")}</b>${escapeHtml(truncate(parent.body || "Pièce jointe", 90))}</button>` : ""}${deleted ? `<div class="message-text">Message supprimé.</div>` : ""}${!deleted && images.length ? `<div class="attachment-grid ${images.length === 1 ? "one" : ""}">${images.map(renderAttachment).join("")}</div>` : ""}${!deleted ? documents.map(renderAttachment).join("") : ""}${!deleted && message.body ? `<div class="message-text">${renderRichText(message.body)}</div>` : ""}${!deleted && message.briefing_document_id ? `<button class="secondary-button" data-action="open-document" data-document-id="${escapeHtml(message.briefing_document_id)}">Consulter le briefing signé</button>` : ""}${!deleted ? renderMessageActionLinks(message) : ""}${!deleted ? renderReactionBar(message) : ""}<div class="message-footer"><span>${formatTime(message.created_at)}</span>${mine ? `<span class="message-status" title="${messageReadBySomeoneElse(message) ? "Lu par un interlocuteur" : "Envoyé"}">${messageReadBySomeoneElse(message) ? "✓✓" : "✓"}</span>` : ""}</div>${!deleted ? `<div class="message-actions"><button data-action="reply" data-message-id="${message.id}">↩ Répondre</button><button data-action="open-reactions" data-message-id="${message.id}">☺ Réagir</button><button data-action="make-action" data-message-id="${message.id}">✓ Action</button>${mine ? `<button data-action="toggle-important" data-message-id="${message.id}">${message.is_important ? "★ Désépingler" : "☆ Épingler"}</button>` : ""}</div>` : ""}</div>`;
+    const summary = completed ? `<details class="completed-feed-details"><summary class="completed-feed-action"><b>✓ Action terminée</b><strong>${escapeHtml(linkedActions.map(action => action.title).join(" · "))}</strong><span>${escapeHtml(message.author_name || "Intervenant")} · ${formatTime(message.created_at)} · Voir l’historique et la preuve <i aria-hidden="true">⌄</i></span></summary>${bubble}</details>` : `<span class="message-avatar">${escapeHtml(initial(message.author_name))}</span>${bubble}`;
+    return `<article class="message-row ${mine ? "mine" : ""} ${completed ? "action-completed" : ""}" data-message-row="${message.id}">${summary}</article>`;
   }
   function scrollMessagesToBottom() {
     app.feedAtBottom = true;
@@ -1149,6 +1150,7 @@
       showEmpty(els.messageFeed, "Aucun message trouvé", app.search || app.typeFilter ? "Modifie les filtres pour retrouver la discussion." : "Écris le premier message du chantier.", "▰");
       return;
     }
+    const expandedActions = new Set([...(els.messageFeed.querySelectorAll?.('.completed-feed-details[open]') || [])].map(node => node.closest('[data-message-row]').dataset.messageRow));
     let previousDay = "", html = "";
     list.forEach(message => {
       const day = formatDay(message.created_at);
@@ -1156,6 +1158,7 @@
       html += renderMessage(message);
     });
     els.messageFeed.innerHTML = html;
+    els.messageFeed.querySelectorAll?.('.completed-feed-details').forEach(node => { node.open = expandedActions.has(node.closest('[data-message-row]').dataset.messageRow); });
     app.feedAtBottom = followBottom;
     if (!followBottom) els.messageFeed.scrollTop = oldPosition;
     else requestAnimationFrame(scrollMessagesToBottom);
@@ -1711,7 +1714,7 @@
     return legacy.length === 1 ? legacy : [];
   }
   function renderMessageActionLinks(message) {
-    return actionLinksForMessage(message).map(action => `<button class="message-action-link" data-action="open-action" data-action-id="${escapeHtml(action.id)}"><b>✓ ${escapeHtml(action.title)}</b><span>${escapeHtml(actionStatusLabel(action.status))} · ${escapeHtml(action.assignee || "Sans pilote")} · ${escapeHtml(actionDeadlineLabel(action))}</span><small>Ouvrir l’action ›</small></button>`).join("");
+    return actionLinksForMessage(message).map(action => `<button class="message-action-link ${action.status === "terminee" ? "is-complete" : ""}" data-action="open-action" data-action-id="${escapeHtml(action.id)}"><b>✓ ${escapeHtml(action.title)}</b><span>${escapeHtml(actionStatusLabel(action.status))} · ${escapeHtml(action.assignee || "Sans pilote")} · ${escapeHtml(actionDeadlineLabel(action))}</span><small>Ouvrir l’action ›</small></button>`).join("");
   }
   function renderActions() {
     const chantier = currentChantier();
@@ -1723,7 +1726,7 @@
     els.actionBoard.innerHTML = columns.map(([status, title]) => {
       const key = action => action.due_mode === "immediate" ? "0000" : String(action.due_date || "9999");
       const items = actions.filter(action => action.status === status).sort((a, b) => key(a).localeCompare(key(b)));
-      return `<section class="action-column"><h3>${title}<span>${items.length}</span></h3>${items.map(action => `<article class="action-card"><button class="action-menu" data-action="action-menu" data-action-id="${escapeHtml(action.id)}" aria-label="Ouvrir l’action">⋮</button><span class="action-priority priority-${escapeHtml(action.priority || "normale")}">${escapeHtml(actionPriorityLabel(action.priority))}</span><h4><button class="action-title-link" data-action="open-action" data-action-id="${escapeHtml(action.id)}">${escapeHtml(action.title)}</button></h4>${action.description ? `<p>${escapeHtml(action.description)}</p>` : ""}${action.close_note ? `<p class="action-proof">✓ ${escapeHtml(truncate(action.close_note, 100))}</p>` : ""}<div class="action-card-foot"><span>${escapeHtml(action.assignee || "Sans pilote")}</span><span class="${actionIsLate(action) ? "due-late" : ""}">${escapeHtml(actionDeadlineLabel(action))}</span></div></article>`).join("") || `<p style="margin:16px 3px;color:#687982;font-size:11px">Aucune action</p>`}</section>`;
+      return `<section class="action-column"><h3>${title}<span>${items.length}</span></h3>${items.map(action => `<article class="action-card ${action.status === "terminee" ? "is-complete" : ""}"><button class="action-menu" data-action="action-menu" data-action-id="${escapeHtml(action.id)}" aria-label="Ouvrir l’action">⋮</button><span class="action-priority priority-${escapeHtml(action.priority || "normale")}">${escapeHtml(actionPriorityLabel(action.priority))}</span><h4><button class="action-title-link" data-action="open-action" data-action-id="${escapeHtml(action.id)}">${escapeHtml(action.title)}</button></h4>${action.description ? `<p>${escapeHtml(action.description)}</p>` : ""}${action.close_note ? `<p class="action-proof">✓ ${escapeHtml(truncate(action.close_note, 100))}</p>` : ""}<div class="action-card-foot"><span>${escapeHtml(action.assignee || "Sans pilote")}</span><span class="${actionIsLate(action) ? "due-late" : ""}">${escapeHtml(actionDeadlineLabel(action))}</span></div></article>`).join("") || `<p style="margin:16px 3px;color:#687982;font-size:11px">Aucune action</p>`}</section>`;
     }).join("");
   }
 
@@ -4169,7 +4172,7 @@
   async function initialize() {
     wireEvents();
     const callbackError = takeAuthCallbackError();
-    if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("./service-worker-v13.js?v=15.0").catch(error => console.warn("Service worker", error));
+    if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("./service-worker-v13.js?v=15.3").catch(error => console.warn("Service worker", error));
     syncFromLocal();
     if (cloudConfigured()) {
       try { await initializeCloud(); }
