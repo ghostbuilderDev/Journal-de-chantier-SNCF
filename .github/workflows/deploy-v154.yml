@@ -8,6 +8,7 @@ on:
       - 'supabase/functions/_shared/cr-email.mjs'
       - 'supabase/tests/cr-v154-*'
       - 'scripts/deploy-v154-release.py'
+      - 'tests/v154-deployment.test.py'
       - '.github/workflows/deploy-v154.yml'
   workflow_dispatch:
 permissions:
@@ -36,6 +37,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+      - name: Vérifier le chemin de déploiement avant toute connexion
+        run: python3 tests/v154-deployment.test.py
       - name: Vérifier les tables et les droits sur PostgreSQL 17 jetable
         shell: bash
         run: |
@@ -44,11 +47,15 @@ jobs:
           for file in supabase/tests/backend-fixture.sql supabase/tests/backend-production-shape.sql supabase/migrations/20260906000300_v14_2_contraintes_reelles.sql supabase/tests/feedback-backend-fixture.sql supabase/migrations/20260907000500_v14_5_retours_application.sql supabase/migrations/20260908000100_v15_cr_encadrement.sql supabase/migrations/20260908000200_v15_1_cr_perimetres.sql supabase/migrations/20260908000300_v15_2_cr_simple.sql supabase/migrations/20260909000100_v15_3_cr_tables.sql supabase/migrations/20260909000200_v15_4_production_email.sql supabase/migrations/20260909000200_v15_4_production_email.sql supabase/tests/cr-v154-postgres.sql; do
             docker exec -i "$test_container" psql -U postgres -d journal_v154_test -v ON_ERROR_STOP=1 < "$file"
           done
+          docker exec -i "$test_container" psql -U postgres -d journal_v154_test -v ON_ERROR_STOP=1 -c "CREATE TABLE IF NOT EXISTS public.journal_sql_migrations (migration_name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now());"
+          python3 scripts/deploy-v154-release.py --print-sql | docker exec -i "$test_container" psql -U postgres -d journal_v154_test -v ON_ERROR_STOP=1
+          docker exec -i "$test_container" psql -U postgres -d journal_v154_test -v ON_ERROR_STOP=1 -c "DO \$\$ BEGIN IF (SELECT count(*) FROM public.journal_sql_migrations WHERE migration_name='20260909000200_v15_4_production_email.sql') <> 1 THEN RAISE EXCEPTION 'Migration non enregistrée'; END IF; END \$\$;"
       - name: Tester la conservation des données et les signalements
         run: |
           npm install --prefix /tmp/journal-v154-tests @electric-sql/pglite@0.5.8 --ignore-scripts --no-audit --no-fund
           PGLITE_MODULE=/tmp/journal-v154-tests/node_modules/@electric-sql/pglite node supabase/tests/cr-v154-backend.cjs
           PGLITE_MODULE=/tmp/journal-v154-tests/node_modules/@electric-sql/pglite node supabase/tests/cr-v154-retrofit.cjs
+          PGLITE_MODULE=/tmp/journal-v154-tests/node_modules/@electric-sql/pglite node supabase/tests/cr-v154-deployment.cjs
           node --test supabase/tests/cr-v154-email.test.cjs
           python3 tests/v154-installation.test.py
       - name: Installer le client PostgreSQL

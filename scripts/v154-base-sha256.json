@@ -33,7 +33,9 @@
     "journal-v154.css": null,
     "tests/cr-v154-browser.cjs": null,
     "VERSION_V15.4.md": null,
-    "VERIFICATIONS_V15.4.txt": null
+    "VERIFICATIONS_V15.4.txt": null,
+    "tests/v154-deployment.test.py": null,
+    "supabase/tests/cr-v154-deployment.cjs": null
   },
   "dependencies": {
     "briefing/journal-bridge.js": "186b1f1491ea5f83fffed642efc2ab8e328e8225320fb524e090ef663619a4f4",
@@ -67,5 +69,107 @@
     "supabase/tests/feedback-backend-fixture.sql": "4fa860722064ac98acce2717973421ac06d142cef4ddb89abdaa764f919a5b12",
     "tests/actions.cjs": "92c7deb92e82d2a09d8b73922b694cce4dffe597045059d7ddecb23c39a6cd72",
     "tests/briefing-v153-pdf.cjs": "fd2c8d3985e887c9343624b915c953a4b7b3c9aa4f1f4a6a84f7bfe496335926"
-  }
+  },
+  "previous_files": {
+    ".github/workflows/deploy-v154.yml": [
+      "7d667cded708a38eae55d0596cdf1a25716991c7607eb356004e3d542058a6f3"
+    ],
+    ".github/workflows/configure-email-v154.yml": [
+      "5a6e9625309a47d3407ced472e01523ab0f9a9bfea79664fa4b24c824349813c"
+    ],
+    "supabase/migrations/20260909000200_v15_4_production_email.sql": [
+      "962d6c175bf9ff9203de6f637cc8ce5ebb8444adafcf7f2ea58750a55e716167"
+    ],
+    "supabase/functions/_shared/cr-email.mjs": [
+      "c6ad951398afb5b1600d1223ea917d144e3f78e55ec0036e6d2a01bbf2665096"
+    ],
+    "supabase/functions/journal-cr-send-v154/index.ts": [
+      "5b847887806be75308264c4327d9709cfaa1d6d181b3f9d91987a55f4a44ada3"
+    ],
+    "supabase/functions/journal-cr-send-v154/handler.mjs": [
+      "b89083576eb5bed4917e3dc2a02683b4643c2b24eda6dca3eb7346aca998a14f"
+    ],
+    "supabase/tests/cr-v154-backend.cjs": [
+      "ce09d5dc2f4c87fdca470c40946d26fb6f7df56552c0e3560d037a826a9c5044"
+    ],
+    "supabase/tests/cr-v154-postgres.sql": [
+      "727952be1fa358e81b0df676b5b0c9ad53e410a164380684ee80d02bd3b79a5c"
+    ],
+    "supabase/tests/cr-v154-retrofit.cjs": [
+      "9bebc5e87717acfa67caf7f96e5f77fd614bf63b7e10a3ab0a434c8e5e15c53d"
+    ],
+    "supabase/tests/cr-v154-email.test.cjs": [
+      "ac11dcce3149122addf61ef3a3812439ce1729e926f026293492e6efac7c1b11"
+    ],
+    "scripts/deploy-v154-release.py": [
+      "a3f15747498ea002525d06b2cd7a70d772b23f0a85948853e2a081a83ece6f87"
+    ],
+    "scripts/configure-v154-email.py": [
+      "80153bdae69a57b6f4fd01ca5ebba09adcef0baeddbf82c7421a1aba8aee3624"
+    ],
+    "scripts/configure-v154-email-termux.sh": [
+      "02234ec95e62a27cd6120d906e3071933494b716d5904dd6df8830f339cc6baf"
+    ],
+    "scripts/prepare-v154-update.py": [
+      "6a862281d6dff0d9bf596146a739b181041c5197eb671aa3d0249bffff8aaf37"
+    ],
+    "scripts/wait-v154-workflow.py": [
+      "7246f1e965dd48f4ed2748c0495ebf5bdc21da6bde4be268b73926380c5a2a2a"
+    ],
+    "scripts/update-v154-termux.sh": [
+      "6f29ed489dda512597da7c8cbd9ddf2713ca041b9a7c1f2772a3ab8f4362c8d8"
+    ],
+    "scripts/v154-base-sha256.json": [
+      "c551e30a1e177ed69520d2daec081f3bfbe07b999519d7dd513acf2f5e6ed9ea"
+    ],
+    "tests/v154-installation.test.py": [
+      "dbbf53eebed1f6ce92d21823f94cb0e9572b2281f43be94a29676d84871bf266"
+    ],
+    "app-v13.js": [
+      "40c9937909f588056a03150248d8a900fbca0646d6c5f522a05e3981fbbd435f"
+    ],
+    "cr-off.js": [
+      "df21a4d60910ddcb58fd30a0c555707f3da4ea8df5f71273940ad3e153ee77fd"
+    ],
+    "feedback.js": [
+      "f4190f0ba277ad1811634e4a4de8dea7c642732c56adcdb785398a70f063a45c"
+    ],
+    "briefing-integration.js": [
+      "082e4447e4aae6172ee2fe9589357fc6b1a48bc611e6c506a70906d6ee2e096a"
+    ],
+    "briefing/index.html": [
+      "ec0fe044a835a5c5e5a94c61783a8578ea5e1989a9df2721bf36f6858ee38656"
+    ],
+    "index.html": [
+      "35da6e8a576128d1d3c14839a76ccd7c483c375767c4e89d12c992dd7e8c5206"
+    ],
+    "service-worker-v13.js": [
+      "b5e82012902d9b7fa161f876611965eab8fafb44718aed079d5831cd279f14ba"
+    ],
+    "journal-dialogs.js": [
+      "a62afa13553faf44de02c65691f02ff2d8d98def705b2a095cb32457eaf98104"
+    ],
+    "journal-feed.js": [
+      "602c249e624f2318182a43df76beb3b5d6ec3920f62eb280573f519ed22d771f"
+    ],
+    "journal-production.js": [
+      "212d7f50cd0f6f1f1d46b667d64c5717bcf3c782bede04e94c0df0b473a82b5f"
+    ],
+    "journal-export.js": [
+      "d5279bfc1596ddcc165467f999656f50370c049c892adfb62638e7d56a1e5ef3"
+    ],
+    "journal-v154.css": [
+      "6b54e66238e1cde6d3bf7ed8366c73ddd5d4af439fc2d67be494b89c925551c7"
+    ],
+    "tests/cr-v154-browser.cjs": [
+      "103ca56bec7305a61555ab5bdcbcb407b0278c807229cdf9996840991bb0f323"
+    ],
+    "VERSION_V15.4.md": [
+      "238874341637c05c3c6b9d6a713b0a4cb78876a6956e647f9513240ff3884c58"
+    ],
+    "VERIFICATIONS_V15.4.txt": [
+      "23a49a310e8e1daf027646543cb6269fccaa837ebf8cfd98bc7fd8c47528e3c3"
+    ]
+  },
+  "recovery_from_commit": "bdf9aa7"
 }

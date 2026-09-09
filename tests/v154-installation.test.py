@@ -12,6 +12,12 @@ class Tests(unittest.TestCase):
  def test_missing_archive_and_new_files(self):
   m.validate_change('new.js',None,b'code',None)
   with self.assertRaises(ValueError):m.validate_change('app.js',b'code',None,m.digest(b'code'))
+ def test_interrupted_v154_release_only_accepts_known_bytes(self):
+  previous,new=b'paquet V15.4 interrompu',b'paquet corrige'
+  m.validate_change('migration.sql',previous,new,None,[m.digest(previous)])
+  m.validate_change('migration.sql',None,new,None,[m.digest(previous)])
+  m.validate_change('migration.sql',new,new,None,[m.digest(previous)])
+  with self.assertRaises(ValueError):m.validate_change('migration.sql',previous+b' modification personnelle',new,None,[m.digest(previous)])
  def test_symlinks(self):
   with tempfile.TemporaryDirectory() as d:
    root=Path(d);(root/'outside').write_text('garder');(root/'link').symlink_to(root/'outside')

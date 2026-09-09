@@ -1,5 +1,7 @@
 -- V15.4: one shared production entry, immutable CR snapshots, email preview.
 -- Additive; no historical messages, recipients or validated versions removed.
+BEGIN;
+
 create table if not exists journal_cr_private.production_sheets(
  id uuid primary key, chantier_id uuid not null references public.chantiers(id) on delete cascade,
  night date not null, message_id uuid not null unique, items jsonb not null,
@@ -154,3 +156,5 @@ revoke all on function public.journal_cr_api(text,jsonb) from public,anon,servic
 grant execute on function public.journal_cr_api(text,jsonb) to authenticated;
 revoke all on all functions in schema journal_cr_private from public,anon,authenticated,service_role;
 NOTIFY pgrst, 'reload schema';
+
+COMMIT;
