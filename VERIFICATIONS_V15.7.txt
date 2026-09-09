@@ -1,0 +1,41 @@
+Journal de chantier V15.7 — vérifications du 09/09/2026
+Base : 8ce4394 — Journal Chantier V15.6.
+
+SOURCE
+Classeur Programmation AINM S37 à S44 04-09-2026.xlsx lu sans modification.
+124 lignes Petit / Dahmani / Damani et 11 lignes Moret (Samois).
+64 références : 14 SEL, 23 secteurs, 27 ZEP / groupements.
+Onze ajouts : deux SEL, quatre secteurs, cinq ZEP / groupements.
+Libellés groupés, mentions Précaire et cellules sources conservés.
+
+ESSAIS RÉUSSIS
+- Tests des conversions horaires : minuit, dates éloignées, heures de Paris,
+  conservation des instants enregistrés, heure répétée et heure inexistante.
+- Migration additive appliquée deux fois sur PGlite : mêmes horaires et demandes.
+- Catalogue serveur comparé à l'extraction des références et sources du classeur.
+- Accès privé : formulaire réservé à son responsable, aucun accès anonyme.
+- Transaction exacte du programme d'installation, registre de migration,
+  et toutes les requêtes SQL de vérification de ce programme.
+- Six tests de déploiement et cinq tests de protection de l'installation.
+- Chromium 390 x 844 et 1024 x 768 : un champ Intitulé, recherche,
+  choix modifiable ou vide, type SEL/Secteur, ZEP et voie libre.
+- Les quatre champs horaires natifs sont visibles ; les quatre dates restent
+  masquées jusqu'au clic Date ; aucun contrôle été/hiver n'est affiché.
+- Deux lignes de consignation : affichage des dates indépendant par ligne.
+- Horaires prévus vides autorisés, passage de minuit et date de fin au surlendemain.
+- Sauvegarde de l'administrateur, brouillon de l'agent, envoi définitif,
+  retour aux valeurs persistées sur tablette.
+- CR validé : champs non modifiables, dates toujours consultables.
+
+COMMANDES DE TEST
+node tests/cr-v157-clocks.cjs
+node supabase/tests/cr-v157-backend.cjs
+node supabase/tests/cr-v157-deployment.cjs
+node tests/cr-v157-browser.cjs
+python tests/v157-deployment.test.py
+python tests/v157-installation.test.py
+
+Les tests Node utilisent PGlite et Playwright installés dans l'environnement de test.
+PGlite utilise une interface SQL simulée pour pg_cron ; aucun rappel réel n'est envoyé.
+Le cadran natif dessiné par Android ne peut pas être reproduit par Chromium sans écran.
+Les essais ne constituent pas un déploiement sur les comptes GitHub ou Supabase.
