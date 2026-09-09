@@ -1,0 +1,69 @@
+name: Installer le Journal V15.5 - demandes et PDF
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/20260909000300_v15_5_requests_pdf.sql'
+      - 'supabase/tests/cr-v155-*'
+      - 'scripts/deploy-v155-release.py'
+      - 'tests/v155-deployment.test.py'
+      - '.github/workflows/deploy-v155.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: supabase-production
+  cancel-in-progress: false
+jobs:
+  install:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: journal-ci-only
+          POSTGRES_DB: journal_v155_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d journal_v155_test"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Vérifier le chemin de déploiement avant toute connexion
+        run: python3 tests/v155-deployment.test.py
+      - name: Vérifier les tables et les droits sur PostgreSQL 17 jetable
+        shell: bash
+        run: |
+          set -euo pipefail
+          test_container="${{ job.services.postgres.id }}"
+          for file in supabase/tests/backend-fixture.sql supabase/tests/backend-production-shape.sql supabase/migrations/20260906000300_v14_2_contraintes_reelles.sql supabase/tests/feedback-backend-fixture.sql supabase/migrations/20260907000500_v14_5_retours_application.sql supabase/migrations/20260908000100_v15_cr_encadrement.sql supabase/migrations/20260908000200_v15_1_cr_perimetres.sql supabase/migrations/20260908000300_v15_2_cr_simple.sql supabase/migrations/20260909000100_v15_3_cr_tables.sql supabase/migrations/20260909000200_v15_4_production_email.sql; do
+            docker exec -i "$test_container" psql -U postgres -d journal_v155_test -v ON_ERROR_STOP=1 < "$file"
+          done
+          docker exec -i "$test_container" psql -U postgres -d journal_v155_test -v ON_ERROR_STOP=1 -c "CREATE TABLE IF NOT EXISTS public.journal_sql_migrations (migration_name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now());"
+          python3 scripts/deploy-v155-release.py --print-sql | docker exec -i "$test_container" psql -U postgres -d journal_v155_test -v ON_ERROR_STOP=1
+          docker exec -i "$test_container" psql -U postgres -d journal_v155_test -v ON_ERROR_STOP=1 < supabase/tests/cr-v155-postgres.sql
+          docker exec -i "$test_container" psql -U postgres -d journal_v155_test -v ON_ERROR_STOP=1 -c "DO \$\$ BEGIN IF (SELECT count(*) FROM public.journal_sql_migrations WHERE migration_name='20260909000300_v15_5_requests_pdf.sql') <> 1 THEN RAISE EXCEPTION 'Migration non enregistrée'; END IF; END \$\$;"
+      - name: Tester la conservation des données et les signalements
+        run: |
+          npm install --prefix /tmp/journal-v155-tests @electric-sql/pglite@0.5.8 --ignore-scripts --no-audit --no-fund
+          PGLITE_MODULE=/tmp/journal-v155-tests/node_modules/@electric-sql/pglite node supabase/tests/cr-v155-backend.cjs
+          PGLITE_MODULE=/tmp/journal-v155-tests/node_modules/@electric-sql/pglite node supabase/tests/cr-v155-deployment.cjs
+          python3 tests/v155-installation.test.py
+      - name: Installer le client PostgreSQL
+        run: |
+          if ! command -v psql >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y postgresql-client
+          fi
+      - name: Appliquer V15.5 et contrôler les droits
+        env:
+          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: python3 scripts/deploy-v155-release.py
