@@ -1,0 +1,18 @@
+{
+  "name": "Rapport journalier AINM",
+  "short_name": "RJ AINM",
+  "description": "Saisie terrain et archivage complet des rapports journaliers travaux signalisation.",
+  "lang": "fr",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f1f5f6",
+  "theme_color": "#34464c",
+  "icons": [
+    {
+      "src": "icons/rapport-journalier-ainm-pwa.png",
+      "sizes": "1254x1254",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

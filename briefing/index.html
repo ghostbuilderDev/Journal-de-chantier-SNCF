@@ -2764,9 +2764,11 @@ toggleTravauxType();
       let changed=false;
       for(const p of rows){
         if(p.session_id!==sessionId||!/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(p.signature||''))continue;
-        if(ignoredRemote.has(p.id)||participants.some(x=>x.remote_id===p.id))continue;
+        if(ignoredRemote.has(p.id))continue;
+        const existing=participants.find(x=>x.remote_id===p.id);
+        if(existing){for(const k of ['nom','entreprise']){const value=String(existing[k]||'').toLocaleUpperCase('fr-FR');if(existing[k]!==value){existing[k]=value;changed=true;}}continue;}
         const match=participants.filter(x=>!x.signature&&['nom','prenom','entreprise','fonction'].every(k=>String(x[k]||'').trim().toLocaleLowerCase('fr')===String(p[k]||'').trim().toLocaleLowerCase('fr')));
-        const record={nom:p.nom,prenom:p.prenom,entreprise:p.entreprise,fonction:p.fonction,signature:p.signature,remote_id:p.id,remote_session:sessionId,signed_at:p.created_at};
+        const record={nom:String(p.nom||'').toLocaleUpperCase('fr-FR'),prenom:p.prenom,entreprise:String(p.entreprise||'').toLocaleUpperCase('fr-FR'),fonction:p.fonction,signature:p.signature,remote_id:p.id,remote_session:sessionId,signed_at:p.created_at};
         if(match.length===1)Object.assign(match[0],record);else participants.push(record);changed=true;
       }
       if(changed){render();save();}return participants.length;
@@ -2802,7 +2804,7 @@ toggleTravauxType();
       const raw=localStorage.getItem(KEY);
       if(raw){
         const state=JSON.parse(raw);
-        participants=Array.isArray(state.participants)?state.participants:[];
+        participants=Array.isArray(state.participants)?state.participants.map(p=>p.remote_id?{...p,nom:String(p.nom||'').toLocaleUpperCase('fr-FR'),entreprise:String(p.entreprise||'').toLocaleUpperCase('fr-FR')}:p):[];
         ignoredRemote=new Set(Array.isArray(state.ignoredRemote)?state.ignoredRemote:[]);
         applyFields(state.fields);
       }

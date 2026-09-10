@@ -1,3 +1,36 @@
 <!doctype html>
-<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="referrer" content="no-referrer"><meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#ad1233"><title>Signer le briefing · Journal de chantier</title><link rel="stylesheet" href="briefing-v158.css?v=15.8"><script src="../config.js?v=14.2-collaborateurs" defer></script><script src="../supabase.js?v=14.2-collaborateurs" defer></script><script src="signer.js?v=15.8" defer></script></head>
-<body class="briefing-sign-page"><main class="briefing-sign-card"><header><small>JOURNAL DE CHANTIER</small><h1>Signer le briefing</h1><p id="signSession">Chargement de la séance…</p></header><p id="signNotice" role="status"></p><form id="signForm" hidden><div class="briefing-sign-grid"><label>Nom<input name="nom" autocomplete="family-name" maxlength="120" required></label><label>Prénom<input name="prenom" autocomplete="given-name" maxlength="120" required></label><label>Fonction<input name="fonction" autocomplete="organization-title" maxlength="120" required placeholder="Ex. RSO, conducteur…"></label><label>Entreprise<input name="entreprise" autocomplete="organization" maxlength="120" required></label></div><label class="briefing-sign-label">Votre signature</label><canvas id="signCanvas" width="800" height="260" aria-label="Dessiner votre signature avec le doigt"></canvas><button type="button" id="signClear" class="briefing-sign-clear">Effacer la signature</button><p class="briefing-sign-help">En validant, je confirme ma participation au briefing indiqué ci-dessus.</p><button id="signSubmit" class="briefing-sign-primary" type="submit">Valider ma signature</button></form><section id="signSuccess" hidden><div class="briefing-sign-check">✓</div><h2>Signature reçue</h2><p>Votre présence a été transmise à l’encadrant pour ce briefing. Vous pouvez fermer cette page.</p><button type="button" id="signAnother">Faire signer une autre personne</button></section></main></body></html>
+<html lang="fr">
+<head>
+ <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+ <meta name="referrer" content="no-referrer"><meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#ad1233">
+ <title>Journal de chantier – Briefing au pied de l’opération</title>
+ <link rel="manifest" href="manifest.json"><link rel="apple-touch-icon" href="icon-192-v19b.png">
+ <link rel="stylesheet" href="briefing-v158.css?v=15.8"><link rel="stylesheet" href="signer-v15101.css?v=15.10.1">
+ <script src="../config.js?v=14.2-collaborateurs" defer></script><script src="../supabase.js?v=14.2-collaborateurs" defer></script>
+ <script src="signature-pad.js?v=15.10.1" defer></script><script src="signer.js?v=15.10.1" defer></script>
+</head>
+<body class="briefing-sign-page">
+ <main class="briefing-sign-card">
+  <header><div class="sign-brand"><small>JOURNAL DE CHANTIER</small><button id="signFullscreen" type="button" hidden>Plein écran</button></div><h1>Briefing au pied de l’opération</h1><p id="signSession">Chargement de la séance…</p></header>
+  <p id="signNotice" role="status"></p>
+  <form id="signForm" hidden>
+   <div class="briefing-sign-grid">
+    <label>Nom de l’agent<input name="nom" autocomplete="family-name" autocapitalize="characters" maxlength="120" required></label>
+    <label>Prénom<input name="prenom" autocomplete="given-name" maxlength="120" required></label>
+    <label>Fonction<input name="fonction" autocomplete="organization-title" maxlength="120" required placeholder="Ex. RSO, conducteur…"></label>
+    <label>Entreprise<input name="entreprise" autocomplete="organization" autocapitalize="characters" maxlength="120" required></label>
+   </div>
+   <p class="briefing-sign-label" id="signLabel">Votre signature</p>
+   <button type="button" id="signOpen" class="sign-open" aria-labelledby="signLabel signSignatureHint" aria-haspopup="dialog"><canvas id="signCanvas" width="800" height="280" aria-hidden="true"></canvas><span id="signSignatureHint">Appuyer ici pour signer</span></button>
+   <p class="briefing-sign-help">En validant ma participation, je confirme avoir participé au briefing indiqué ci-dessus.</p>
+   <button id="signSubmit" class="briefing-sign-primary" type="submit">Valider ma participation</button>
+  </form>
+  <section id="signSuccess" hidden><div class="briefing-sign-check">✓</div><h2>Signature reçue</h2><p>Votre présence a été transmise à l’encadrant pour ce briefing. Vous pouvez fermer cette page.</p><button type="button" id="signAnother">Faire signer une autre personne</button></section>
+ </main>
+ <dialog id="signatureDialog" class="signature-dialog" aria-labelledby="signatureTitle" aria-describedby="signatureStatus">
+  <header><div><small>BRIEFING · ÉMARGEMENT</small><h2 id="signatureTitle">Votre signature</h2></div><button type="button" id="signatureClose" aria-label="Revenir au formulaire en conservant le tracé">Fermer ×</button></header>
+  <p id="signatureStatus" role="status">Signez avec le doigt. Vous pouvez tourner votre téléphone.</p>
+  <div class="signature-workspace"><canvas id="signatureEditor" width="800" height="600" aria-label="Dessiner votre signature avec le doigt"></canvas></div>
+  <footer><button type="button" id="signatureClear">Effacer</button><button type="button" id="signatureApply" class="briefing-sign-primary" disabled>Valider la signature</button></footer>
+ </dialog>
+</body></html>

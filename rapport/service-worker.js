@@ -1,0 +1,11 @@
+const CACHE='journal-rapport-v15.10';
+const ASSETS=['./index.html','./styles.css','./collaboration.css?v=15.10','./collaboration.js?v=15.10','./app.js?v=15.10','./journal-config.js','./journal-archive.js','./vendor/supabase.js','./vendor/pdf-lib.min.js','./data/price-catalog.js','./data/terrain-catalog.js','./data/billing-evidence.js','./icons/rapport-journalier-ainm.png','./icons/rapport-journalier-ainm-pwa.png','./assets/ainm-infrapole-paris-sud-est.jpg','../journal-composer.js?v=15.7.1'];
+self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting())));
+self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('journal-rapport-')&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
+self.addEventListener('message',e=>{if(e.data?.type==='SKIP_WAITING')self.skipWaiting();});
+self.addEventListener('fetch',e=>{const u=new URL(e.request.url);if(e.request.method!=='GET'||u.origin!==self.location.origin)return;
+ const root=new URL('./',self.location.href);const navigation=e.request.mode==='navigate'&&(u.pathname===root.pathname||u.pathname===root.pathname+'index.html');
+ const asset=ASSETS.find(a=>new URL(a,self.location.href).href===u.href);if(!navigation&&!asset)return;
+ const key=navigation?new URL('index.html',root).href:e.request;
+ e.respondWith(fetch(e.request).then(r=>{if(r.ok){const copy=r.clone();void caches.open(CACHE).then(c=>c.put(key,copy));}return r;}).catch(async()=>{const hit=await caches.match(key);return hit||new Response('Connexion nécessaire pour ouvrir ce fichier.',{status:503});}));
+});

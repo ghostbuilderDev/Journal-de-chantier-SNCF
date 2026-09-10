@@ -84,6 +84,7 @@
   };
 
   let messagePermission = { key: '', allowed: null, error: '', checkedAt: 0, pending: null };
+  let mentionTargets=[];
   const composer = createMessageComposer();
   function createMessageComposer() {
     const fallback = { open: () => els.messageInput.focus(), close: () => {}, suspend: () => {}, resume: () => {}, status: () => {}, isOpen: () => false };
@@ -188,13 +189,21 @@
     getContext: () => ({ready:isCloudReady(),db:app.db,userId:app.user?.id,
       chantiers:app.chantiers,currentId:app.currentId}),
     toast, openAlerts:openAlertCenter,
+    openDailyReport:(site,id)=>{rememberComposerDraft();location.href=dailyReportUrl(site,id);},
     async navigate({chantierId,messageId}) {
       if (!isCloudReady() || !app.chantiers.some(c=>c.id===chantierId)) return false;
-      await selectChantier(chantierId); setActiveTab("chat");
+      if(app.sendingMessage)return false;
+      const user=ownId();rememberComposerDraft();composer.close();
+      await selectChantier(chantierId);if(user!==ownId()||app.currentId!==chantierId)return false;setActiveTab("chat");
       app.search=""; app.typeFilter=""; app.onlyImportant=false;
       app.advancedFilters={from:"",to:"",zone:"",author:"",attachment:false};
       els.messageSearch.value="";els.typeFilter.value="";els.importantFilterBtn.setAttribute("aria-pressed","false");
-      renderMessages(); if(messageId) jumpToMessage(messageId); return true;
+      if(messageId&&!app.messages.some(m=>String(m.id)===String(messageId))){
+        const response=await app.db.from('chantier_messages').select('*').eq('id',messageId).eq('chantier_id',chantierId).maybeSingle();
+        if(response.error)throw response.error;if(!response.data||response.data.deleted_at){toast('Ce message a été supprimé ou n’est plus accessible.','warning');return false;}
+        const rows=await hydrateCloudAttachments([response.data]);if(user!==ownId()||app.currentId!==chantierId)return false;app.messages.push(...rows);
+      }
+      renderMessages(); if(messageId)return jumpToMessage(messageId); return true;
     }
   });
 
@@ -1908,7 +1917,18 @@
     } catch (_) { return false; }
   }
   function portalAppById(id) { if (id === "integrated-ainm") return ainmPortalApp(); if (id === 'integrated-briefing') return {id, icon_key:'briefing'}; return (app.portalApps || []).find(item => String(item.id) === String(id)) || null; }
+  function dailyReportUrl(site,id){const url=new URL('./rapport/index.html',location.href);url.searchParams.set('chantierId',site);if(id)url.searchParams.set('reportId',id);return url.href;}
+  async function openDailyReportHub(){
+    if(!isCloudReady()||!currentChantier())return toast('Connectez-vous et sélectionnez un chantier.','warning');
+    const site=app.currentId,user=ownId();
+    openModal({title:'Rapports journaliers',subtitle:currentChantier().name,body:'<p>Chargement des rapports partagés…</p>',footer:''});
+    try{const [list,write]=await Promise.all([app.db.rpc('journal_report_api',{p_action:'list',p_payload:{chantier_id:site}}),app.db.rpc('journal_v142_can_write',{p_chantier_id:site})]);if(list.error)throw list.error;if(site!==app.currentId||user!==ownId())return;
+      els.modalBody.innerHTML=(write.data?'<button id="dailyReportStart" class="primary-button">Ouvrir mon brouillon / Nouveau rapport</button>':'')+(list.data||[]).map(r=>`<button class="report-hub-item" data-daily-report="${r.id}"><b>${escapeHtml(r.report_no||'Rapport journalier')}</b><small>${escapeHtml(r.report_date)} · ${r.state==='validated'?'Validé':'À compléter'}</small></button>`).join('')+(!(list.data||[]).length?'<p>Aucun rapport partagé pour ce chantier. Ouvrez votre brouillon, puis enregistrez-le sur le serveur ou transférez-le.</p>':'');
+      $('dailyReportStart')?.addEventListener('click',()=>{location.href=dailyReportUrl(site);});els.modalBody.querySelectorAll('[data-daily-report]').forEach(b=>b.onclick=()=>{location.href=dailyReportUrl(site,b.dataset.dailyReport);});
+    }catch(e){els.modalBody.textContent='Chargement impossible : '+friendlyError(e);}
+  }
   function openPortalApp(item) {
+    if(isAinmPortalApp(item)) return openDailyReportHub();
     if (item?.icon_key === 'briefing' || item?.id === 'suggestion-briefing') {
       return window.JournalBriefing.open({
         context: () => ({ready: isCloudReady(), db: app.db, userId: app.user?.id, chantier: currentChantier()}),
@@ -2305,7 +2325,8 @@
       chantier_id: chantier.id, author_id: ownId(), author_name: ownName(), body: payload.body?.trim() || "",
       message_type: payload.message_type || "Info", zone: payload.zone?.trim() || "", reply_to: payload.reply_to || null,
       is_important: Boolean(payload.is_important), created_at: nowIso(),
-      ...(payload.action_id ? { action_id: payload.action_id } : {})
+      ...(payload.action_id ? { action_id: payload.action_id } : {}),
+      ...(payload.mentioned_users?.length ? {mentioned_users:payload.mentioned_users} : {})
     };
     if (!base.body && !files.length) throw new Error("Ajoute un message ou au moins un fichier.");
     if (isCloudReady()) {
@@ -2372,7 +2393,8 @@
       setMessageSendStatus('Envoi en cours…');
       await addMessage({
         body: els.messageInput.value, message_type: els.messageType.value, zone: els.messageZone.value,
-        reply_to: app.replyTo?.id || null, is_important: els.messageImportant.checked
+        reply_to: app.replyTo?.id || null, is_important: els.messageImportant.checked,
+        mentioned_users:mentionTargets.filter(m=>els.messageInput.value.includes(m.token)).map(m=>m.id)
       }, files, {}, app.composerRetry);
       if ((app.sessionVersion || 0) !== sessionVersion || ownId() !== senderId || app.currentId !== sendingChantierId) return;
       clearComposer();
@@ -2396,13 +2418,14 @@
   function draftKey(){return String(ownId())+':'+String(app.currentId);}
   function rememberComposerDraft() {
     if (!app.currentId || !ownId()) return;
-    const draft={body:els.messageInput.value,type:els.messageType.value,zone:els.messageZone.value,important:els.messageImportant.checked,files:[...app.pendingFiles],replyTo:app.replyTo,retry:app.composerRetry};
+    const draft={body:els.messageInput.value,type:els.messageType.value,zone:els.messageZone.value,important:els.messageImportant.checked,files:[...app.pendingFiles],replyTo:app.replyTo,retry:app.composerRetry,mentionTargets};
     app.composerDrafts.set(String(app.currentId),draft);
     const stored={...draft,files:draft.files.map(item=>({file:item.file}))};
     if (!window.JournalComposer?.write) return Promise.resolve(false);
     return window.JournalComposer.write(draftKey(),draft.body||draft.files.length||draft.retry?stored:null).then(()=>{composer.status('Brouillon conservé sur cet appareil · Entrée ajoute une ligne.');return true;}).catch(()=>{composer.status('Brouillon conservé pendant cette session. Gardez l’application ouverte.');return false;});
   }
   function applyComposerDraft(draft={}){
+    mentionTargets=draft.mentionTargets||[];
     els.messageInput.value=draft.body||'';els.messageInput.style.height='';els.messageType.value=draft.type||'Info';els.messageZone.value=draft.zone||'';els.messageImportant.checked=Boolean(draft.important);
     app.pendingFiles=draft.files||[];app.replyTo=draft.replyTo||null;app.composerRetry=draft.retry||null;renderPendingFiles();renderReplyPreview();setComposerSendingState();
   }
@@ -2420,6 +2443,7 @@
     renderPendingFiles();
   }
   function clearComposer() {
+    mentionTargets=[];
     app.composerRetry = null;
     app.composerDrafts.delete(String(app.currentId));
     if(app.currentId&&ownId())void window.JournalComposer?.write?.(draftKey(),null).catch(()=>{});
@@ -2516,21 +2540,7 @@
     field.focus(); field.setSelectionRange(position, position);
     field.dispatchEvent(new Event("input", { bubbles: true }));
   }
-  function knownMentions() {
-    const entries = new Map();
-    currentMessages().forEach(message => {
-      const label = String(message.author_name || "").trim();
-      if (label && String(message.author_id) !== String(ownId())) entries.set(label.toLocaleLowerCase("fr"), label);
-    });
-    return ["équipe", ...[...entries.values()].sort((a, b) => a.localeCompare(b, "fr"))];
-  }
   function openEmojiPicker(){const identity=draftKey(),session=app.sessionVersion;const start=els.messageInput.selectionStart,end=els.messageInput.selectionEnd;void JournalEmoji.open({title:'Ajouter un emoji',onSelect:emoji=>{if(draftKey()!==identity||app.sessionVersion!==session)return;els.messageInput.setSelectionRange(start,end);insertInComposer(emoji);rememberComposerDraft();composer.open();}});}
-  function openMentionPicker() {
-    const mentions = knownMentions();
-    openModal({ title: "Mentionner", subtitle: "La mention est visible par tous les membres du chantier.", body: `<div class="menu-list">${mentions.map(name => `<button data-mention="${escapeHtml(name)}">@${escapeHtml(name)}</button>`).join("")}</div>`, footer: `<button class="secondary-button" id="closeMentionPicker">Fermer</button>` });
-    $("closeMentionPicker").addEventListener("click", closeModal);
-    $$('[data-mention]', els.modalBody).forEach(button => button.addEventListener("click", () => { insertInComposer(`@${button.dataset.mention}`); closeModal(); }));
-  }
   async function polishComposerText(){
     const source=els.messageInput.value,key=draftKey(),version=app.sessionVersion;
     if(!source.trim())return toast('Écris ou dicte d’abord un message.','warning');
@@ -2545,6 +2555,20 @@
       $('applyWritingAI').onclick=()=>{if(key!==draftKey()||version!==app.sessionVersion)return closeModal(true);if(els.messageInput.value!==source)return toast('Votre texte a changé. Conservez-le ou relancez une nouvelle proposition.','warning');els.messageInput.value=$('writingAIProposal').value;els.messageInput.dispatchEvent(new Event('input',{bubbles:true}));rememberComposerDraft();closeModal();};
     }catch(error){if(marker.isConnected)els.modalBody.textContent=error.message+' Votre texte reste conservé.';}
   }
+  async function openMentionPicker() {
+    if(!isCloudReady()) return toast('Les mentions sont disponibles après connexion au chantier.','warning');
+    const site=app.currentId,user=ownId();composer.suspend();
+    try {
+      const result=await app.db.rpc('journal_report_api',{p_action:'directory',p_payload:{chantier_id:site}});
+      if(result.error)throw result.error;if(site!==app.currentId||user!==ownId())return;
+      const people=(result.data||[]).filter(p=>p.id!==user);
+      openModal({title:'Mentionner une personne',subtitle:'La personne recevra une alerte avec un accès direct au message.',body:'<button id="mentionTeam" class="report-hub-item">@équipe · Toute l’équipe</button>'+people.map(p=>`<button class="report-hub-item" data-mention-id="${p.id}"><b>${escapeHtml(p.name||'Utilisateur')}</b><small>${escapeHtml(p.company||'')}</small></button>`).join('')||'<p>Aucun autre utilisateur dans ce chantier.</p>',footer:'<button id="mentionCancel" class="secondary-button">Retour au message</button>'});
+      $('mentionCancel').onclick=()=>{closeModal();composer.resume();};
+      $('mentionTeam').onclick=()=>{mentionTargets=people.map(p=>({id:p.id,token:'@équipe'}));insertInComposer('@équipe ');rememberComposerDraft();closeModal();composer.resume();};
+      els.modalBody.querySelectorAll('[data-mention-id]').forEach(b=>b.onclick=()=>{const person=people.find(p=>p.id===b.dataset.mentionId),token='@'+person.name.trim().replace(/\s+/g,'.');mentionTargets=mentionTargets.filter(p=>p.id!==person.id);mentionTargets.push({id:person.id,token});insertInComposer(token+' ');rememberComposerDraft();closeModal();composer.resume();});
+    }catch(e){toast('Annuaire des mentions indisponible. Votre message est conservé.','warning');composer.resume();}
+  }
+
   function setComposerToolTray(open) {
     const visible = Boolean(open);
     els.composerToolTray.hidden = !visible;
@@ -4031,14 +4055,16 @@
 
   function jumpToMessage(id) {
     const node = document.querySelector(`[data-message-row="${String(id)}"]`);
-    if (!node) return;
+    if (!node) return false;
     const history = node.closest(".completed-feed-details"); if (history) history.open = true;
     node.scrollIntoView({ behavior: "smooth", block: "center" });
+    node.classList.add("message-target-highlight");setTimeout(()=>node.classList.remove("message-target-highlight"),5000);
     node.querySelector(".message-bubble")?.animate([
       { boxShadow: "0 0 0 0 rgba(130,0,90,0)" },
       { boxShadow: "0 0 0 5px rgba(130,0,90,.34)" },
       { boxShadow: "0 0 0 0 rgba(130,0,90,0)" }
     ], { duration: 1100 });
+    return true;
   }
   async function handleDynamicClick(event) {
     const element = event.target.closest("[data-action]");
@@ -4266,7 +4292,7 @@
   async function initialize() {
     wireEvents();
     const callbackError = takeAuthCallbackError();
-    if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("./service-worker-v13.js?v=15.9").catch(error => console.warn("Service worker", error));
+    if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("./service-worker-v13.js?v=15.10.1").catch(error => console.warn("Service worker", error));
     syncFromLocal();
     if (cloudConfigured()) {
       try { await initializeCloud(); }

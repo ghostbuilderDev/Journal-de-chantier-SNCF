@@ -6,13 +6,13 @@
  * sans paramètres d'URL, afin d'éviter les entrées de cache non maîtrisées.
  */
 const CACHE_PREFIX = 'briefing-pwa-pages-';
-const CACHE_NAME = 'briefing-pwa-pages-v159-qr-partage';
+const CACHE_NAME = 'briefing-pwa-pages-v15101-signature';
 const APP_SHELL = [
   './afficher-qr.html', './afficher-qr.js?v=15.9', './briefing-qr-share.js?v=15.9', './briefing-v159.css?v=15.9',
   './',
   './index.html',
   './manifest.json',
-  './signer.html', './signer.js?v=15.8', './briefing-v158.css?v=15.8',
+  './signer.html', './signer.js?v=15.10.1', './signature-pad.js?v=15.10.1', './signer-v15101.css?v=15.10.1', './briefing-v158.css?v=15.8',
   './journal-bridge.js?v=15.8', './briefing-preparation.js?v=15.8', './briefing-attendance.js?v=15.9', './vendor/qrcodegen.js?v=15.8',
   './icon-192-v19b.png',
   './icon-512-v19b.png',

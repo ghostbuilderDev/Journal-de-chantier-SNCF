@@ -1,0 +1,59 @@
+Journal de chantier V15.10.1 - vérifications du 10/09/2026
+Base : V15.9 99176290509b15cc43d8a791b7f206539558086d.
+Contient également V15.10 555b529 et son correctif de reprise de transfert.
+
+TESTS SQL (base jetable PGlite, aucune donnée de production)
+- supabase/tests/collaboration-v15101-backend.cjs : PASS.
+  Majuscules côté serveur, prénom préservé, anciennes confirmations réessayables,
+  impossibilité de rattacher une signature à un autre briefing, séance fermée,
+  droits des signaux individuels et publication Realtime, transferts successifs,
+  document intégral conservé, validation, migration répétable sans perte.
+- supabase/tests/collaboration-v15101-deployment.cjs : PASS.
+  Deux transactions réelles, deux lignes de registre, contrôles de droits V15.10
+  et V15.10.1, exécution de chaque requête de contrôle de l’installateur.
+- tests/v15101-deployment.test.py : 7 tests PASS.
+  Installation directe V15.9, reprise V15.10, interruption entre les deux
+  migrations, fichier invalide et prérequis absents bloqués avant mutation.
+- tests/v15101-installation.test.py : 5 tests PASS.
+  Fichiers attendus, conservation des changements inconnus, liens symboliques,
+  phases séparées, configuration Supabase exclue des remplacements.
+
+TESTS NAVIGATEUR (Chromium, interfaces réelles et comptes simulés)
+- tests/collaboration-v15101-browser.cjs : PASS.
+  Enregistrement du rapport, transfert multiple, réponse réseau perdue puis
+  nouvel essai sans doublon, notification et ouverture du même rapport,
+  saisies après rechargement, conflit préservé, nouveau transfert et validation.
+  Signal de mention traité sans attendre le délai de 20 secondes ; notification
+  reçue pendant que le destinataire utilise déjà l’application. Passage depuis
+  un autre chantier, chargement du message exact absent du fil, surbrillance.
+  Changement de compte : arrêt de l’abonnement et retrait des alertes affichées.
+- tests/signature-v15101-browser.cjs : PASS.
+  Deux téléphones, noms et entreprises normalisés, grande fenêtre, effacement,
+  rotation, fermeture et rechargement sans perte du tracé, aperçu avant envoi,
+  aucune transmission au simple clic sur Valider la signature, réception unique
+  après perte de confirmation, bonne séance, reprise dans le briefing.
+  PDF signé A4 de 3 pages généré ; configuration des 4 voies, engins et LAM
+  conservée après rechargement et export, signatures finalisées non réimportées.
+- tests/pwa-v15101-browser.cjs : PASS.
+  Installation réelle des service workers Journal/Briefing/Rapport, ressources
+  présentes, aucun cache des requêtes privées, brouillon préservé, page QR
+  correcte hors connexion, jeton URL conservé et manifeste standalone inchangé.
+
+CONTRÔLES COMPLÉMENTAIRES
+- Installation simulée depuis les sources V15.9 (9917629) puis V15.10 (555b529) :
+  PASS. Copie serveur, vérification, copie interface, nouvelle exécution sans
+  changement ; une modification personnelle est refusée et conservée.
+- tests/messages-v1571-browser.cjs : PASS. Administrateur principal, administrateur
+  chantier et deux contributeurs envoient ; lecture seule refusée, retours à la
+  ligne, brouillons, erreurs réseau, photos et reprises sans duplication.
+- tests/mode-worker.test.cjs : 14 tests PASS. Notifications téléphone existantes,
+  identité, expiration, déconnexion, déduplication et liens directs préservés.
+- Plein écran / retour normal dans Chromium : PASS, jeton du QR conservé.
+- PDF du briefing : page des signatures rendue et vérifiée visuellement ; les
+  deux signatures, les noms et les entreprises en majuscules sont présents.
+- Syntaxe JavaScript et bash, espaces Git : PASS.
+
+Limites : tests locaux avec transport et identités simulés ; pas de test sur les
+comptes réels ni de publication de production. Le parcours Android natif et le
+canal Supabase hébergé sont à vérifier après installation. Aucune nouvelle
+configuration email, aucun effacement de données ni modification des QR existants.

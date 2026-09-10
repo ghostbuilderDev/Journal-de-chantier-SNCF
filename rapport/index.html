@@ -1,0 +1,500 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#34464c" />
+    <meta name="description" content="Rapport journalier travaux signalisation — AINM" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icons/rapport-journalier-ainm-pwa.png" type="image/png" />
+    <link rel="apple-touch-icon" href="icons/rapport-journalier-ainm-pwa.png" />
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="collaboration.css?v=15.10" />
+    <title>Rapport journalier · AINM</title>
+  </head>
+  <body>
+    <section id="startupScreen" class="startup-screen" aria-label="Accueil du Rapport journalier AINM">
+      <div class="startup-atmosphere" aria-hidden="true"><span class="startup-orbit orbit-one"></span><span class="startup-orbit orbit-two"></span><span class="startup-scanline"></span></div>
+      <main class="startup-panel">
+        <div class="startup-topline">
+          <div class="startup-brand">
+            <img src="icons/rapport-journalier-ainm.png" alt="" aria-hidden="true" />
+            <div><strong>AINM</strong><span>Travaux signalisation</span></div>
+          </div>
+          <span class="startup-version"><span>Version</span><strong data-app-version>V10.3</strong></span>
+        </div>
+        <a class="return-journal-link" data-return-to-journal href="https://ghostbuilderdev.github.io/Journal-de-chantier-SNCF/">← Retour au journal de chantier</a>
+        <div class="startup-content">
+          <p class="startup-kicker">Opérations · terrain · signalisation</p>
+          <h1>Rapport<br /><span>journalier</span></h1>
+          <p class="startup-intro">Préparer, tracer et valider la séance de travaux depuis un seul dossier terrain.</p>
+          <section class="startup-session-card" aria-label="Rapport en cours">
+            <div><span>Rapport actif</span><strong id="startupReportNo">Chargement…</strong></div>
+            <div><span>Séance</span><strong id="startupSessionInfo">Brouillon local</strong></div>
+          </section>
+          <button id="enterAppButton" class="startup-enter-button" type="button"><span>Ouvrir le rapport</span><b aria-hidden="true">→</b></button>
+          <p class="startup-footnote"><span aria-hidden="true">●</span> Utilisable hors ligne · données conservées sur cet appareil</p>
+        </div>
+      </main>
+    </section>
+
+    <div class="app-shell">
+      <nav class="return-journal-bar no-print" aria-label="Retour au journal"><a class="return-journal-link" data-return-to-journal href="https://ghostbuilderdev.github.io/Journal-de-chantier-SNCF/">← Retour au journal de chantier</a></nav>
+      <header class="topbar no-print">
+        <div class="brand" aria-label="AINM Infrapôle Paris Sud Est">
+          <img class="brand-app-mark" src="icons/rapport-journalier-ainm.png" alt="" aria-hidden="true" />
+          <img class="brand-logo" src="assets/ainm-infrapole-paris-sud-est.jpg" alt="AINM Infrapôle Paris Sud Est" />
+          <span class="brand-context">Rapport travaux</span>
+        </div>
+        <div class="topbar-actions">
+          <span class="app-version-badge" data-app-version aria-label="Version de l’application">V10.3</span>
+          <span id="saveState" class="save-state" aria-live="polite">Brouillon local</span>
+          <button class="icon-button" id="newReportButton" type="button" title="Nouveau rapport" aria-label="Nouveau rapport">＋</button>
+          <button class="icon-button" id="moreButton" type="button" title="Actions" aria-label="Ouvrir les actions">•••</button>
+        </div>
+      </header>
+
+      <main class="app-main no-print">
+        <section class="hero-card hero-card-compact">
+          <div class="hero-brand-lockup">
+            <img class="hero-logo" src="assets/ainm-infrapole-paris-sud-est.jpg" alt="AINM Infrapôle Paris Sud Est" />
+            <div class="hero-copy">
+              <p class="eyebrow">AINM travaux</p>
+              <h1>Rapport journalier</h1>
+              <p class="hero-brandline">AINM travaux signalisation</p>
+            </div>
+          </div>
+        </section>
+
+        <div class="stepper-shell no-print">
+          <nav class="stepper" aria-label="Raccourcis fixes du rapport">
+            <button class="step active" data-scroll-target="contextSection" aria-current="step" type="button"><span>1</span>Contexte</button>
+            <button class="step" data-scroll-target="productionSection" type="button"><span>2</span>Production</button>
+            <button class="step" data-scroll-target="traceabilitySection" type="button"><span>3</span>Moyens &amp; horaires</button>
+            <button class="step" data-scroll-target="archiveSection" type="button"><span>4</span>Archivage</button>
+            <button class="step" data-scroll-target="reviewSection" type="button"><span>5</span>Contrôle</button>
+          </nav>
+        </div>
+
+        <section id="contextSection" class="section-card">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">1 · Contexte</p>
+              <h2>Une seule fois par séance</h2>
+            </div>
+            <div class="heading-actions">
+              <button id="duplicateLastNightButton" class="secondary-button compact-button" type="button">↻ Reprendre dernière nuit</button>
+              <span id="contextStatus" class="status-chip warning">À compléter</span>
+            </div>
+          </div>
+          <div class="form-grid context-grid">
+            <label class="field field-wide">
+              <span>Opération / chantier</span>
+              <input id="operationInput" data-path="meta.operation" autocomplete="organization" placeholder="Ex. RCT" />
+            </label>
+            <label class="field field-wide">
+              <span>Lieu / secteur / ligne</span>
+              <input id="locationInput" data-path="meta.location" placeholder="Ex. V1 et V2 — PK 80+050 à 80+340" />
+            </label>
+            <section class="field field-wide participant-companies-field" aria-label="Entreprises intervenantes">
+              <span>Entreprises intervenantes</span>
+              <div class="company-selector">
+                <select id="participantCompanySelect" aria-label="Choisir une entreprise intervenante"></select>
+                <button id="addParticipantCompanySelectButton" class="secondary-button" type="button">Ajouter</button>
+              </div>
+              <div id="participantCompanyPicker" class="company-selected-list"></div>
+              <div class="company-adder">
+                <input id="participantCompanyCustomInput" autocomplete="organization" placeholder="Ajouter une autre entreprise ou un prestataire" />
+                <button id="addParticipantCompanyButton" class="secondary-button" type="button">Ajouter</button>
+              </div>
+            </section>
+            <section class="field-wide company-signer-setup" aria-label="Responsables entreprises">
+              <span>Responsable de chaque entreprise</span>
+              <p class="company-signer-hint">Renseigner le nom et la fonction ici. Chaque responsable signe en fin de rapport.</p>
+              <div id="companySignerSetup"></div>
+            </section>
+            <label class="field">
+              <span>Date</span>
+              <input id="dateInput" data-path="meta.date" type="date" />
+            </label>
+            <label class="field">
+              <span>Nature</span>
+              <select id="shiftTypeInput" data-path="meta.shiftType">
+                <option value="jour">Journée</option>
+                <option value="nuit">Nuit</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Début réel</span>
+              <input id="shiftStartInput" data-path="meta.shiftStart" type="time" />
+            </label>
+            <label class="field">
+              <span>Fin réelle</span>
+              <input id="shiftEndInput" data-path="meta.shiftEnd" type="time" />
+            </label>
+            <label class="field">
+              <span>Durée effective travaux (h)</span>
+              <input id="workDurationInput" data-path="meta.workDuration" type="number" min="0" max="24" step="0.25" inputmode="decimal" placeholder="Ex. 5,5" />
+              <span class="duration-presets" aria-label="Durées courantes"><button type="button" data-duration-preset="3">3 h</button><button type="button" data-duration-preset="4">4 h</button><button type="button" data-duration-preset="5">5 h</button><button type="button" data-duration-preset="6">6 h</button></span>
+            </label>
+            <label class="field field-wide">
+              <span>Rédacteur</span>
+              <input id="reporterInput" data-path="meta.reporter" placeholder="Nom et prénom du surveillant" autocomplete="name" />
+            </label>
+          </div>
+          <details class="optional-details context-options">
+            <summary>Compléments de rapport</summary>
+            <div class="form-grid">
+              <label class="field"><span>N° rapport</span><input id="reportNoInput" readonly aria-readonly="true" /></label>
+              <label class="field"><span>N° commande</span><input id="orderNoInput" data-path="meta.orderNo" placeholder="À renseigner ultérieurement" /></label>
+              <label class="field">
+                <span>Temps</span>
+                <select id="weatherInput" data-path="meta.weather">
+                  <option value="">À renseigner</option><option value="Beau">Beau</option><option value="Nuageux">Nuageux</option><option value="Pluie">Pluie</option><option value="Vent">Vent</option><option value="Gel">Gel</option>
+                </select>
+              </label>
+              <label class="field"><span>Température (°C)</span><input id="temperatureInput" data-path="meta.temperature" type="number" min="-20" max="60" step="0.5" inputmode="decimal" /></label>
+              <div class="same-signer-note field-wide"><strong>Visa MOETx / surveillant de travaux</strong><span>Il s’agit de la même personne. Son nom, sa fonction et sa signature sont renseignés une seule fois dans les signatures finales.</span></div>
+              <label class="field field-wide"><span>Objectif / consigne de la séance</span><textarea id="objectiveInput" data-path="meta.objective" rows="3" placeholder="Objectif de la nuit, zone concernée, consigne principale…"></textarea></label>
+            </div>
+          </details>
+          <div class="inline-option">
+            <label class="check-row"><input id="publicHolidayInput" data-path="meta.publicHoliday" type="checkbox" /> Jour férié / régime week-end à appliquer</label>
+            <label class="check-row danger"><input id="cancelledInput" data-path="meta.cancelled" type="checkbox" /> Chantier annulé</label>
+          </div>
+          <label id="cancelReasonField" class="field hidden">
+            <span>Motif d’annulation</span>
+            <textarea id="cancelReasonInput" data-path="meta.cancelReason" rows="2" placeholder="Motif, causes et conséquences"></textarea>
+          </label>
+          <div id="pricingContext" class="info-banner admin-finance hidden"></div>
+        </section>
+
+        <section class="quick-actions-card" aria-label="Saisie rapide">
+          <div>
+            <p class="eyebrow">Saisie rapide</p>
+            <h2>Ajouter l’essentiel</h2>
+          </div>
+          <div class="quick-actions-grid">
+            <button id="quickAddTask" class="quick-action-button" type="button"><strong>＋ Prestation</strong><span>Travail réalisé</span></button>
+            <button class="quick-action-button" data-scroll-target="traceabilitySection" type="button"><strong>＋ Équipe</strong><span>Personnel entreprise</span></button>
+            <button class="quick-action-button" data-add-row="equipment" type="button"><strong>＋ Engin</strong><span>Mobile travaux</span></button>
+            <button class="quick-action-button" data-add-row="possession" type="button"><strong>＋ Horaires</strong><span>ITC / consignation</span></button>
+            <button class="quick-action-button" data-scroll-target="photoSection" type="button"><strong>📷 Photos</strong><span>Chantier et contrôles</span></button>
+          </div>
+        </section>
+
+        <section id="productionSection" class="section-card">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">2 · Production</p>
+              <h2>Production</h2>
+            </div>
+            <button id="openTaskCatalog" class="primary-button" type="button">＋ Ajouter une prestation</button>
+          </div>
+          <div id="quickCatalog" class="quick-catalog" aria-label="Prestations fréquentes"></div>
+          <div id="taskList" class="task-list"></div>
+          <div id="emptyTasks" class="empty-state">
+            <span class="empty-icon">⌁</span>
+            <p>Aucune prestation saisie.</p>
+            <button class="secondary-button" data-action="catalog" type="button">Ajouter la première prestation</button>
+          </div>
+        </section>
+
+        <section id="traceabilitySection" class="two-column-grid">
+          <section class="section-card compact-card">
+            <div class="section-heading">
+              <div><p class="eyebrow">Ressources</p><h2>Personnel des entreprises</h2><p class="muted">Effectif affecté à l’opération, classé par entreprise. Ajouter ou retirer une fonction directement dans le tableau concerné.</p></div>
+            </div>
+            <div id="quickPersonnelRoster" class="quick-roster"></div>
+          </section>
+
+          <section class="section-card compact-card">
+            <div class="section-heading">
+              <div><p class="eyebrow">Ressources</p><h2>Engins et mobiles travaux</h2></div>
+              <button class="text-button" data-add-row="equipment" type="button">＋ Ajouter</button>
+            </div>
+            <div id="quickEquipmentAdder" class="quick-equipment-adder"></div>
+            <div id="equipmentList" class="data-list"></div>
+          </section>
+
+          <section class="section-card compact-card wide-on-tablet">
+            <div class="section-heading">
+              <div><p class="eyebrow">Horaires</p><h2>Interceptions et consignations</h2></div>
+              <button class="text-button" data-add-row="possession" type="button">＋ Ajouter une ligne</button>
+            </div>
+            <div id="possessionList" class="data-list"></div>
+          </section>
+
+          <section class="section-card compact-card">
+            <div class="section-heading">
+              <div><p class="eyebrow">Qualité & sécurité</p><h2>Anomalies constatées</h2></div>
+              <button class="text-button" data-add-row="anomaly" type="button">＋ Ajouter</button>
+            </div>
+            <div id="anomalyList" class="data-list"></div>
+          </section>
+
+          <section class="section-card compact-card">
+            <div class="section-heading">
+              <div><p class="eyebrow">Pièces</p><h2>Rapports fournis</h2></div>
+              <button class="text-button" data-add-row="document" type="button">＋ Ajouter</button>
+            </div>
+            <div id="documentList" class="data-list"></div>
+          </section>
+
+          <section class="section-card compact-card">
+            <div class="section-heading">
+              <div><p class="eyebrow">SNCF</p><h2>Personnel SNCF affecté</h2></div>
+              <button id="addSncfFunctionButton" class="text-button" type="button">＋ Fonction</button>
+            </div>
+            <div id="quickSncfRoster" class="quick-roster quick-sncf-roster"></div>
+            <div id="sncfMeansList" class="data-list"></div>
+          </section>
+
+          <section class="section-card compact-card wide-on-tablet" id="photoSection">
+            <div class="section-heading">
+              <div><p class="eyebrow">Photos</p><h2>Avant / après nuit</h2><p class="muted">Photos datées et classées directement dans le rapport.</p></div>
+              <div class="photo-actions">
+                <button class="text-button" type="button" data-add-photo-phase="avant" data-photo-source="camera">📷 Avant</button>
+                <button class="text-button" type="button" data-add-photo-phase="avant" data-photo-source="files">▣ Avant</button>
+                <button class="text-button" type="button" data-add-photo-phase="apres" data-photo-source="camera">📷 Après</button>
+                <button class="text-button" type="button" data-add-photo-phase="apres" data-photo-source="files">▣ Après</button>
+              </div>
+            </div>
+            <div id="photoList" class="photo-list"></div>
+          </section>
+        </section>
+
+        <section id="archiveSection" class="section-card archive-card">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">4 · Archivage</p>
+              <h2>Dossier complet de la séance</h2>
+              <p class="muted">Les éléments saisis ici sont repris dans le rapport d’archivage, sans limite de pages.</p>
+            </div>
+            <span class="status-chip neutral">Dossier de séance</span>
+          </div>
+          <div class="two-column-grid archive-grid">
+            <section class="archive-subcard">
+              <div class="section-heading">
+                <div><p class="eyebrow">Consommables</p><h3>Matériaux utilisés</h3><p class="muted">Câbles, fournitures, béton, éléments déposés ou consommés.</p></div>
+                <button class="text-button" data-add-row="material" type="button">＋ Ajouter</button>
+              </div>
+              <div id="materialList" class="data-list"></div>
+            </section>
+            <section class="archive-subcard">
+              <div class="section-heading">
+                <div><p class="eyebrow">Qualité</p><h3>Autocontrôles et contrôles</h3><p class="muted">Contrôles réalisés, résultats, réserves et références.</p></div>
+                <button class="text-button" data-add-row="selfCheck" type="button">＋ Ajouter</button>
+              </div>
+              <div id="selfCheckList" class="data-list"></div>
+            </section>
+          </div>
+          <div class="form-grid archive-notes">
+            <label class="field field-wide"><span>Faits marquants / aléas / décisions</span><textarea id="executionNotesInput" data-path="meta.executionNotes" rows="4" placeholder="Décrire les faits marquants, aléas, décisions prises et coordination réalisée."></textarea></label>
+            <label class="field field-wide"><span>Travaux restant à réaliser / prochaine séance</span><textarea id="nextWorksInput" data-path="meta.nextWorks" rows="4" placeholder="Travaux restant, conditions de reprise, livraisons, contrôles ou points à lever."></textarea></label>
+          </div>
+        </section>
+
+        <section id="reviewSection" class="section-card review-card">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">5 · Contrôle</p>
+              <h2>Rapport prêt à éditer</h2>
+              <p class="muted">Le PDF terrain ne contient que les faits constatés et les quantités réellement réalisées.</p>
+            </div>
+            <span id="reviewStatus" class="status-chip warning">Brouillon</span>
+          </div>
+          <div id="reviewChecks" class="review-checks"></div>
+          <section class="company-visa-section" aria-label="Visas des entreprises intervenantes">
+            <div class="section-heading">
+              <div><p class="eyebrow">Signatures finales</p><h3>Responsables des entreprises intervenantes</h3></div>
+            </div>
+            <div id="companyVisaList" class="company-visa-list"></div>
+          </section>
+          <section class="after-work-signature" aria-label="Visa du représentant MOETx et du surveillant de travaux">
+            <div><p class="eyebrow">Visa final</p><h3>Visa MOETx / surveillant de travaux</h3></div>
+            <div class="signature-fields">
+              <label class="field"><span>Nom du responsable</span><input id="afterWorkSignerName" autocomplete="name" placeholder="Nom et prénom" /></label>
+            </div>
+            <div class="signature-canvas-wrap"><canvas id="afterWorkSignatureCanvas" aria-label="Zone de signature du représentant MOETx et du surveillant de travaux"></canvas><p id="afterWorkSignatureStatus" class="muted">À signer</p></div>
+            <div class="signature-actions"><button id="saveAfterWorkSignatureButton" class="secondary-button" type="button">Enregistrer</button><button id="clearAfterWorkSignatureButton" class="text-button" type="button">Effacer la signature</button></div>
+          </section>
+          <div class="review-actions">
+            <button id="archiveSharePointButton" class="primary-button" type="button">Enregistrer le rapport final dans le journal</button>
+            <button id="printButton" class="secondary-button" type="button">Enregistrer le PDF sur le téléphone</button>
+            <button id="importFinalPdfButton" class="secondary-button" type="button">Déposer un PDF déjà enregistré</button>
+            <input id="importFinalPdfInput" type="file" accept="application/pdf,.pdf" hidden />
+            <button id="exportButton" class="secondary-button" type="button">Sauvegarder la saisie</button>
+          </div>
+          <section class="journal-archive-panel" aria-label="Archivage dans le journal de chantier">
+            <h3>Enregistrement du rapport final</h3>
+            <p>Le bouton « Enregistrer le rapport final dans le journal » dépose le PDF sur SharePoint et dans <strong>Documents → Rapports journaliers</strong> du chantier sélectionné.</p>
+            <label for="journalChantier">Chantier destinataire</label>
+            <select id="journalChantier"><option value="">Connexion au journal…</option></select>
+            <p><a href="https://ghostbuilderdev.github.io/Journal-de-chantier-SNCF/" target="_blank" rel="noopener noreferrer">Ouvrir le journal / se connecter</a></p>
+            <button id="journalRefreshButton" type="button" class="secondary-button">Actualiser la connexion</button>
+            <button id="journalResumeButton" type="button" class="primary-button" hidden>Reprendre l’archivage</button>
+            <button id="journalDownloadButton" type="button" class="secondary-button" hidden>Télécharger le PDF conservé</button>
+            <p id="journalArchiveStatus" role="status" aria-live="polite"></p>
+          </section>
+          <p id="sharepointArchiveStatus" class="sharepoint-archive-status" aria-live="polite">Un nouveau rapport sera créé après confirmation des deux archivages.</p>
+          <section id="adminPanel" class="admin-panel" aria-label="Espace administrateur">
+            <div id="adminLockedPane" class="admin-access hidden">
+              <div>
+                <p class="eyebrow">Administrateur</p>
+                <h3>Contrôle hebdomadaire</h3>
+                <p class="muted">Réservé à l’administrateur principal pour le contrôle de fin de semaine.</p>
+              </div>
+              <button id="openAdminButton" class="secondary-button" type="button">Accès administrateur</button>
+            </div>
+            <div id="adminLoginPane" class="admin-login hidden">
+              <div>
+                <p class="eyebrow">Accès administrateur</p>
+                <h3 id="adminLoginTitle">Déverrouiller l’espace administrateur</h3>
+                <p id="adminLoginHint" class="muted">Saisir le code administrateur de cet appareil.</p>
+              </div>
+              <label class="field"><span id="adminPinLabel">Code à 6 chiffres</span><input id="adminPinInput" type="password" inputmode="numeric" autocomplete="off" maxlength="6" placeholder="••••••" /></label>
+              <div class="dialog-actions"><button id="cancelAdminButton" class="secondary-button" type="button">Retour terrain</button><button id="confirmAdminButton" class="primary-button" type="button">Déverrouiller</button></div>
+            </div>
+            <div id="adminWorkspace" class="admin-workspace hidden">
+              <div class="admin-workspace-heading">
+                <div><p class="eyebrow">Administrateur</p><h3>Valorisation et contrôle de la semaine</h3><p id="adminEvidenceNote" class="muted"></p></div>
+                <button id="lockAdminButton" class="text-button" type="button">Verrouiller</button>
+              </div>
+              <div id="adminValuationStats" class="admin-stats"></div>
+              <label class="admin-common-option"><input id="includeCommonCostsCheckbox" type="checkbox" /> <span>Inclure les dispositions communes PCLE à titre indicatif (7 % GC, 7 % signalisation et 5 % installations)</span></label>
+              <section class="admin-numbering">
+                <p class="eyebrow">Numérotation des rapports</p>
+                <p class="muted">Le réglage applique le numéro au rapport actuellement ouvert. Le rapport suivant recevra automatiquement le numéro suivant.</p>
+                <div class="admin-actions">
+                  <label class="field"><span>N° du rapport actif</span><input id="nextReportSerialInput" type="number" min="1" inputmode="numeric" /></label>
+                  <button id="saveNextReportSerialButton" class="secondary-button" type="button">Appliquer au rapport</button>
+                  <button id="resetReportSerialButton" class="text-button danger-text" type="button">Repartir au n° 1</button>
+                </div>
+              </section>
+              <div class="admin-actions">
+                <button id="adminConfigurePricesButton" class="secondary-button" type="button">Paramétrer les références marché</button>
+                <button id="adminPrintButton" class="secondary-button" type="button">Enregistrer avec annexe interne</button>
+              </div>
+              <details class="valuation-details" open>
+                <summary>Contrôle de valorisation interne</summary>
+                <div id="valuationPreview"></div>
+              </details>
+            </div>
+          </section>
+        </section>
+      </main>
+
+      <section id="printReport" class="print-report"></section>
+    </div>
+
+    <div id="appToast" class="app-toast" role="status" aria-live="polite" aria-atomic="true"></div>
+
+    <dialog id="taskDialog" class="dialog task-dialog">
+      <form method="dialog" id="taskForm">
+        <header class="dialog-header">
+          <div><p class="eyebrow">Production</p><h2 id="taskDialogTitle">Ajouter une prestation</h2></div>
+          <button class="icon-button" value="cancel" aria-label="Fermer" type="submit">×</button>
+        </header>
+        <div id="taskCatalogPane"></div>
+        <div id="taskEditorPane" class="hidden"></div>
+      </form>
+    </dialog>
+
+    <dialog id="rowDialog" class="dialog resource-dialog">
+      <form method="dialog" id="rowForm">
+        <header class="dialog-header">
+          <div><p class="eyebrow">Saisie terrain</p><h2 id="rowDialogTitle">Ajouter</h2></div>
+          <button class="icon-button" value="cancel" aria-label="Fermer" type="submit">×</button>
+        </header>
+        <div id="rowEditorPane"></div>
+      </form>
+    </dialog>
+
+    <dialog id="rosterRoleDialog" class="dialog resource-dialog">
+      <form method="dialog">
+        <header class="dialog-header">
+          <div><p id="rosterRoleDialogEyebrow" class="eyebrow">Personnel entreprise</p><h2 id="rosterRoleDialogTitle">Ajouter une fonction</h2></div>
+          <button class="icon-button" value="cancel" aria-label="Fermer" type="submit">×</button>
+        </header>
+        <div class="resource-editor">
+          <section class="resource-banner material-banner">
+            <span class="resource-symbol">+</span>
+            <div><strong id="rosterRoleCompanyName">Entreprise</strong><p id="rosterRoleCompanyType">Entreprise intervenante</p></div>
+          </section>
+          <label class="field"><span>Fonction à ajouter au tableau</span><select id="rosterRoleSelect"></select></label>
+          <label id="rosterRoleOtherField" class="field hidden"><span>Autre fonction</span><input id="rosterRoleOtherInput" placeholder="Préciser la fonction" /></label>
+          <p class="muted">La fonction est ajoutée à cette entreprise, puis l’effectif se règle directement avec − et +.</p>
+          <div class="dialog-actions"><button id="saveRosterRoleButton" type="button" class="primary-button">Ajouter au tableau</button></div>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="moreDialog" class="dialog menu-dialog">
+      <form method="dialog">
+        <header class="dialog-header">
+          <div><p class="eyebrow">Rapport</p><h2>Outils</h2></div>
+          <button class="icon-button" value="cancel" aria-label="Fermer" type="submit">×</button>
+        </header>
+        <div class="menu-stack">
+          <button id="configurePricesButton" class="menu-button admin-finance hidden" type="button">Paramétrer les prix du chantier</button>
+          <button id="importButton" class="menu-button" type="button">Restaurer une sauvegarde locale</button>
+          <button id="saveSnapshotButton" class="menu-button" type="button">Conserver un instantané sur ce téléphone</button>
+          <button id="duplicateLastNightMenuButton" class="menu-button" type="button">Reprendre la dernière nuit</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="mappingDialog" class="dialog mapping-dialog">
+      <form method="dialog">
+        <header class="dialog-header">
+          <div><p class="eyebrow">Encadrant</p><h2>Paramétrage prix du chantier</h2></div>
+          <button class="icon-button" value="cancel" aria-label="Fermer" type="submit">×</button>
+        </header>
+        <p class="muted">Cette page est faite pour lever les ambiguïtés une seule fois par chantier. Les agents ne voient ensuite que les libellés terrain.</p>
+        <div id="mappingPane"></div>
+      </form>
+    </dialog>
+
+    <dialog id="companyVisaDialog" class="dialog resource-dialog">
+      <form method="dialog" id="companyVisaForm">
+        <header class="dialog-header">
+          <div><p class="eyebrow">Visa entreprise</p><h2 id="companyVisaDialogTitle">Ajouter un visa</h2></div>
+          <button class="icon-button" value="cancel" aria-label="Fermer" type="submit">×</button>
+        </header>
+        <div id="companyVisaEditor"></div>
+      </form>
+    </dialog>
+
+    <dialog id="confirmDialog" class="dialog confirm-dialog" aria-labelledby="confirmDialogTitle">
+      <form method="dialog" id="confirmForm">
+        <header class="dialog-header">
+          <div>
+            <p class="eyebrow">Confirmation</p>
+            <h2 id="confirmDialogTitle">Confirmer l’action</h2>
+          </div>
+          <button class="icon-button" value="cancel" aria-label="Fermer" type="submit">×</button>
+        </header>
+        <p id="confirmDialogMessage" class="confirm-message"></p>
+        <div class="dialog-actions">
+          <button id="confirmDialogCancel" value="cancel" type="submit" class="secondary-button">Annuler</button>
+          <button id="confirmDialogAccept" value="confirm" type="submit" class="primary-button">Confirmer</button>
+        </div>
+      </form>
+    </dialog>
+
+    <input id="importInput" type="file" accept="application/json" hidden />
+    <input id="photoCameraInput" type="file" accept="image/*" capture="environment" multiple hidden />
+    <input id="photoFileInput" type="file" accept="image/*" multiple hidden />
+    <script src="data/price-catalog.js"></script>
+    <script src="data/terrain-catalog.js"></script>
+    <script src="data/billing-evidence.js"></script>
+    <script src="vendor/pdf-lib.min.js"></script>
+    <script src="vendor/supabase.js"></script>
+    <script src="journal-config.js"></script>
+    <script src="journal-archive.js"></script>
+    <script src="../journal-composer.js?v=15.7.1"></script>
+    <script src="collaboration.js?v=15.10"></script>
+    <script src="app.js?v=15.10"></script>
+  </body>
+</html>
