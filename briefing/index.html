@@ -5,8 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self' 'unsafe-inline' https://script.google.com https://script.googleusercontent.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' data: blob:; connect-src 'self' https://script.google.com https://script.googleusercontent.com; form-action 'self' https://script.google.com https://script.googleusercontent.com; frame-src https://script.google.com https://script.googleusercontent.com; worker-src 'self' blob:; manifest-src 'self'; upgrade-insecure-requests">
 <meta name="referrer" content="no-referrer">
-<link rel="stylesheet" href="presence-review.css?v=15.10.2">
-<script src="presence-matching.js?v=15.10.2"></script>
+<script src="presence-matching.js?v=15.10.3"></script>
 <meta name="robots" content="noindex,nofollow,noarchive,nosnippet,noimageindex">
 <script id="briefing-security-bootstrap">
 (function(){
@@ -2773,60 +2772,40 @@ toggleTravauxType();
     }
     render();document.dispatchEvent(new Event('briefing-presence-changed'));
   }
-  function attachReceipt(target,p){
-    // Keep the saved row identity and name; employer/function describe today's attendance.
-    Object.assign(target,{nom:String(target.nom||p.nom||'').toLocaleUpperCase('fr-FR'),
-      prenom:target.prenom||p.prenom,entreprise:String(p.entreprise||target.entreprise||'').toLocaleUpperCase('fr-FR'),
-      fonction:p.fonction||target.fonction||'',signature:p.signature,remote_id:p.id,
-      remote_session:p.session_id,signed_at:p.created_at});
-  }
   window.BriefingPresence={
-    merge(sessionId,rows){
-      activeRemoteSession=sessionId;const before=rosterSnapshot();let changed=false;
-      for(const p of rows){
-        if(!p.id||p.session_id!==sessionId||!/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(p.signature||''))continue;
-        if(ignoredRemote.has(p.id)||participants.some(x=>x.remote_id===p.id)||pendingRemote.some(x=>x.id===p.id))continue;
-        const decision=BriefingPresenceMatching.classify(participants,p);
-        if(decision.kind==='attach')attachReceipt(participants.find(x=>x.local_id===decision.participantId),p);
-        else pendingRemote.push({...p,briefing_date:id('date')?.value||''});
-        changed=true;
+    merge(sessionId,rows=[]){
+      activeRemoteSession=sessionId;const before=rosterSnapshot(),editingId=participants[editIndex]?.local_id;
+      const merged=BriefingPresenceMatching.merge(participants,[...pendingRemote,...rows],{sessionId,ignoredIds:[...ignoredRemote]});
+      const consumed=new Set(merged.consumedIds),remaining=pendingRemote.filter(p=>!consumed.has(p.id));
+      if(merged.events.length||remaining.length!==pendingRemote.length){
+        participants=merged.participants;ignoredRemote=new Set(merged.handledIds);pendingRemote=remaining;
+        reviewLog.push(...merged.events.map(e=>({...e,at:new Date().toISOString()})));
+        rosterCommit(before);
+        // Keep a manual edit attached to its person if old duplicate rows were consolidated.
+        if(editIndex!==null&&editingId){
+          const canonical=merged.events.find(e=>e.merged_ids.includes(editingId))?.participant_id||editingId;
+          editIndex=participants.findIndex(p=>p.local_id===canonical);if(editIndex<0)editIndex=null;
+        }
       }
-      if(changed)rosterCommit(before);return participants.length;
+      return participants.length;
     },
     pending(){return pendingRemote.map(p=>({...p}));},
-    resolve(receiptId,action,participantId,expectedSignature=''){
-      const p=pendingRemote.find(x=>x.id===receiptId);
-      if(!p)throw new Error('Cette signature a déjà été traitée.');
-      if(p.session_id!==activeRemoteSession)throw new Error('Rouvrez la séance du '+p.briefing_date+' pour vérifier cette signature.');
-      const before=rosterSnapshot(),target=participants.find(x=>x.local_id===participantId);
-      if(action==='new'){
-        const record=localRow({nom:p.nom,prenom:p.prenom});attachReceipt(record,p);participants.push(record);
-        participantId=record.local_id;
-      }else if(action==='attach'||action==='ignore'){
-        if(!target)throw new Error('Choisissez un participant existant.');
-        if((target.signature||'')!==expectedSignature)throw new Error('Cette ligne a changé. Rouvrez la vérification avant de continuer.');
-        if(action==='ignore'&&!target.signature)throw new Error('Ce participant ne possède pas encore de signature.');
-        if(action==='attach'){if(target.remote_id)ignoredRemote.add(target.remote_id);attachReceipt(target,p);}
-      }else throw new Error('Choix de rapprochement inconnu.');
-      ignoredRemote.add(p.id);pendingRemote=pendingRemote.filter(x=>x.id!==p.id);
-      reviewLog.push({receipt_id:p.id,session_id:p.session_id,participant_id:participantId,action,at:new Date().toISOString()});
-      rosterCommit(before);return true;
-    },
+    mergePending(){if(activeRemoteSession)this.merge(activeRemoteSession);},
     clearRemote(){
-      if(pendingRemote.length)throw new Error('Vérifiez les signatures en attente avant de commencer une nouvelle séance.');
-      ignoredRemote.clear();activeRemoteSession=null;
+      this.mergePending();ignoredRemote.clear();activeRemoteSession=null;
       participants=participants.map(p=>p.remote_session?{...p,signature:'',remote_session:null,remote_id:null,signed_at:null}:p);render();save();
     },
     retainSession(sessionId){
       activeRemoteSession=sessionId;
       participants=participants.map(p=>p.remote_session&&p.remote_session!==sessionId?{...p,signature:'',remote_session:null,remote_id:null,signed_at:null}:p);render();save();
+      if(sessionId)this.mergePending();
     },
     list(){return participants.map(p=>({...p}));}
   };
   function collectFields(){
     const fields = {};
     document.querySelectorAll("input, textarea, select").forEach(el=>{
-      if(!el.id || el.closest("#presencePopup,#presenceReviewDialog")) return;
+      if(!el.id || el.closest("#presencePopup")) return;
       fields[el.id] = el.type === "checkbox" ? el.checked : el.value;
     });
     return fields;
@@ -10323,8 +10302,7 @@ window.updateLamBriefing=function(){let target=document.getElementById("oMiseVoi
 <script src="briefing-preparation.js?v=15.8"></script>
 <link rel="stylesheet" href="briefing-v159.css?v=15.9">
 <script src="briefing-qr-share.js?v=15.9"></script>
-<script src="presence-review.js?v=15.10.2"></script>
-<script src="briefing-attendance.js?v=15.10.2"></script>
+<script src="briefing-attendance.js?v=15.10.3"></script>
 <script src="journal-bridge.js?v=15.8"></script>
 </body>
 </html>

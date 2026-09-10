@@ -30,7 +30,7 @@
   if(!box)return;
   const active=matches()&&!current.finalized,open=active&&current.state==='open'&&Date.parse(current.expires_at)>Date.now();
   byId('attendanceOpen').textContent=open?'Afficher le QR code':'Créer le QR code de cette séance';
-  notice(active?`${current.count||0} signature(s) reçue(s) · ${open?'émargement ouvert':'émargement fermé'}`:'Chaque participant peut signer depuis son téléphone.');
+  notice(active?`${window.BriefingPresence.list().filter(p=>p.remote_session===current.id&&p.signature).length} participant(s) signé(s) · ${open?'émargement ouvert':'émargement fermé'}`:'Chaque participant peut signer depuis son téléphone.');
   if(panel?.open){
    byId('attendanceQr').innerHTML=open?qrSvg(url()):'<p>Les signatures de cette séance sont fermées.</p>';
    byId('attendanceSessionTitle').textContent=context.name+' · '+current.date;
@@ -49,19 +49,12 @@
   }
   if(!panel.open)panel.showModal();render();
  }
- function requireReviewed(){
-  const count=window.BriefingPresence.pending().length;if(!count)return;
-  panel?.close();window.BriefingPresenceReview.open();
-  throw new Error(count+' signature(s) à vérifier avant de générer le PDF ou de changer de séance.');
- }
  async function open(){
   if(busy)return;busy=true;byId('attendanceOpen').disabled=true;
   try{
    if(!matches()||current.finalized||current.state==='closed'||Date.parse(current.expires_at)<=Date.now()){
-    requireReviewed();
     if(current&&!current.finalized&&current.state==='open'){
      if(matches())await closeSession();else await transport('close',{id:current.id});
-     requireReviewed();
     }
     const token=Array.from(crypto.getRandomValues(new Uint8Array(32)),n=>n.toString(16).padStart(2,'0')).join('');
     window.BriefingPresence.clearRemote();
@@ -72,20 +65,16 @@
  }
  async function closeSession(){if(inflight)await inflight;if(!current||!matches()||current.finalized)return;received(await transport('close',{id:current.id}));}
  async function beforeExport(){
-  requireReviewed();
   if(!current||current.finalized)return;
   if(!matches()){
    await transport('close',{id:current.id});current.finalized=true;save();window.BriefingPresence.clearRemote();render();return;
   }
-  exporting=true;try{await closeSession();requireReviewed();}finally{exporting=false;}
+  exporting=true;try{await closeSession();}finally{exporting=false;}
  }
  function init(e){
   if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',()=>init(e),{once:true});return;}
   context=e.detail;storageKey='journal-briefing-qr-v158:'+context.userId+':'+context.id;
   try{current=JSON.parse(localStorage.getItem(storageKey)||'null');}catch(_){}
-  if(current&&!current.finalized&&window.BriefingPresence.pending().length&&!matches()){
-   byId('date').value=current.date;window.presenceSave?.();
-  }
   window.BriefingPresence.retainSession(matches()&&!current.finalized?current.id:null);
   box=document.createElement('section');box.className='briefing-attendance no-print';box.innerHTML='<div><small>SIGNATURES SUR TÉLÉPHONE</small><h3>Faire signer les participants</h3><p id="attendanceStatus" role="status"></p><p>La génération du PDF termine l’émargement de cette séance.</p></div><button type="button" id="attendanceOpen">Créer le QR code de cette séance</button>';
   byId('signatureSheet')?.before(box);byId('attendanceOpen').onclick=open;render();
@@ -94,10 +83,6 @@
  document.addEventListener('journal-briefing-context',init,{once:true});
  document.addEventListener('change',e=>{
   if(e.target.id!=='date'||!current||matches())return;
-  if(window.BriefingPresence.pending().length){
-   e.target.value=current.date;window.presenceSave?.();panel?.close();window.BriefingPresenceReview.open();
-   notice('Vérifiez les signatures reçues avant de changer la date.');return;
-  }
   window.BriefingPresence.clearRemote();panel?.close();render();
  });
  document.addEventListener('DOMContentLoaded',()=>{

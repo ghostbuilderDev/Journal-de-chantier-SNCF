@@ -1,0 +1,43 @@
+{
+  "base_commit": "32d546ba456a33cca2761dbd106dd317fb837a4c",
+  "version_required": "V15.10.2",
+  "files": {
+    "briefing/index.html": "17152e888657159f29e253e1e95fa5dfd10bbf122d0e25ed882668639ba3dd3c",
+    "briefing/briefing-attendance.js": "a3039b573792bf4eb9267a83d5498648ec34e5286bfa73b8df535705c315677d",
+    "briefing/presence-matching.js": "27629022a33540b6c9cb2130699f2ae6675609eb25736f8fde13e2dd9ac71ccf",
+    "briefing/presence-review.js": "f82b8b851875d317955e2a4a4f75080c7481d3f476e00e07007dcbe6417d2984",
+    "briefing/presence-review.css": "6fc20b9c90ea58022706002f198f120088cf9bf1fcc9ef109cb1cc81869b14bd",
+    "briefing/service-worker.js": "eb45d34818c9f0f109fd34d96ae64676288f19dc55411c35bbaec1f3d4bee848",
+    "service-worker-v13.js": "d3ba8e7e8e6fb24be98dbf7bdc47efe1dfb2496145528e6234ee2c981044005c",
+    "cr-off.js": "1a32f367813690dd460a02b419897fed00f52a878a92e6afcb9124a113142cb8",
+    "index.html": "c2196e4ff851c8f6e90beaff57efd4b78cdb647243d205a1bdcf7b65d711bbde",
+    "tests/signature-v15102-browser.cjs": "e25e9531494e8a38e901f8511ae470d7b7cc35ee4fed058cd4b2876d892ec8e4",
+    "tests/presence-matching-v15102.cjs": "08c487ccee5dfdccf4016d90737307ded0472ca5daf90c7d9bf528f892e5a96e",
+    "tests/pwa-v15102-browser.cjs": "562976964d9489d85a0c8969884f6b346c99cea36db574f85c9545566cbc7c27",
+    "tests/signature-v15103-browser.cjs": null,
+    "tests/presence-matching-v15103.cjs": null,
+    "tests/pwa-v15103-browser.cjs": null,
+    "scripts/prepare-v15103-update.py": null,
+    "scripts/update-v15103-termux.sh": null,
+    "scripts/v15103-base-sha256.json": null,
+    "tests/v15103-installation.test.py": null,
+    "VERSION_V15.10.3.md": null,
+    "VERIFICATIONS_V15.10.3.txt": null
+  },
+  "dependencies": {
+    "app-v13.js": "1d94a2e4902436d2ba001d732a02bdaafa6cd9f113a5c7a9bb9d9fe1c7d3a9e9",
+    "briefing-integration.js": "8fab0d473cefdc503bc1aa1db54babfc787b40c2926f923db6df3cbf337d6563",
+    "briefing/briefing-preparation.js": "f7869f8246d49b5b622adce88d28a68e0f7276d2ffe6e323cde48854f4d9e8a8",
+    "briefing/journal-bridge.js": "89887cca4f6f4133f56c5370358c022dad9bed08731285bfd5d7c1f20cbb2dfd",
+    "briefing/briefing-v158.css": "d30b9ed37f2a2b2e662ef575550c549154004d6461a8b7e1e8b8d1033be18991",
+    "briefing/briefing-v159.css": "bd043566f2f0d2204020de0bd7409bccd32498dd0f007310f92c4f2fae200e03",
+    "briefing/briefing-qr-share.js": "5151fc5284dccd66b4d5e589ac8083245c12193540f6871e12dbbfd5bb97f584",
+    "briefing/signer.js": "404b504d3dacdd8f3bad20054dd6834538487261e3325325dcaea99894599f65",
+    "briefing/signature-pad.js": "21b6a66415d7679d85c8b2bbf04af849676b6ea384f3119fddd963b82defd936",
+    "briefing/manifest.json": "563c43ff41302ef987728cacd3d162a75a6bf67b853af49e171c728ed3e91f8f",
+    "briefing/vendor/qrcodegen.js": "2511bc17f40a3c41d4a0578995db956b38997334d3d20113a5d4dc5c49c69480",
+    "journal-dialogs.js": "a62afa13553faf44de02c65691f02ff2d8d98def705b2a095cb32457eaf98104",
+    "supabase/migrations/20260910000100_v15_8_preparation_briefing.sql": "5f0901292555ee45ce247b37908f3e0c6a1da36b74b4b96162c0c808f8b9b395",
+    "supabase/migrations/20260910000400_v15_10_1_signatures_notifications.sql": "00c4645c3148e2a7968193444536ba0804215463ebfa0113e65285dcbfd46c5b"
+  }
+}

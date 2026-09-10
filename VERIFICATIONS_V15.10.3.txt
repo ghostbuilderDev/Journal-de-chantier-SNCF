@@ -1,0 +1,39 @@
+Journal de chantier V15.10.3 — Vérifications
+
+11 tests de rapprochement réussis :
+- nom / prénom / société normalisés ; fonction indépendante de l'identité ;
+- ajout automatique d'une nouvelle personne ;
+- nouvelle signature prioritaire sur la même ligne ;
+- regroupement des lignes de même identité ;
+- sociétés différentes conservées séparément ;
+- société manquante sur une seule ligne préparée ;
+- actualisations, doublons de reçus, réponses retardées, microsecondes ;
+- séparation des séances et respect des reçus retirés précédemment.
+
+Parcours navigateur réel réussi :
+- vingt noms sauvegardés, sans signature, repris après rechargement ;
+- deux sessions téléphone, signature agrandie, aperçu, envoi et reprise réseau ;
+- cinq reçus mis en attente selon le format V15.10.2, repris automatiquement ;
+- disparition du bandeau et de la fenêtre de vérification ;
+- remplacement de l'image de signature existante et ajout d'un nouveau participant ;
+- absence de retour à une ancienne signature après actualisation et rechargement ;
+- PDF réel créé avec les signatures et fermeture du QR de la séance ;
+- configuration des voies, PK, LAM et engins conservée après export ;
+- signatures non réimportées après finalisation du briefing.
+
+PWA : trois service workers installés, fichiers de rapprochement en cache,
+anciens fichiers de vérification exclus du cache actif, appels privés non mis
+en cache, données locales conservées et formulaire QR disponible hors connexion.
+
+Installateur : 6 tests réussis sur les contrôles des fichiers, la reprise,
+les liens symboliques, les listes sans doublon et l'absence d'opération SQL
+ou de demande de secrets. Vérification de la syntaxe JavaScript et shell.
+
+Les tests utilisent Chromium, les interfaces de l'application et une base
+PostgreSQL de test via PGlite. Le transport et l'authentification sont simulés.
+Aucun appel d'écriture sur le serveur de production pendant ces tests.
+
+Installation simulée depuis le commit publié 32d546b (V15.10.2) :
+copie du correctif et seconde vérification réussies ; configuration et
+fichiers Supabase strictement identiques ; modification inconnue refusée.
+Syntaxe vérifiée pour les 47 scripts internes du briefing et les fichiers livrés.

@@ -1,8 +1,8 @@
-const CACHE_NAME = 'journal-chantier-connecte-v15.10.2';
+const CACHE_NAME = 'journal-chantier-connecte-v15.10.3';
 const APP_SHELL = [
   './journal-collaboration.js?v=15.10.1', './journal-v1510.css?v=15.10.1',
   './journal-completion.js?v=15.9', './journal-v159.css?v=15.9',
-  './briefing/presence-matching.js?v=15.10.2', './briefing/presence-review.js?v=15.10.2', './briefing/presence-review.css?v=15.10.2',
+  './briefing/presence-matching.js?v=15.10.3',
   './briefing/afficher-qr.html', './briefing/afficher-qr.js?v=15.9', './briefing/briefing-qr-share.js?v=15.9', './briefing/briefing-v159.css?v=15.9',
   './journal-composer.js?v=15.7.1', './journal-emoji.js?v=15.6', './data/emojis.json', './journal-v156.css?v=15.7.1',
   './journal-pdf.js?v=15.8', './journal-v155.css?v=15.5',
@@ -10,8 +10,8 @@ const APP_SHELL = [
   './vendor/pdfjs/pdf.min.mjs', './vendor/pdfjs/pdf.worker.min.mjs',
   './journal-v154.css?v=15.4', './journal-dialogs.js?v=15.4', './journal-feed.js?v=15.4', './journal-production.js?v=15.9', './journal-export.js?v=15.5', './supabase/functions/_shared/cr-email.mjs?v=15.4',
   './journal-v153.css?v=15.3',
-  './cr-fields.js?v=15.8', './journal-v157.css?v=15.7', './cr-off.js?v=15.10.2', './cr-ai.js?v=15.6', './cr-off.css?v=15.3',
-  './briefing-integration.js?v=15.9', './briefing/index.html', './briefing/journal-bridge.js?v=15.8', './briefing/signer.html', './briefing/signer.js?v=15.10.1', './briefing/signature-pad.js?v=15.10.1', './briefing/signer-v15101.css?v=15.10.1', './briefing/briefing-v158.css?v=15.8', './briefing/briefing-preparation.js?v=15.8', './briefing/briefing-attendance.js?v=15.10.2', './briefing/vendor/qrcodegen.js?v=15.8',
+  './cr-fields.js?v=15.8', './journal-v157.css?v=15.7', './cr-off.js?v=15.10.3', './cr-ai.js?v=15.6', './cr-off.css?v=15.3',
+  './briefing-integration.js?v=15.9', './briefing/index.html', './briefing/journal-bridge.js?v=15.8', './briefing/signer.html', './briefing/signer.js?v=15.10.1', './briefing/signature-pad.js?v=15.10.1', './briefing/signer-v15101.css?v=15.10.1', './briefing/briefing-v158.css?v=15.8', './briefing/briefing-preparation.js?v=15.8', './briefing/briefing-attendance.js?v=15.10.3', './briefing/vendor/qrcodegen.js?v=15.8',
   './briefing/vendor/html2canvas.min.js', './briefing/vendor/jspdf.umd.min.js',
   './feedback.js?v=15.4', './feedback.css?v=15.3',
   './', './index.html', './styles-v13.css?v=14.7-pdf',
