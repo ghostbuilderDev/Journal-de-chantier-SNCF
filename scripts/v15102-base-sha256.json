@@ -1,0 +1,378 @@
+{
+  "base_commit": "99176290509b15cc43d8a791b7f206539558086d",
+  "also_accepts": "V15.10 (555b529), V15.10.1 (16b39a9)",
+  "report_source_commit": "86b8d4b15ffd0e31598de12d5529a8d66d1f7764",
+  "files": {
+    "supabase/migrations/20260910000300_v15_10_rapports_mentions.sql": null,
+    "supabase/tests/reports-v1510-backend.cjs": null,
+    "supabase/tests/reports-v1510-postgres.sql": null,
+    "supabase/tests/reports-v1510-deployment.cjs": null,
+    "scripts/deploy-v1510-release.py": null,
+    "tests/v1510-deployment.test.py": null,
+    "supabase/migrations/20260910000400_v15_10_1_signatures_notifications.sql": null,
+    "supabase/tests/collaboration-v15101-backend.cjs": null,
+    "supabase/tests/collaboration-v15101-postgres.sql": null,
+    "supabase/tests/collaboration-v15101-deployment.cjs": null,
+    "scripts/deploy-v15101-release.py": null,
+    "scripts/prepare-v15101-update.py": null,
+    "scripts/update-v15101-termux.sh": null,
+    "scripts/wait-v15101-workflow.py": null,
+    "scripts/v15101-base-sha256.json": null,
+    "tests/v15101-deployment.test.py": null,
+    "tests/v15101-installation.test.py": null,
+    ".github/workflows/deploy-v15102.yml": null,
+    "scripts/prepare-v15102-update.py": null,
+    "scripts/update-v15102-termux.sh": null,
+    "scripts/wait-v15102-workflow.py": null,
+    "scripts/v15102-base-sha256.json": null,
+    "tests/v15102-installation.test.py": null,
+    "app-v13.js": "9f38f4769e159489a06265d696b0efb12aab8dff0d46e40d4b5a48c61e1aa254",
+    "index.html": "dd4c122748ee48557a82cd556fe4ab824c1a129947ef025f25ca19e46936834a",
+    "service-worker-v13.js": "2b984926f1959a277b75229588ffd87a7a01643b66dc7ea5d32a483dfd74f1e2",
+    "cr-off.js": "5bdafd67d4f28288a3af0b1d612dde8ac0276002760dbfdde6ccd7818ea7b885",
+    "journal-collaboration.js": null,
+    "journal-v1510.css": null,
+    "tests/collaboration-v1510-browser.cjs": null,
+    "rapport/app.js": null,
+    "rapport/assets/ainm-infrapole-paris-sud-est.jpg": null,
+    "rapport/collaboration.css": null,
+    "rapport/collaboration.js": null,
+    "rapport/data/billing-evidence.js": null,
+    "rapport/data/price-catalog.js": null,
+    "rapport/data/terrain-catalog.js": null,
+    "rapport/icons/icon.svg": null,
+    "rapport/icons/rapport-journalier-ainm-pwa.png": null,
+    "rapport/icons/rapport-journalier-ainm.png": null,
+    "rapport/index.html": null,
+    "rapport/journal-archive.js": null,
+    "rapport/journal-config.js": null,
+    "rapport/manifest.webmanifest": null,
+    "rapport/service-worker.js": null,
+    "rapport/styles.css": null,
+    "rapport/vendor/pdf-lib.min.js": null,
+    "rapport/vendor/supabase.js": null,
+    "briefing/index.html": "bad0a2b2e5662e8ad969e53a33380c572cb08757ceda1c9753e466f2746d2314",
+    "briefing/service-worker.js": "e42f38845a67a1b190ad1c2ccaa90d91fcc58452e40286562e01cc07116d8d04",
+    "briefing/signer.html": "1708c81af83fc348e9be82a0f81fdfe85d923027f0134eb4138244b44348a576",
+    "briefing/signer.js": "af977f2a5f4567285a2296a2adee15e6bf48de71014bddfa50f07d29e050e0ef",
+    "briefing/signature-pad.js": null,
+    "briefing/signer-v15101.css": null,
+    "tests/collaboration-v15101-browser.cjs": null,
+    "tests/signature-v15101-browser.cjs": null,
+    "tests/pwa-v15101-browser.cjs": null,
+    "VERSION_V15.10.1.md": null,
+    "VERIFICATIONS_V15.10.1.txt": null,
+    "briefing/briefing-attendance.js": "9e66c740fbe1b0a6ad1ab2b2d492f3645bcca6b04fe46da8fb37908b422e39c6",
+    "briefing/presence-matching.js": null,
+    "briefing/presence-review.js": null,
+    "briefing/presence-review.css": null,
+    "tests/signature-v15102-browser.cjs": null,
+    "tests/presence-matching-v15102.cjs": null,
+    "tests/pwa-v15102-browser.cjs": null,
+    "VERSION_V15.10.2.md": null,
+    "VERIFICATIONS_V15.10.2.txt": null
+  },
+  "previous_files": {
+    "supabase/migrations/20260910000300_v15_10_rapports_mentions.sql": [
+      "50c21700dfbb7137c604debed184fb6875e7baee94b4a520bb1f584a133c52c1"
+    ],
+    "supabase/tests/reports-v1510-backend.cjs": [
+      "dec96ec1d9862d769c37ce0bc147ff2bc98384b3008a57c2296f4a7b924e2b1c"
+    ],
+    "supabase/tests/reports-v1510-postgres.sql": [
+      "2d4715804043db2d4f7e774e78f45e25c92db6eb69781d0d37f784524a6d0ae3"
+    ],
+    "supabase/tests/reports-v1510-deployment.cjs": [
+      "0f8fbe1940e54d74e20edb1f9801b7f1a8d0914706ab273245c71ff7db3dc557"
+    ],
+    "scripts/deploy-v1510-release.py": [
+      "98ffb04fbf5094e1e43f5ed86d7470ea64b516dc37a1fce865345f6503b10b74"
+    ],
+    "tests/v1510-deployment.test.py": [
+      "2d071554d87038f61b5d3c54af5fa0775a299507e8f28033c6d1ad930fcfde6b"
+    ],
+    "supabase/migrations/20260910000400_v15_10_1_signatures_notifications.sql": [
+      null,
+      "00c4645c3148e2a7968193444536ba0804215463ebfa0113e65285dcbfd46c5b"
+    ],
+    "supabase/tests/collaboration-v15101-backend.cjs": [
+      null,
+      "0210e50748426c0049d0a99330cc9afd4a210d56313beff413d0fdd82cf88d56"
+    ],
+    "supabase/tests/collaboration-v15101-postgres.sql": [
+      null,
+      "b0d27f5d3b9180df14b0288f5ec2df6c2785b1486e2827bb5ed4cae6a1f887c9"
+    ],
+    "supabase/tests/collaboration-v15101-deployment.cjs": [
+      null,
+      "a2fb4b436e7d324bb7ccb76626bc6feb4b768c35d047cf1c48b296bccfa88f55"
+    ],
+    "scripts/deploy-v15101-release.py": [
+      null,
+      "8cdfb469ccf0ec7c1c2d845ec002e390b1668811f175587ac1d614b75c70b413"
+    ],
+    "scripts/prepare-v15101-update.py": [
+      null,
+      "9e5133f3a2dc4a2049eb95f84b814e9b9fa8e6ed31ee592a0ceafc9280262d43"
+    ],
+    "scripts/update-v15101-termux.sh": [
+      null,
+      "fa220b6c3d3e16730314cbdb28bfde4fb35c5503e59b7f3b054a4f4748f2f8a7"
+    ],
+    "scripts/wait-v15101-workflow.py": [
+      null,
+      "e08633ac1af9830adc07a89ae7629024e8157e92a1b80cb14cc263efe31c5844"
+    ],
+    "scripts/v15101-base-sha256.json": [
+      null,
+      "15b00a527d0483f2482a8a1c829b8a8b3ac3edc9fd18fd9d5e6fc3f8efc46951"
+    ],
+    "tests/v15101-deployment.test.py": [
+      null,
+      "42c071a0fe40f6c4033bbab0d49b5326443af542f76e35ad7d55dd27e300f0d9"
+    ],
+    "tests/v15101-installation.test.py": [
+      null,
+      "002c6164867fb4314d33fcbccf8d7faeb26042d5aee5d7dfe00ab16c1ce6ee4a"
+    ],
+    ".github/workflows/deploy-v15102.yml": [
+      null
+    ],
+    "scripts/prepare-v15102-update.py": [
+      null
+    ],
+    "scripts/update-v15102-termux.sh": [
+      null
+    ],
+    "scripts/wait-v15102-workflow.py": [
+      null
+    ],
+    "scripts/v15102-base-sha256.json": [
+      null
+    ],
+    "tests/v15102-installation.test.py": [
+      null
+    ],
+    "app-v13.js": [
+      "a65ec8ca7cf32b12464e8c28bb2c6bff2dc21c8de72a975de43d9b57cc201813",
+      "1d94a2e4902436d2ba001d732a02bdaafa6cd9f113a5c7a9bb9d9fe1c7d3a9e9"
+    ],
+    "index.html": [
+      "73e3e3331cddb6af4790888210ad3c26a3beb811db5bceb3e2f0e4b5f1f402d4",
+      "20fbf97ba11f76c67fc29cdb48ed06b9e4dd35b5aaf003b9e1be8ac7253e26e7"
+    ],
+    "service-worker-v13.js": [
+      "a089f6d3cc38c5cf2e0ab9597dab769be18764ff537e0def18892c5cc7ccec1c",
+      "8aac70cb1b9ee3f7e05a49a8cb5f4b89d5456cb5ec5a74ba4e0318032e5b17d2"
+    ],
+    "cr-off.js": [
+      "a2c1b8015c8ff4779f2c27aa17bc61f0df17708a86a38f84c0a4d20c8a43ae35",
+      "ee3bb417327a83e35f4ca5a7549f179679a3fb735e5f350b4658635250e31267"
+    ],
+    "journal-collaboration.js": [
+      "7d9ea910ef75110d6f7bc551b05f3f763147e6e54d4d42918e24c2d264652f60",
+      "56a7b6d7867ba6700ee4d37f09f061dd72949a8760b89c0757bb1cef0e2fc727"
+    ],
+    "journal-v1510.css": [
+      "e7a9c878ecbe269e86b6d8b00d2af99fb2d8ee97dae786448fafba16b9fadddd"
+    ],
+    "tests/collaboration-v1510-browser.cjs": [
+      "c8cee8add5cd4cefc5e4cb584fe19132600a3e8d355131ff967b2999e54e910f"
+    ],
+    "rapport/app.js": [
+      "870e091c44e1e1c1ab8a06c7df84a4ecb9c04f328dce102e9aeede4b87a5444e"
+    ],
+    "rapport/assets/ainm-infrapole-paris-sud-est.jpg": [
+      "7e9e1d26b62bfd1720ee7a2528d106bb1dbd0521dc5c046dfcf583f39c41b1ea"
+    ],
+    "rapport/collaboration.css": [
+      "0cf1e4040763a58bbb0822aaecc50ad7e20b7bb67cb28e7f60f65421e4f10caa"
+    ],
+    "rapport/collaboration.js": [
+      "24773b03c28e7de9ca8f76676b6590437ee921704733f1fc6899cd230a0d6b32"
+    ],
+    "rapport/data/billing-evidence.js": [
+      "40fd379b1b1cbca1d0c81978f1c923702c37ce6c4c9edd752f1d9a279048f62e"
+    ],
+    "rapport/data/price-catalog.js": [
+      "c4d42e83f6432651bbec801070a5bf163af602d4f97e92fe7caa73f7d6568d47"
+    ],
+    "rapport/data/terrain-catalog.js": [
+      "127a124cdee6897c588f833111a987e4de13e696ead5dd54c2d0dfff46f7b622"
+    ],
+    "rapport/icons/icon.svg": [
+      "e6e42189ef6564d42bf6d051b47f67693608667577dde59d20d18512e2508b5f"
+    ],
+    "rapport/icons/rapport-journalier-ainm-pwa.png": [
+      "64d4e25d0ce38834157ee3429768259d7c21f1eba487ea2dc622893ee279f622"
+    ],
+    "rapport/icons/rapport-journalier-ainm.png": [
+      "64d4e25d0ce38834157ee3429768259d7c21f1eba487ea2dc622893ee279f622"
+    ],
+    "rapport/index.html": [
+      "0d1803fe3fef12c7ce220ed1db1d700f7f30f4f45284b113146b2125820c6526"
+    ],
+    "rapport/journal-archive.js": [
+      "955a4fffafe82565ebac3e11297895d4265c70ba23575dde411f5ff8f5b5d311"
+    ],
+    "rapport/journal-config.js": [
+      "fc074ca402cd9722179dab2078cb71b222badba494cd7382d3b83a16ce1f5aa9"
+    ],
+    "rapport/manifest.webmanifest": [
+      "3b356378ab64c7c388d0252a3dcfceb3cea4a80b24bf357b2a0e701ddb4b4586"
+    ],
+    "rapport/service-worker.js": [
+      "2b25468e7a461fc7144dbd0ed751ec50b969e952475e53ff7c698324e4af7e6a"
+    ],
+    "rapport/styles.css": [
+      "a06f594a58a090cf91ed528d22758587aef9da072b1f620635a856a2a21ad31e"
+    ],
+    "rapport/vendor/pdf-lib.min.js": [
+      "0f9a5cad07941f0826586c94e089d89b918c46e5c17cf2d5a3c6f666e3bc694f"
+    ],
+    "rapport/vendor/supabase.js": [
+      "04b957f2563a40dcb02b1d9d6f7a7a23973bf8ebe4c1435be5feaf24bff91134"
+    ],
+    "briefing/index.html": [
+      "bad0a2b2e5662e8ad969e53a33380c572cb08757ceda1c9753e466f2746d2314",
+      "27f005274dbf8bf1274dcd07f58bc6490d23047e8dcf59f05849130322e20c34"
+    ],
+    "briefing/service-worker.js": [
+      "e42f38845a67a1b190ad1c2ccaa90d91fcc58452e40286562e01cc07116d8d04",
+      "9ab7c0146965e0695addfeecc5f743fcb2f7a6ac9576f806e07b0d114b9d417c"
+    ],
+    "briefing/signer.html": [
+      "1708c81af83fc348e9be82a0f81fdfe85d923027f0134eb4138244b44348a576",
+      "efd07e0582d6e4cb9367455ccf5b6ec950d13e18a3fe3b1f185ee7324a7c88ea"
+    ],
+    "briefing/signer.js": [
+      "af977f2a5f4567285a2296a2adee15e6bf48de71014bddfa50f07d29e050e0ef",
+      "404b504d3dacdd8f3bad20054dd6834538487261e3325325dcaea99894599f65"
+    ],
+    "briefing/signature-pad.js": [
+      null,
+      "21b6a66415d7679d85c8b2bbf04af849676b6ea384f3119fddd963b82defd936"
+    ],
+    "briefing/signer-v15101.css": [
+      null,
+      "0b53b838e07365581f494f5aa436cf9ee1e54ae8ae9d6f4b6c74cf596701e51a"
+    ],
+    "tests/collaboration-v15101-browser.cjs": [
+      null,
+      "695630e0d82b62ce68a82e16a51750c4b23e652d780d8f0acd24b1646f70f5fe"
+    ],
+    "tests/signature-v15101-browser.cjs": [
+      null,
+      "c4e0ad7b3ed7e5efcbc009d4900fb03c99cb815eea1c34215fd8c14c864c2a3e"
+    ],
+    "tests/pwa-v15101-browser.cjs": [
+      null,
+      "74e1d23eaa630f9df47db304641e78e3788609e26e5ba932619c8e88d0cd36e2"
+    ],
+    "VERSION_V15.10.1.md": [
+      null,
+      "5b47c7e6c5ee5d90ff074e8cafbe6c22b63d3050089fbca5839c6a68694cafaa"
+    ],
+    "VERIFICATIONS_V15.10.1.txt": [
+      null,
+      "c3c36cf46af37013ab27f245f777823fd65fc525639d7209796f79720d2c577c"
+    ],
+    "briefing/briefing-attendance.js": [
+      "9e66c740fbe1b0a6ad1ab2b2d492f3645bcca6b04fe46da8fb37908b422e39c6"
+    ],
+    "briefing/presence-matching.js": [
+      null
+    ],
+    "briefing/presence-review.js": [
+      null
+    ],
+    "briefing/presence-review.css": [
+      null
+    ],
+    "tests/signature-v15102-browser.cjs": [
+      null
+    ],
+    "tests/presence-matching-v15102.cjs": [
+      null
+    ],
+    "tests/pwa-v15102-browser.cjs": [
+      null
+    ],
+    "VERSION_V15.10.2.md": [
+      null
+    ],
+    "VERIFICATIONS_V15.10.2.txt": [
+      null
+    ]
+  },
+  "dependencies": {
+    ".github/workflows/deploy-v158.yml": "e2175e086392ddf89b17776cfe3034139dc64abbf1af45aa23b85615d2cc8129",
+    "VERIFICATIONS_V15.8.txt": "f1c17b6cbc7d96a1227b19b16dc007e41f328ed71a752189b3aa917d7999b733",
+    "VERSION_V15.8.md": "9ea648d904e910bb3c2824c187c9b5ca02a1585b7e971b02db631316d122bab5",
+    "briefing/briefing-preparation.js": "f7869f8246d49b5b622adce88d28a68e0f7276d2ffe6e323cde48854f4d9e8a8",
+    "briefing/briefing-v158.css": "d30b9ed37f2a2b2e662ef575550c549154004d6461a8b7e1e8b8d1033be18991",
+    "briefing/journal-bridge.js": "89887cca4f6f4133f56c5370358c022dad9bed08731285bfd5d7c1f20cbb2dfd",
+    "briefing/vendor/qrcodegen.js": "2511bc17f40a3c41d4a0578995db956b38997334d3d20113a5d4dc5c49c69480",
+    "cr-ai.js": "7644ae9ea3334ddce495d120f41658433135c343cafcdd2764d8f63c0ce4a875",
+    "cr-fields.js": "6d0fd7c6d6cdb243924caf62622dbf25442d086f286ac950dc217584f6475f36",
+    "cr-off.css": "17b908d8306629ece2110b4ef70a487d22908b6d3666d2c18c441f91d66e6f8e",
+    "data/emojis.json": "cf46b4a5432dcedc64fd41f5ef6adce908bcf30ae15bb7637198bbec6d7e07de",
+    "journal-composer.js": "0a5dba2a507e332331e9aa45c2080f1a8fe50fecf3a26c944f5e143624608efe",
+    "journal-dialogs.js": "a62afa13553faf44de02c65691f02ff2d8d98def705b2a095cb32457eaf98104",
+    "journal-emoji.js": "1905ffd274eb633083398d1a1781bba529a7ad05834e25e0fa0d9a631b10efa1",
+    "journal-export.js": "bebb9dde5b5d95f983ec50c2865953e05e2c8a21a67c34cbb43992ccf88c1ceb",
+    "journal-pdf.js": "625dae976b1e321603e8078a3e71ad316c380502f8ed60bc1cf7d61908a2638d",
+    "journal-v155.css": "0d0437fb7b2ddb7d84ccf3578af3da088d288b93380ff9003c1cdc317be54076",
+    "journal-v156.css": "d6fed4a607d26ca94d37f534c721e3b66dac6c9359169134fab62bf09c1ef5a6",
+    "journal-v157.css": "37b46df64308a67d23d8a804c96cd00668f15ca797071ad1601e5e48695bab02",
+    "scripts/deploy-briefing-release.py": "fadbebe23ad0aa6b92ecad8fd030e75b74ab3c42170c70db5ea96323e7147bb3",
+    "scripts/deploy-supabase-release.py": "201bc69dff68f41c7685fac8caaf14f68231e3ecbfd9107537f6c30b01cfd824",
+    "scripts/deploy-v158-release.py": "855cae9dcbc09d3eafa0ff9afc42ce154a5cfdd8fa9de91c53aaf31f0d27b4c3",
+    "scripts/prepare-v158-update.py": "89c1865f90372cafa51c09424340566e3a6bfbcbb06d9c90df6ab2955bad00b2",
+    "scripts/update-v158-termux.sh": "dbb67436e50e0355dff122e4df46e5260d872a320c2ddd4ae38a315a03f2fff5",
+    "scripts/v158-base-sha256.json": "4bf5c213d229ebb5e10aebff3e3cef518baa82ec45ca39546537f89161ebc07e",
+    "scripts/wait-v158-workflow.py": "03234d8d62f8ffafbb2e7eddb73645ff4aaaf61263d1cd56f7d34fbbbe2850e8",
+    "supabase.js": "04b957f2563a40dcb02b1d9d6f7a7a23973bf8ebe4c1435be5feaf24bff91134",
+    "supabase/migrations/20260901000100_documentation_securisee.sql": "ab81c01437109e7e0f03738e2c3bfa017216153209693ede5b5a7aea39b24950",
+    "supabase/migrations/20260901000200_actions_reset_and_document_roots.sql": "31d57098dc95cc7d6f73937a61ad99855d324a091e0ca155138b1aa087222875",
+    "supabase/migrations/20260901000300_v14_chantiers_et_portail_applications.sql": "67f577cdafe7525c81abdbbf0faffd42e0c7c99ff1226303940d98932f319762",
+    "supabase/migrations/20260901000400_v14_1_fiche_chantier_simplifiee.sql": "b65a306dc33cf392d4359daba290b1e56c49495183f0bf7a0b08db6673fd5e8b",
+    "supabase/migrations/20260906000100_v14_2_collaborateurs_actions.sql": "2658b36067fed3da58da16a2ba60223b53a7dd4d8126b0ce9231d29721f7626b",
+    "supabase/migrations/20260906000200_v14_2_schema_production.sql": "5b7aeb22fda71ba4aaacd07480bdcc4f0df47f57837dbeacf1421c94cb5ec4b1",
+    "supabase/migrations/20260906000300_v14_2_contraintes_reelles.sql": "2b39c6eadc14a985fa626997e14abd97a643c40004ff3d885d5ab9957f5d1ba5",
+    "supabase/migrations/20260906000400_v14_4_mode_chantier.sql": "b8a974b81f17e0c577db73c1a1d367dfeaecb2d29fdc9b004683144d2066ce7c",
+    "supabase/migrations/20260907000500_v14_5_retours_application.sql": "442df933ae2ace49ebe2a0f1de2e0fb0d41a376888dca6a376d1192e1758798a",
+    "supabase/migrations/20260907000600_briefing_archive.sql": "6a10f61c42d1ff1de6902d8bf78b211083819295640f6bff2ff79d89e6988fe7",
+    "supabase/migrations/20260907000700_archive_rapports_journaliers.sql": "1fc99246fc0d21b0505af8c650a387b5a4451d0e2ef4dad7d4ae682b680fffd3",
+    "supabase/migrations/20260908000100_v15_cr_encadrement.sql": "1810354ee104aea1a3382dc55d8127b00ed93403fcf6f8aa25205487e2b11b85",
+    "supabase/migrations/20260908000200_v15_1_cr_perimetres.sql": "de7e08f80ea13f94ac0261ce203cbf62fc95e2c419ddbc7e116c5423912f28cd",
+    "supabase/migrations/20260908000300_v15_2_cr_simple.sql": "e2d600b4db166c4bf3776eba69bd555ce629053fd3fd23d4a47b1d0e3e33a841",
+    "supabase/migrations/20260909000100_v15_3_cr_tables.sql": "b1ba99ffa6d1b5168e875482e9dbeb2814c669e030b14cc4c71342dfc0718eb8",
+    "supabase/migrations/20260909000200_v15_4_production_email.sql": "f2623d4194ff3963dd2e7566fa046460963423d5177a3f8492e3c89454b74430",
+    "supabase/migrations/20260909000300_v15_5_requests_pdf.sql": "9190affa9e46774418510383aa4610e6cb01da6d61c7332d178c917fe0ba8c90",
+    "supabase/migrations/20260909000400_v15_6_writing_references_delete.sql": "e44ca5295fb582590e7542212c3622a03419c206ac63c1217fe8de5d784864a8",
+    "supabase/migrations/20260909000500_v15_7_reference_catalogue.sql": "9546f1d78814f3152e01dcc292f8b24c6d51c0310d68a837322fab30a8cab092",
+    "supabase/migrations/20260910000100_v15_8_preparation_briefing.sql": "5f0901292555ee45ce247b37908f3e0c6a1da36b74b4b96162c0c808f8b9b395",
+    "supabase/tests/backend-fixture.sql": "48df4e5fed1ef44036a8c765071d0f190e96cf9c54a8da88e982cc47dcb80bf7",
+    "supabase/tests/backend-production-shape.sql": "08f58b1e807c47c5d2faa2e20920d013b556bd6ee8244cd264725728d71bedcd",
+    "supabase/tests/cr-v15-backend.cjs": "80ca82461e9bbb36c4044571d1cbb95363b74dbb57943bcb8555b703235a7a55",
+    "supabase/tests/cr-v151-backend.cjs": "e87f9a228888e897235bc594d97761e0294eb3bc63b4244f8d0464f9fc1b5cd7",
+    "supabase/tests/cr-v152-backend.cjs": "27041b94219332e1258453fc13d4bb68ca1b63a728ded645d247e7d9dfcd3d29",
+    "supabase/tests/cr-v153-backend.cjs": "89f527c4af089d12f357fe4d33b51cd520c945ab43e5e0c3309c46c15cdab49b",
+    "supabase/tests/cr-v154-backend.cjs": "ce09d5dc2f4c87fdca470c40946d26fb6f7df56552c0e3560d037a826a9c5044",
+    "supabase/tests/cr-v155-backend.cjs": "1590d9b00c2c7723905dd5e1794d54489bba8ac740263607cd8ebf09e7ef30f6",
+    "supabase/tests/cr-v156-backend.cjs": "b71ce36e6a731d779f5e62057f44153843515c39705ce25d81c8a45cd77c897a",
+    "supabase/tests/cr-v157-backend.cjs": "6f3bd54be03598e518bee629b9d8ce7dd6dda37e97d0a982ce422bc4ef6eace0",
+    "supabase/tests/cr-v158-backend.cjs": "bdccce46738dca102ceb0aba95435fbdea8d6a67cd0cdbd53127fbbd850b7d41",
+    "supabase/tests/cr-v158-deployment.cjs": "c8c824b5a17f6cdd4232a2ae17575cf94dbec54407b24d1572951c438e953d55",
+    "supabase/tests/cr-v158-postgres.sql": "4645aebd236ba9033930d567d1062fcc57f5795fdf301d69af55d60704969069",
+    "supabase/tests/feedback-backend-fixture.sql": "4fa860722064ac98acce2717973421ac06d142cef4ddb89abdaa764f919a5b12",
+    "tests/messages-v1571-browser.cjs": "5c80ed89e1b4e58408cee74e12f984746313cc78f19b35bd679e1f3fa5c71a34",
+    "tests/preparation-v158-browser.cjs": "db57139aba1f2dba51aa5091f3381ed06af703d630110d6e64cdeb3fe05a398b",
+    "tests/v158-deployment.test.py": "702942e1f2b59809ac54725843549bfb7387571bfcee046ec56d4c54bf163e4a",
+    "tests/v158-installation.test.py": "b05ae5f9bf96dcd954235d9d1ef4c9c035cc1e044f9fd92133e8e99912c5f4d5",
+    "supabase/tests/cr-v159-backend.cjs": "51cf356ca989fc189b149d5d68153be87363af17d8bc2610727850cc6b162aec",
+    "supabase/migrations/20260910000200_v15_9_completion_partagee.sql": "14a4c9595a8974ee6c1f7a1b9fec4c4622e3303b662acee6656231a5c02df3b6",
+    "briefing/manifest.json": "563c43ff41302ef987728cacd3d162a75a6bf67b853af49e171c728ed3e91f8f"
+  }
+}
