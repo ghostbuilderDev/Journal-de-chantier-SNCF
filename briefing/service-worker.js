@@ -6,13 +6,14 @@
  * sans paramètres d'URL, afin d'éviter les entrées de cache non maîtrisées.
  */
 const CACHE_PREFIX = 'briefing-pwa-pages-';
-const CACHE_NAME = 'briefing-pwa-pages-v158-preparation-signatures';
+const CACHE_NAME = 'briefing-pwa-pages-v159-qr-partage';
 const APP_SHELL = [
+  './afficher-qr.html', './afficher-qr.js?v=15.9', './briefing-qr-share.js?v=15.9', './briefing-v159.css?v=15.9',
   './',
   './index.html',
   './manifest.json',
   './signer.html', './signer.js?v=15.8', './briefing-v158.css?v=15.8',
-  './journal-bridge.js?v=15.8', './briefing-preparation.js?v=15.8', './briefing-attendance.js?v=15.8', './vendor/qrcodegen.js?v=15.8',
+  './journal-bridge.js?v=15.8', './briefing-preparation.js?v=15.8', './briefing-attendance.js?v=15.9', './vendor/qrcodegen.js?v=15.8',
   './icon-192-v19b.png',
   './icon-512-v19b.png',
   './vendor/html2canvas.min.js',
@@ -86,7 +87,7 @@ self.addEventListener('fetch', event => {
       if (saved) return saved;
 
       if (request.mode === 'navigate') {
-        const shell = await cache.match(url.pathname.endsWith('/signer.html') ? './signer.html' : './index.html');
+        const shell = await cache.match(url.pathname.endsWith('/signer.html') ? './signer.html' : url.pathname.endsWith('/afficher-qr.html') ? './afficher-qr.html' : './index.html');
         if (shell) return shell;
       }
 

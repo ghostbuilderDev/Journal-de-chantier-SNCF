@@ -14,7 +14,7 @@
    if(b.dataset.production==='close')return close();
    if(b.dataset.production==='add'){if(d.querySelectorAll('[data-production-row]').length>=60)return;d.querySelector('#productionRows').insertAdjacentHTML('beforeend',row({additional:Boolean(record.id)}));dirty=true;return;}
    busy=true;b.disabled=true;b.textContent='Enregistrement…';
-   try{const items=readRows(d),night=d.querySelector('#productionNight').value;if(!night)throw new Error('Indiquez la date de la séance.');await api(c,'save',{id,night,version:record.version||0,items});dirty=false;d.remove();await c.refresh?.();}
+   try{const items=readRows(d),night=d.querySelector('#productionNight').value;if(!night)throw new Error('Indiquez la date de la séance.');const result=await api(c,'save',{id,night,version:record.version||0,items});dirty=false;d.remove();await c.refresh?.();if(result.completion_can_open&&(!c.valid||c.valid())){await JournalCompletion.open({id:result.completion_id,userId:c.userId,rpc:async(action,payload)=>{if(c.valid&&!c.valid())throw new Error('Le compte a changé.');const response=await c.db.rpc('journal_cr_api',{p_action:action,p_payload:payload});if(response.error)throw response.error;return response.data;},valid:c.valid,improve:(text,chantierId)=>JournalCRAI.improve(text,{db:c.db,chantierId}),onSaved:()=>{void c.refresh?.();}});}}
    catch(error){if(d.isConnected)d.querySelector('#productionStatus').textContent=error.message;}
    finally{busy=false;b.disabled=false;b.textContent='Enregistrer la production';}
   });document.body.append(d);d.showModal();

@@ -1,0 +1,38 @@
+Journal de chantier V15.9 — vérifications sur environnement jetable
+Base : V15.8 publiée, commit dcc6991e1d149f0833a9c7f48b721c021f46c55c.
+
+SQL réellement exécuté dans PostgreSQL embarqué (PGlite) :
+- Création de la complétude à partir de la production, affectation de plusieurs agents.
+- Contributeurs et lecteur désigné limités à leur formulaire ; CR complet privé.
+- Modifications de lignes différentes conservées ; conflit sur une même ligne rejeté.
+- Enregistrement provisoire distinct de la transmission ; réessai sans doublon.
+- Transmission commune retirant les tâches, tout en gardant le CR en brouillon.
+- Relecture et modification par l’encadrant, retour pour correction, révocation d’accès.
+- Tables privées, anciennes fonctions privées non appelables, migration réexécutable.
+- Transaction exacte de l’installateur, registre SQL et toutes ses requêtes de contrôle.
+
+Navigateur Chromium, plusieurs comptes et appareils simulés :
+- Interface réelle du journal, fenêtres mobiles (390 px) et tablette (1024 px).
+- Affectation par l’encadrant, popup et « Mes demandes » chez les deux agents.
+- Production et Top/Flop conservés à la fermeture et à la réouverture.
+- Modifications simultanées, choix explicite de la version d’un collègue.
+- Réponse serveur perdue puis réessai ; coupure avant sauvegarde, masquage puis reprise.
+- Transmission avec confirmation ; modification de la remontée par l’encadrant.
+- Partage de l’URL d’affichage du QR (partage natif intercepté dans le test).
+- Page publique affichant le QR du bon formulaire ; PNG de l’affiche généré localement.
+- Émargement fermé : QR masqué ; nouveau briefing : nouveau lien affiché.
+- Aucun message, email ou document envoyé à des utilisateurs réels.
+
+Non-régression : scénario messagerie V15.7.1 (contributeurs, encadrants, lecteur,
+retrait d’accès, retours à la ligne, brouillon, photo et réessais) ; scénario V15.8
+(reprise de nuit, ARF réel, voies/engins conservés, signatures et PDF du briefing).
+
+Livraison : syntaxe JS et shell, deux phases serveur/interface, protection des
+fichiers modifiés, installation depuis les fichiers de la V15.8 puis réexécution.
+Le workflow applique également un contrôle sur PostgreSQL 17 jetable avant
+l’installation serveur. Ce contrôle GitHub reste à exécuter par Termux.
+
+La validation du partage natif avec le choix d’une application sur des appareils
+Android physiques reste à faire après installation. Le test navigateur vérifie
+le contenu partagé, les liens, l’affichage, la fermeture et le changement de séance.
+Aucune modification du serveur ni publication GitHub effectuée dans cet environnement.

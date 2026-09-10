@@ -34,13 +34,16 @@
   if(panel?.open){
    byId('attendanceQr').innerHTML=open?qrSvg(url()):'<p>Les signatures de cette séance sont fermées.</p>';
    byId('attendanceSessionTitle').textContent=context.name+' · '+current.date;
-   byId('attendanceCopy').hidden=!open;byId('attendanceCloseSession').hidden=!open;
+   byId('attendanceCopy').hidden=!open;byId('attendanceShare').hidden=!open;byId('attendancePoster').hidden=!open;byId('attendanceDisplay').hidden=!open;byId('attendanceDisplay').href=BriefingQRShare.links(current.token).display;byId('attendanceCloseSession').hidden=!open;
   }
  }
  function show(){
-  if(!panel){panel=document.createElement('dialog');panel.className='briefing-qr-dialog';panel.innerHTML='<header><div><small>BRIEFING · ÉMARGEMENT</small><h2 id="attendanceSessionTitle"></h2></div><button type="button" data-qr-close>Fermer ×</button></header><p>Scannez ce QR code, renseignez votre identité et signez sur votre téléphone.</p><div id="attendanceQr"></div><p id="attendanceDialogStatus" role="status"></p><div class="briefing-qr-actions"><button type="button" id="attendanceCopy">Copier le lien</button><button type="button" id="attendanceRefresh">Actualiser</button><button type="button" id="attendanceCloseSession">Terminer l’émargement</button></div>';document.body.append(panel);
+  if(!panel){panel=document.createElement('dialog');panel.className='briefing-qr-dialog';panel.innerHTML='<header><div><small>BRIEFING · ÉMARGEMENT</small><h2 id="attendanceSessionTitle"></h2></div><button type="button" data-qr-close>Fermer ×</button></header><p>Scannez ce QR code, renseignez votre identité et signez sur votre téléphone.</p><div id="attendanceQr"></div><p id="attendanceDialogStatus" role="status"></p><p class="qr-share-help">Partagez l’affichage sur une tablette ou un écran. À chaque briefing, ouvrez le nouveau lien reçu pour remplacer le précédent.</p><a id="attendanceDisplay" class="qr-display-link" target="_blank" rel="noopener noreferrer">Ouvrir l’affichage du QR code</a><div class="briefing-qr-actions"><button type="button" id="attendanceShare" class="qr-share-primary">Partager le QR code</button><button type="button" id="attendancePoster">Télécharger l’affiche QR</button><button type="button" id="attendanceCopy">Copier le lien de signature</button><button type="button" id="attendanceRefresh">Actualiser</button><button type="button" id="attendanceCloseSession">Terminer l’émargement</button></div>';document.body.append(panel);
    panel.querySelector('[data-qr-close]').onclick=()=>panel.close();
    byId('attendanceCopy').onclick=async()=>{try{await navigator.clipboard.writeText(url());notice('Lien de cette séance copié.');}catch(_){notice('Copie indisponible. Les participants peuvent scanner le QR code.');}};
+   const shareSession=()=>({token:current.token,id:current.id,date:current.date,title:context.name});
+   byId('attendanceShare').onclick=async()=>{try{notice(await BriefingQRShare.share(shareSession()));}catch(e){notice('Partage indisponible. Utilisez le lien Ouvrir l’affichage du QR code ou téléchargez l’affiche.');}};
+   byId('attendancePoster').onclick=async()=>{try{await BriefingQRShare.download(shareSession());notice('Affiche téléchargée pour cette séance. Remplacez-la au prochain briefing.');}catch(e){notice(e.message);}};
    byId('attendanceRefresh').onclick=()=>void poll().catch(e=>notice(e.message));
    byId('attendanceCloseSession').onclick=async()=>{if(await JournalDialogs.confirm('Terminer l’émargement ? Ce QR code n’acceptera plus de nouvelle signature.'))try{await closeSession();}catch(e){notice(e.message);}};
   }

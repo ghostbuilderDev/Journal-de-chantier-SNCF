@@ -13,6 +13,7 @@ window.JournalBriefing = {
   const label = document.createElement('span'); label.textContent = 'Briefing · ' + site.name;
   bar.append(close,label);
   const frame = document.createElement('iframe');
+  frame.allow = 'web-share; clipboard-write; fullscreen';
   frame.title = 'Briefing du chantier ' + site.name;
   frame.style.cssText = 'width:100%;flex:1;border:0';
   const target = new URL('./briefing/index.html', location.href);

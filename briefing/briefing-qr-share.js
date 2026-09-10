@@ -1,0 +1,16 @@
+/* Share a live display of this briefing, with an optional locally rendered poster. */
+(function(root){
+ 'use strict';
+ function links(token,base=location.href){const display=new URL('afficher-qr.html',base),sign=new URL('signer.html',base);display.search=sign.search='';display.hash=sign.hash=token;return {display:display.href,sign:sign.href};}
+ function svg(url){const q=qrcodegen.QrCode.encodeText(url,qrcodegen.QrCode.Ecc.MEDIUM),size=q.size+8;let path='';for(let y=0;y<q.size;y++)for(let x=0;x<q.size;x++)if(q.getModule(x,y))path+=`M${x+4},${y+4}h1v1h-1z `;return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" role="img" aria-label="QR code de signature de ce briefing" shape-rendering="crispEdges"><rect width="100%" height="100%" fill="white"/><path d="${path}" fill="black"/></svg>`;}
+ async function share(session){const url=links(session.token).display;const payload={title:'QR code du briefing · '+session.title,text:session.title+' · '+session.date+' — Ouvrir pour afficher le QR code de signature sur la tablette ou l’écran.',url};if(navigator.share){try{await navigator.share(payload);return 'Partage ouvert pour ce briefing.';}catch(e){if(e.name==='AbortError')return 'Partage annulé.';}}await navigator.clipboard.writeText(url);return 'Lien d’affichage copié. Ouvrez-le sur la tablette pour y afficher le QR code.';}
+ async function poster(session){
+  const canvas=document.createElement('canvas');canvas.width=1200;canvas.height=1460;const ctx=canvas.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,1200,1460);ctx.fillStyle='#ad1233';ctx.fillRect(0,0,1200,18);ctx.textAlign='center';ctx.fillStyle='#263940';ctx.font='bold 32px system-ui';ctx.fillText('BRIEFING · SIGNATURE DES PARTICIPANTS',600,96);
+  const words=session.title.split(/\s+/);let line='',y=174;ctx.font='bold 44px system-ui';for(const word of words){if(ctx.measureText(line+' '+word).width>1040&&line){ctx.fillText(line,600,y);line=word;y+=56;if(y>230)break;}else line+=(line?' ':'')+word;}ctx.fillText(line,600,y);ctx.font='32px system-ui';ctx.fillText(new Date(session.date+'T12:00:00').toLocaleDateString('fr-FR'),600,310);
+  const q=qrcodegen.QrCode.encodeText(links(session.token).sign,qrcodegen.QrCode.Ecc.MEDIUM),cell=Math.floor(900/(q.size+8)),size=(q.size+8)*cell,left=(1200-size)/2,top=370;ctx.fillStyle='black';for(let yy=0;yy<q.size;yy++)for(let x=0;x<q.size;x++)if(q.getModule(x,yy))ctx.fillRect(left+(x+4)*cell,top+(yy+4)*cell,cell,cell);
+  ctx.fillStyle='#263940';ctx.font='32px system-ui';ctx.fillText('Scannez, renseignez votre identité puis signez.',600,1312);ctx.font='24px system-ui';ctx.fillText('Séance '+session.id.slice(0,8)+' · Remplacer cette affiche au prochain briefing.',600,1370);
+  const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));if(!blob)throw new Error('L’affiche n’a pas pu être générée.');return blob;
+ }
+ async function download(session){const blob=await poster(session),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='QR-Briefing-'+session.date+'-'+session.id.slice(0,8)+'.png';a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);}
+ root.BriefingQRShare={links,svg,share,poster,download};
+})(window);
