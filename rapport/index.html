@@ -9,7 +9,7 @@
     <link rel="icon" href="icons/rapport-journalier-ainm-pwa.png" type="image/png" />
     <link rel="apple-touch-icon" href="icons/rapport-journalier-ainm-pwa.png" />
     <link rel="stylesheet" href="styles.css" />
-    <link rel="stylesheet" href="collaboration.css?v=15.10" />
+    <link rel="stylesheet" href="collaboration.css?v=15.10.5" />
     <title>Rapport journalier · AINM</title>
   </head>
   <body>
@@ -21,7 +21,7 @@
             <img src="icons/rapport-journalier-ainm.png" alt="" aria-hidden="true" />
             <div><strong>AINM</strong><span>Travaux signalisation</span></div>
           </div>
-          <span class="startup-version"><span>Version</span><strong data-app-version>V10.3</strong></span>
+          <span class="startup-version"><span>Version</span><strong data-app-version>V10.5</strong></span>
         </div>
         <a class="return-journal-link" data-return-to-journal href="https://ghostbuilderdev.github.io/Journal-de-chantier-SNCF/">← Retour au journal de chantier</a>
         <div class="startup-content">
@@ -47,7 +47,7 @@
           <span class="brand-context">Rapport travaux</span>
         </div>
         <div class="topbar-actions">
-          <span class="app-version-badge" data-app-version aria-label="Version de l’application">V10.3</span>
+          <span class="app-version-badge" data-app-version aria-label="Version de l’application">V10.5</span>
           <span id="saveState" class="save-state" aria-live="polite">Brouillon local</span>
           <button class="icon-button" id="newReportButton" type="button" title="Nouveau rapport" aria-label="Nouveau rapport">＋</button>
           <button class="icon-button" id="moreButton" type="button" title="Actions" aria-label="Ouvrir les actions">•••</button>
@@ -492,9 +492,10 @@
     <script src="vendor/pdf-lib.min.js"></script>
     <script src="vendor/supabase.js"></script>
     <script src="journal-config.js"></script>
-    <script src="journal-archive.js"></script>
+    <script src="journal-archive.js?v=15.10.4"></script>
     <script src="../journal-composer.js?v=15.7.1"></script>
-    <script src="collaboration.js?v=15.10"></script>
-    <script src="app.js?v=15.10"></script>
+    <script src="report-actions.js?v=15.10.5"></script>
+    <script src="collaboration.js?v=15.10.5"></script>
+    <script src="app.js?v=15.10.5"></script>
   </body>
 </html>

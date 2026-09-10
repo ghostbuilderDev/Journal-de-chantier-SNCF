@@ -1,0 +1,35 @@
+V15.10.5 — Vérifications de la livraison cumulative
+
+Exécutées localement, sur les formulaires réels avec une base PostgreSQL embarquée de test :
+- Menu accessible depuis les cinq onglets existants ; aucune commande collaborative ni historique dans l’espace principal de saisie.
+- Écrans de 390 et 1024 pixels, clavier/souris et événements tactiles Chromium : ouverture, fermeture, Échap, retour du focus et consultation de l’historique.
+- Déplacement au doigt et à la souris, appui après déplacement, position conservée après réouverture, adaptation à une fenêtre de 320 × 430 pixels.
+- Ouverture/fermeture/déplacement du menu : contenu et identifiant du rapport inchangés.
+- Enregistrement, transfert à plusieurs agents, réception de la notification et accès au même rapport, contribution et nouveau transfert, actualisation puis validation définitive.
+- Réponse de transfert perdue : nouvelle tentative sans duplicata.
+- Conflit entre contributeurs : saisie conservée, problème visible dans le bandeau et sur le bouton flottant, sauvegarde en fichier récupérable avec les bonnes données.
+- Rapport validé non modifiable ; fermeture du menu et blocage des commandes lors d’un changement de compte.
+- Numérotation conservée : ancien brouillon n° 1 repris au n° 3, nouvelle tentative après coupure, PDF et impression n° 3, rapport suivant n° 4 après réouverture, autre appareil n° 5.
+- Cache PWA : nouveaux fichiers JS/CSS du menu présents, trois service workers installables, anciennes saisies conservées, page QR du Briefing toujours disponible, aucune réponse privée mise en cache.
+- Transaction SQL exacte, registre des migrations et contrôles de numérotation de l’installateur vérifiés.
+- Installation cumulative appliquée sur des copies exactes des versions V15.10.3 et V15.10.4 : étape serveur avant interface, deuxième exécution sans changement, configurations et Briefing inchangés, modification inconnue préservée.
+- Tests des installateurs V15.10.4 et V15.10.5 : fichiers inconnus et liens symboliques refusés, configuration préservée, contrôle du serveur avant publication de l’interface.
+
+Les dimensions smartphone et les interactions tactiles ont été testées dans Chromium. Aucun appareil Android physique ni compte de production n’a été utilisé pour ces essais.
+
+La vérification PostgreSQL 17 avec créations simultanées reste exécutée par GitHub Actions lors de l’installation, avant publication de l’interface. La livraison ne lance aucun transfert, email ou envoi de PDF vers les utilisateurs réels.
+
+
+Complément — archive de reprise de l’installation interrompue
+- Exécution GitHub 34537050638 inspectée : tests SQL/numérotation réussis, échec uniquement au contrôle du serveur.
+- Défaut reproduit dans une base jetable en accordant directement EXECUTE à anon via les droits par défaut avant la création de l’archive historique : l’ancien contrôle des archives échoue.
+- Nouvelle migration de droits appliquée après une numérotation déjà enregistrée : les six contrôles passent, le contenu des rapports, photos, signatures, messages, documents, réservations et compteurs reste identique.
+- Fonction de finalisation et politique des autres fonctions inchangées ; archivage réel dans la base de test et seconde finalisation du même PDF réussis. Un lecteur et un utilisateur anonyme ne peuvent pas finaliser l’archive d’un contributeur.
+- Signature QR toujours autorisée ; aucune révocation générale sur les autres fonctions.
+- Reprise du déploiement : seule la migration des droits manquante est appliquée ; une seconde exécution ne rejoue aucune migration déjà enregistrée.
+- Diagnostics : contrôles du compteur et de l’archivage nommés séparément ; un échec reste bloquant.
+- Charge SQL invalide refusée avant connexion au serveur.
+- Installation cumulative vérifiée sur quatre copies exactes : V15.10.3, V15.10.4, première livraison V15.10.5 complète et commit réellement laissé par l’installation interrompue. Reprise dans le bon ordre, seconde exécution sans changement, configuration et Briefing conservés.
+- Interface V10.5 identique à la livraison précédemment testée.
+
+Les droits exacts du serveur de production ne sont pas disponibles dans le journal d’échec initial. Le défaut corrigé est reproduit en test, mais l’installation sur le serveur reste à relancer pour confirmer tous les contrôles. Aucun déploiement ni envoi aux utilisateurs n’a été effectué depuis cette session.

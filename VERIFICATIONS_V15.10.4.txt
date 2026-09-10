@@ -1,0 +1,19 @@
+V15.10.4 — vérifications du correctif de numérotation
+
+Exécutées localement sur le code livré :
+- Base PostgreSQL embarquée : anciens PDF n° 1/2, correction du brouillon n° 1 en n° 3, nouveau rapport n° 4.
+- Conservation des travaux, photos, signature et date ; anciens rapports validés inchangés.
+- Nouvelle tentative après réponse perdue : même rapport et même numéro.
+- Transfert à plusieurs agents, contribution, refus d'une version périmée, transfert suivant et validation définitive.
+- Modification forcée du numéro/identifiant depuis un ancien client neutralisée côté serveur.
+- Suppression d'un rapport et relance de la migration : numéro non recyclé.
+- PDF avec mauvais numéro refusé ; archive déjà réservée récupérable ; droits lecteurs et anonymes refusés.
+- Navigateur Chromium, formats téléphone 390 px et ordinateur/tablette 1024 px : reprise du bon brouillon, date conservée, PDF réellement généré avec n° 3, aperçu d'impression avec n° 3, brouillon suivant conservé après fermeture puis n° 4, second utilisateur sur un nouvel appareil n° 5.
+- Reprise d’un PDF déjà en attente : aucun numéro supplémentaire attribué au nouveau brouillon.
+- Coupure réseau avant export : pas de PDF provisoire envoyé, saisie conservée.
+- Installation des trois service workers et cache des scripts V10.4 ; brouillons conservés ; page de signature QR et plein écran encore disponibles hors connexion ; aucune réponse privée en cache.
+- Transaction SQL exacte de déploiement, registre des migrations et requêtes de contrôle de l'installateur vérifiés.
+
+La livraison inclut également un contrôle sur PostgreSQL 17 jetable et deux créations réellement concurrentes dans GitHub Actions, avant installation de la migration en production. Ce contrôle distant s'exécutera lors de l'installation par l'utilisateur.
+
+Aucun message, PDF ou email de test n'a été envoyé aux utilisateurs, au Journal de production ou à SharePoint. La mise à jour n'est pas installée à distance par la génération du ZIP.

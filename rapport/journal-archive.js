@@ -70,6 +70,7 @@
     const chantierName = select.selectedOptions[0].textContent;
     const userId = await identity(chantierId);
     const pdf = await createPdf();
+    meta = typeof meta === "function" ? meta() : meta;
     const bytes = new Uint8Array(await pdf.blob.arrayBuffer());
     if (new TextDecoder().decode(bytes.slice(0,5)) !== '%PDF-' || bytes.length > 52428800) throw new Error('PDF invalide ou supérieur à 50 Mo.');
     const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), b => b.toString(16).padStart(2,'0')).join('');
@@ -81,8 +82,10 @@
     return job;
   }
   async function archiveJournal(job) {
-    const reservation = await client.rpc('reserve_journal_report', {
-      p_chantier_id: job.chantierId, p_sha256: job.hash, p_file_name: job.filename, p_bytes: job.blob.size
+    const numbered = !!job.meta.reportId || !!job.meta.imported;
+    const reservation = await client.rpc(numbered ? 'journal_reserve_numbered_pdf' : 'reserve_journal_report', {
+      p_chantier_id: job.chantierId, p_sha256: job.hash, p_file_name: job.filename, p_bytes: job.blob.size,
+      ...(numbered ? {p_report_id: job.meta.reportId || null, p_imported: !!job.meta.imported} : {})
     });
     if (reservation.error) throw reservation.error;
     const r = reservation.data;

@@ -2,9 +2,12 @@
 (() => {
   "use strict";
 
+  const journalMode = new URL(location.href).searchParams.has("chantierId");
+  let storageReady = !journalMode;
+  let numberingStatus = journalMode ? "pending" : "local";
   const sharedRequested = new URL(location.href).searchParams.has('reportId');
   let STORAGE_KEY = sharedRequested ? 'ainm-rj-opening-shared' : 'ainm-rj-pwa-v1';
-  const APP_VERSION = "10.3";
+  const APP_VERSION = "10.5";
   const BETA_MODE = false;
   const APP_VERSION_LABEL = `V${APP_VERSION}${BETA_MODE ? " BETA" : ""}`;
   const snapshotKey = "ainm-rj-pwa-last-snapshot";
@@ -165,6 +168,7 @@
   }
 
   function allocateReportIdentity() {
+    if (journalMode) return { serial: 0, uid: crypto.randomUUID(), reportNo: "" };
     let serial = 1;
     try {
       serial = Math.max(1, Math.floor(number(localStorage.getItem(reportSequenceKey))) || 1);
@@ -330,6 +334,9 @@
   };
 
   const load = () => {
+    // The authenticated adapter restores the right user/site/report before editing.
+    // Never reopen the unscoped legacy n° 1 while that lookup is running.
+    if (journalMode) return initialState();
     try {
       if(sharedRequested && STORAGE_KEY === "ainm-rj-opening-shared") return initialState();
       const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY));
@@ -392,7 +399,7 @@
     ensureSncfRosterRoles();
     state.appVersion = Math.max(10, previousAppVersion);
     ensureCompanySignatureRecords();
-    if (!state.reportSerial || !state.reportUid) {
+    if ((!state.reportSerial && !journalMode) || !state.reportUid) {
       const identity = allocateReportIdentity();
       state.reportSerial = identity.serial;
       state.reportUid = identity.uid;
@@ -457,7 +464,7 @@
 
   function renderLaunchIdentity() {
     $$('[data-app-version]').forEach((element) => { element.textContent = APP_VERSION_LABEL; });
-    const reportNo = state.meta?.reportNo || "Rapport en préparation";
+    const reportNo = journalMode && numberingStatus === "pending" ? "Numéro attribué à l’enregistrement" : (state.meta?.reportNo || "Rapport en préparation");
     const session = [state.meta?.shiftType === "nuit" ? "Nuit" : "Journée", state.meta?.date ? formatDate(state.meta.date) : ""].filter(Boolean).join(" · ");
     const reportReference = $("#startupReportNo");
     const sessionInfo = $("#startupSessionInfo");
@@ -504,6 +511,7 @@
   };
 
   function save(label = "Brouillon local") {
+    if (!storageReady) return true;
     state.updatedAt = new Date().toISOString();
     window.dispatchEvent(new CustomEvent("journal-report-change"));
     try {
@@ -740,7 +748,7 @@
       if (element.type === "checkbox") element.checked = Boolean(value);
       else element.value = value ?? "";
     });
-    if ($("#reportNoInput")) $("#reportNoInput").value = state.meta.reportNo || "";
+    if ($("#reportNoInput")) $("#reportNoInput").value = journalMode && numberingStatus === "pending" ? "Numéro attribué à l’enregistrement" : (state.meta.reportNo || "");
     $("#cancelReasonField").classList.toggle("hidden", !state.meta.cancelled);
     renderParticipantCompanies();
   }
@@ -2607,6 +2615,8 @@
   }
 
   async function savePdfOnPhone() {
+    try { await window.JournalReportCollaboration.prepareExport(); }
+    catch (error) { showToast(error.message, "warning"); return; }
     const filename = reportPdfFilename();
     const previousTitle = document.title;
     let handled = false;
@@ -2731,6 +2741,10 @@
   }
 
   async function createSharePointArchivePdf() {
+    const shell = document.querySelector(".app-shell"), wasInert = shell.inert;
+    shell.inert = true;
+    try {
+    await window.JournalReportCollaboration.prepareExport();
     if (!window.PDFLib?.PDFDocument || !window.PDFLib?.StandardFonts || !window.PDFLib?.rgb) {
       throw new Error("Le module PDF d’archivage est indisponible. Rouvrez l’application avec une connexion puis réessayez.");
     }
@@ -2938,6 +2952,7 @@
     pdf.setAuthor("AINM travaux signalisation");
     pdf.setSubject("Rapport journalier de chantier");
     return { blob: new Blob([await pdf.save()], { type: "application/pdf" }), filename: sharePointPdfFilename() };
+    } finally { shell.inert = wasInert; }
   }
 
   function submitSharePointArchive(fields) {
@@ -3066,12 +3081,13 @@
     if (main) main.inert = true;
     try {
       if (!sharePointGatewayUrl()) throw new Error("La passerelle SharePoint n’est pas configurée.");
-      const job = await window.JournalArchive.enqueue(importedPdf ? async () => importedPdf : createSharePointArchivePdf, {
+      const job = await window.JournalArchive.enqueue(importedPdf ? async () => importedPdf : createSharePointArchivePdf, () => ({
+        reportId: importedPdf ? null : window.JournalReportCollaboration.reference()?.id, imported: !!importedPdf,
         reportUid: importedPdf ? `import-${crypto.randomUUID()}` : state.reportUid,
         reportNo: importedPdf ? importedPdf.filename : state.meta.reportNo,
         operation: importedPdf ? "" : (state.meta.operation || ""), date: importedPdf ? "" : (state.meta.date || ""),
         entreprise: importedPdf ? "" : participatingCompanyNames().join(" - ")
-      });
+      }));
       const result = await window.JournalArchive.run(job, async (pending) => {
         await submitSharePointArchive({
           action: "submit", requestId: `RJ-${pending.id}`, filename: pending.filename,
@@ -3090,6 +3106,7 @@
           status: result.journal ? "archived" : "pending" };
         save(result.done ? "PDF archivé aux deux destinations" : "Double archivage à compléter");
         if (result.done) {
+          await window.JournalReportCollaboration.prepareExport();
           startNextReportAfterSharePointTransmission();
           showToast("PDF archivé sur SharePoint et dans les documents du chantier.", "success");
         } else {
@@ -3134,7 +3151,7 @@
     archiveCurrentReport();
     const currentSettings = clone(state.settings || {});
     state = initialState();
-    queueMicrotask(()=>window.JournalReportCollaboration?.newReport());
+    window.JournalReportCollaboration?.newReport();
     Object.assign(state.meta, {
       operation: sourceCopy.meta?.operation || state.meta.operation,
       orderNo: sourceCopy.meta?.orderNo || "",
@@ -3171,6 +3188,7 @@
   }
 
   async function duplicateLastNight() {
+    if(sharePointArchiveInProgress) { showToast("Attendez la fin de l’archivage avant de créer le rapport suivant.", "warning"); return; }
     const history = readReportHistory();
     const source = history.find((report) => report.meta?.shiftType === "nuit")
       || (state.meta.shiftType === "nuit" && (state.personnel.length || state.equipment.length) ? state : null);
@@ -3185,6 +3203,8 @@
       confirmLabel: "Créer le rapport",
     });
     if (!accepted) return;
+    try { await window.JournalReportCollaboration.beforeNew(); }
+    catch (error) { showToast(error.message, "warning"); return; }
     startNewReport(source, { reuseResources: true });
     save("Dernière nuit reprise");
     refresh({ inputs: true });
@@ -3634,7 +3654,7 @@
       refresh();
     });
     $("#saveNextReportSerialButton")?.addEventListener("click", async () => {
-      if (!isAdminView()) return;
+      if (journalMode || !isAdminView()) return;
       const next = Math.max(1, Math.floor(number($("#nextReportSerialInput")?.value)) || 1);
       const currentSerial = Math.max(1, Math.floor(number(state.reportSerial)) || 1);
       const accepted = await askConfirm({
@@ -3652,7 +3672,7 @@
       showToast(identity.reportNo + " est maintenant le rapport actif.", "success");
     });
     $("#resetReportSerialButton")?.addEventListener("click", async () => {
-      if (!isAdminView()) return;
+      if (journalMode || !isAdminView()) return;
       const accepted = await askConfirm({ title: "Réinitialiser la numérotation", message: "Le rapport actuellement ouvert deviendra immédiatement le n° 1. Le rapport suivant recevra le n° 2. Cette action démarre un nouveau cycle de classement.", confirmLabel: "Repartir à 1", danger: true });
       if (!accepted) return;
       let identity;
@@ -3672,12 +3692,15 @@
       refresh();
     });
     $("#newReportButton").addEventListener("click", async () => {
+      if(sharePointArchiveInProgress) { showToast("Attendez la fin de l’archivage avant de créer le rapport suivant.", "warning"); return; }
       const accepted = await askConfirm({
         title: "Créer un nouveau rapport",
         message: "Le rapport actuel sera conservé localement pour pouvoir reprendre ses équipes et engins.",
         confirmLabel: "Créer le rapport",
       });
       if (!accepted) return;
+      try { await window.JournalReportCollaboration.beforeNew(); }
+      catch (error) { showToast(error.message, "warning"); return; }
       startNewReport(state);
       save("Nouveau rapport créé");
       refresh({ inputs: true });
@@ -3756,11 +3779,10 @@
   }
 
   function boot() {
-    // La date suit toujours le jour civil où l'application est ouverte. Un
-    // rapport V9.1 déjà confirmé comme archivé est clôturé ici pour repartir
-    // sans doublon sur le numéro suivant.
-    const migrated = sharedRequested ? null : createNextReportForPreviouslyArchivedState();
-    const dateUpdated = sharedRequested ? false : setCurrentReportDateToToday();
+    // Le Journal charge ensuite le rapport du bon compte et conserve sa date.
+    // La migration locale V9.1 reste réservée au mode historique autonome.
+    const migrated = (journalMode || sharedRequested) ? null : createNextReportForPreviouslyArchivedState();
+    const dateUpdated = (journalMode || sharedRequested) ? false : setCurrentReportDateToToday();
     save(migrated ? `Nouveau rapport ${migrated.nextReportNo} créé` : (dateUpdated ? "Date du jour mise à jour" : "Brouillon local"));
     renderLaunchIdentity();
     renderInputs();
@@ -3772,8 +3794,12 @@
   }
 
   boot();
+  if(journalMode) document.querySelector(".admin-numbering").innerHTML = '<p class="eyebrow">Numérotation des rapports</p><p>Le serveur attribue automatiquement un numéro unique à chaque nouveau rapport. Les sauvegardes et les transferts conservent ce numéro.</p>';
   window.JournalReportCollaboration.start({
-    get:()=>clone(state),scope:(user,id)=>{STORAGE_KEY='ainm-rj-v1510:'+user+':'+id;},
+    get:()=>clone(state),scope:(user,id)=>{STORAGE_KEY='ainm-rj-v1510:'+user+':'+id;storageReady=true;},
+    local:(user,id)=>{try{return JSON.parse(localStorage.getItem('ainm-rj-v1510:'+user+':'+id));}catch{return null;}},
+    numbering:value=>{numberingStatus=value||'pending';renderLaunchIdentity();},
+    identity:doc=>{state.reportSerial=doc.reportSerial;state.reportUid=doc.reportUid;state.meta.reportNo=doc.meta.reportNo;if(doc.meta.previousReportNo)state.meta.previousReportNo=doc.meta.previousReportNo;renderLaunchIdentity();},
     set:document=>{const admin=state.settings?.admin;state=clone(document);ensureSettings();if(admin)state.settings.admin=admin;ensureState();refresh({inputs:true});renderLaunchIdentity();},
     confirm:askConfirm,checks:validation,backup:exportState
   });
