@@ -1,0 +1,22 @@
+Journal de chantier V15.10.2 — Vérifications
+
+Rapprochement des participants : 6 cas Node réussis.
+Interface réelle : 20 noms sans signature restaurés ; signatures QR de deux
+téléphones, changements de casse, accents, entreprise et fonction sans doublon.
+Vérification des homonymes, seconde signature, faute dans le nom et nouvel arrivant.
+Attente conservée après rechargement, absence de doublon après actualisations,
+protection du changement de date et du PDF tant que des signatures sont à vérifier.
+Une nouvelle ligne n'est créée qu'après confirmation explicite.
+PDF réel généré avec les signatures ; fermeture du QR et conservation des voies.
+PWA : trois service workers installés, nouveaux fichiers en cache, formulaires
+conservés, page QR disponible hors connexion, appels privés exclus du cache.
+Installateur : 5 tests de protection des fichiers réussis.
+Serveur cumulatif inchangé : 7 tests de déploiement et contrôles SQL de l'enveloppe,
+des migrations enregistrées et des droits réussis sur PGlite jetable.
+
+Les tests de navigateur utilisent Chromium et les vraies interfaces de l'application.
+Le transport et l'authentification Supabase sont reliés à une base de test isolée.
+Aucune écriture sur les données ni publication de production pendant ces essais.
+
+Archives Git V15.9, V15.10 et V15.10.1 : copie des deux phases vérifiée,
+réexécution identique, configuration conservée et modification inconnue refusée.

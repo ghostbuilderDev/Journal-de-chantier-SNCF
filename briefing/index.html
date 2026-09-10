@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self' 'unsafe-inline' https://script.google.com https://script.googleusercontent.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' data: blob:; connect-src 'self' https://script.google.com https://script.googleusercontent.com; form-action 'self' https://script.google.com https://script.googleusercontent.com; frame-src https://script.google.com https://script.googleusercontent.com; worker-src 'self' blob:; manifest-src 'self'; upgrade-insecure-requests">
 <meta name="referrer" content="no-referrer">
+<link rel="stylesheet" href="presence-review.css?v=15.10.2">
+<script src="presence-matching.js?v=15.10.2"></script>
 <meta name="robots" content="noindex,nofollow,noarchive,nosnippet,noimageindex">
 <script id="briefing-security-bootstrap">
 (function(){
@@ -2729,6 +2731,10 @@ toggleTravauxType();
   const KEY = "briefing_presence_clean_v9";
   let participants = [];
   let ignoredRemote = new Set();
+  let pendingRemote = [];
+  let reviewLog = [];
+  let activeRemoteSession = null;
+  const localRow = p => ({...p,local_id:p.local_id||crypto.randomUUID()});
   let editIndex = null;
   let drawing = false;
   let timer = null;
@@ -2759,28 +2765,68 @@ toggleTravauxType();
     });
   }
   const presenceEscape=value=>String(value||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  function rosterSnapshot(){return {participants:participants.map(p=>({...p})),pendingRemote:pendingRemote.map(p=>({...p})),reviewLog:[...reviewLog],ignoredRemote:new Set(ignoredRemote)};}
+  function rosterCommit(before){
+    if(!save()){
+      ({participants,pendingRemote,reviewLog,ignoredRemote}=before);
+      throw new Error('La sauvegarde a échoué. Gardez cette page ouverte et réessayez.');
+    }
+    render();document.dispatchEvent(new Event('briefing-presence-changed'));
+  }
+  function attachReceipt(target,p){
+    // Keep the saved row identity and name; employer/function describe today's attendance.
+    Object.assign(target,{nom:String(target.nom||p.nom||'').toLocaleUpperCase('fr-FR'),
+      prenom:target.prenom||p.prenom,entreprise:String(p.entreprise||target.entreprise||'').toLocaleUpperCase('fr-FR'),
+      fonction:p.fonction||target.fonction||'',signature:p.signature,remote_id:p.id,
+      remote_session:p.session_id,signed_at:p.created_at});
+  }
   window.BriefingPresence={
     merge(sessionId,rows){
-      let changed=false;
+      activeRemoteSession=sessionId;const before=rosterSnapshot();let changed=false;
       for(const p of rows){
-        if(p.session_id!==sessionId||!/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(p.signature||''))continue;
-        if(ignoredRemote.has(p.id))continue;
-        const existing=participants.find(x=>x.remote_id===p.id);
-        if(existing){for(const k of ['nom','entreprise']){const value=String(existing[k]||'').toLocaleUpperCase('fr-FR');if(existing[k]!==value){existing[k]=value;changed=true;}}continue;}
-        const match=participants.filter(x=>!x.signature&&['nom','prenom','entreprise','fonction'].every(k=>String(x[k]||'').trim().toLocaleLowerCase('fr')===String(p[k]||'').trim().toLocaleLowerCase('fr')));
-        const record={nom:String(p.nom||'').toLocaleUpperCase('fr-FR'),prenom:p.prenom,entreprise:String(p.entreprise||'').toLocaleUpperCase('fr-FR'),fonction:p.fonction,signature:p.signature,remote_id:p.id,remote_session:sessionId,signed_at:p.created_at};
-        if(match.length===1)Object.assign(match[0],record);else participants.push(record);changed=true;
+        if(!p.id||p.session_id!==sessionId||!/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(p.signature||''))continue;
+        if(ignoredRemote.has(p.id)||participants.some(x=>x.remote_id===p.id)||pendingRemote.some(x=>x.id===p.id))continue;
+        const decision=BriefingPresenceMatching.classify(participants,p);
+        if(decision.kind==='attach')attachReceipt(participants.find(x=>x.local_id===decision.participantId),p);
+        else pendingRemote.push({...p,briefing_date:id('date')?.value||''});
+        changed=true;
       }
-      if(changed){render();save();}return participants.length;
+      if(changed)rosterCommit(before);return participants.length;
     },
-    clearRemote(){ignoredRemote.clear();participants=participants.map(p=>p.remote_session?{...p,signature:'',remote_session:null,remote_id:null,signed_at:null}:p);render();save();},
-    retainSession(sessionId){participants=participants.map(p=>p.remote_session&&p.remote_session!==sessionId?{...p,signature:'',remote_session:null,remote_id:null,signed_at:null}:p);render();save();},
+    pending(){return pendingRemote.map(p=>({...p}));},
+    resolve(receiptId,action,participantId,expectedSignature=''){
+      const p=pendingRemote.find(x=>x.id===receiptId);
+      if(!p)throw new Error('Cette signature a déjà été traitée.');
+      if(p.session_id!==activeRemoteSession)throw new Error('Rouvrez la séance du '+p.briefing_date+' pour vérifier cette signature.');
+      const before=rosterSnapshot(),target=participants.find(x=>x.local_id===participantId);
+      if(action==='new'){
+        const record=localRow({nom:p.nom,prenom:p.prenom});attachReceipt(record,p);participants.push(record);
+        participantId=record.local_id;
+      }else if(action==='attach'||action==='ignore'){
+        if(!target)throw new Error('Choisissez un participant existant.');
+        if((target.signature||'')!==expectedSignature)throw new Error('Cette ligne a changé. Rouvrez la vérification avant de continuer.');
+        if(action==='ignore'&&!target.signature)throw new Error('Ce participant ne possède pas encore de signature.');
+        if(action==='attach'){if(target.remote_id)ignoredRemote.add(target.remote_id);attachReceipt(target,p);}
+      }else throw new Error('Choix de rapprochement inconnu.');
+      ignoredRemote.add(p.id);pendingRemote=pendingRemote.filter(x=>x.id!==p.id);
+      reviewLog.push({receipt_id:p.id,session_id:p.session_id,participant_id:participantId,action,at:new Date().toISOString()});
+      rosterCommit(before);return true;
+    },
+    clearRemote(){
+      if(pendingRemote.length)throw new Error('Vérifiez les signatures en attente avant de commencer une nouvelle séance.');
+      ignoredRemote.clear();activeRemoteSession=null;
+      participants=participants.map(p=>p.remote_session?{...p,signature:'',remote_session:null,remote_id:null,signed_at:null}:p);render();save();
+    },
+    retainSession(sessionId){
+      activeRemoteSession=sessionId;
+      participants=participants.map(p=>p.remote_session&&p.remote_session!==sessionId?{...p,signature:'',remote_session:null,remote_id:null,signed_at:null}:p);render();save();
+    },
     list(){return participants.map(p=>({...p}));}
   };
   function collectFields(){
     const fields = {};
     document.querySelectorAll("input, textarea, select").forEach(el=>{
-      if(!el.id || el.closest("#presencePopup")) return;
+      if(!el.id || el.closest("#presencePopup,#presenceReviewDialog")) return;
       fields[el.id] = el.type === "checkbox" ? el.checked : el.value;
     });
     return fields;
@@ -2794,7 +2840,7 @@ toggleTravauxType();
   }
   function save(){
     try{
-      localStorage.setItem(KEY, JSON.stringify({participants:participants, ignoredRemote:[...ignoredRemote], fields:collectFields(), lamData:window.lamData||{}, enginsAutresRR:window.enginsAutresRR||{}}));
+      localStorage.setItem(KEY, JSON.stringify({participants:participants, ignoredRemote:[...ignoredRemote], pendingRemote, reviewLog, fields:collectFields(), lamData:window.lamData||{}, enginsAutresRR:window.enginsAutresRR||{}}));
       const st=id("presenceStatus"); if(st) st.textContent="Sauvegardé : "+new Date().toLocaleTimeString();
       return true;
     }catch(e){ JournalDialogs.alert("Erreur pendant la sauvegarde : "+e.message); return false; }
@@ -2804,7 +2850,9 @@ toggleTravauxType();
       const raw=localStorage.getItem(KEY);
       if(raw){
         const state=JSON.parse(raw);
-        participants=Array.isArray(state.participants)?state.participants.map(p=>p.remote_id?{...p,nom:String(p.nom||'').toLocaleUpperCase('fr-FR'),entreprise:String(p.entreprise||'').toLocaleUpperCase('fr-FR')}:p):[];
+        participants=Array.isArray(state.participants)?state.participants.map(p=>p.remote_id?{...p,nom:String(p.nom||'').toLocaleUpperCase('fr-FR'),entreprise:String(p.entreprise||'').toLocaleUpperCase('fr-FR')}:p).map(localRow):[];
+        pendingRemote=Array.isArray(state.pendingRemote)?state.pendingRemote:[];
+        reviewLog=Array.isArray(state.reviewLog)?state.reviewLog:[];
         ignoredRemote=new Set(Array.isArray(state.ignoredRemote)?state.ignoredRemote:[]);
         applyFields(state.fields);
       }
@@ -2832,8 +2880,8 @@ toggleTravauxType();
   window.presenceClose = function(){ id("presencePopup").style.display="none"; editIndex=null; };
   window.presenceClearSignature = function(){ const c=canvas(); if(c) c.getContext("2d").clearRect(0,0,c.width,c.height); };
   window.presenceValidate = function(){
-    const data={nom:id("presenceNom").value||"", prenom:id("presencePrenom").value||"", entreprise:id("presenceEntreprise").value||"", fonction:(id("presenceFonction")?.value||""), signature:canvas().toDataURL("image/png")};
-    if(editIndex===null) participants.push(data); else participants[editIndex]={...participants[editIndex],...data};
+    const data={nom:id("presenceNom").value||"", prenom:id("presencePrenom").value||"", entreprise:id("presenceEntreprise").value||"", fonction:(id("presenceFonction")?.value||""), signature:canvas().getContext("2d").getImageData(0,0,canvas().width,canvas().height).data.some((n,i)=>i%4===3&&n>0)?canvas().toDataURL("image/png"):""};
+    if(editIndex===null) participants.push(localRow(data)); else participants[editIndex]={...participants[editIndex],...data};
     render(); save(); presenceClose();
   };
   window.presenceRemove = function(i){ if(participants[i]?.remote_id)ignoredRemote.add(participants[i].remote_id);participants.splice(i,1); render(); save(); };
@@ -10275,7 +10323,8 @@ window.updateLamBriefing=function(){let target=document.getElementById("oMiseVoi
 <script src="briefing-preparation.js?v=15.8"></script>
 <link rel="stylesheet" href="briefing-v159.css?v=15.9">
 <script src="briefing-qr-share.js?v=15.9"></script>
-<script src="briefing-attendance.js?v=15.9"></script>
+<script src="presence-review.js?v=15.10.2"></script>
+<script src="briefing-attendance.js?v=15.10.2"></script>
 <script src="journal-bridge.js?v=15.8"></script>
 </body>
 </html>

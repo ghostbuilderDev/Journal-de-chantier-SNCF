@@ -49,37 +49,57 @@
   }
   if(!panel.open)panel.showModal();render();
  }
+ function requireReviewed(){
+  const count=window.BriefingPresence.pending().length;if(!count)return;
+  panel?.close();window.BriefingPresenceReview.open();
+  throw new Error(count+' signature(s) à vérifier avant de générer le PDF ou de changer de séance.');
+ }
  async function open(){
   if(busy)return;busy=true;byId('attendanceOpen').disabled=true;
   try{
    if(!matches()||current.finalized||current.state==='closed'||Date.parse(current.expires_at)<=Date.now()){
-    if(current&&!current.finalized&&current.state==='open')await transport('close',{id:current.id});
+    requireReviewed();
+    if(current&&!current.finalized&&current.state==='open'){
+     if(matches())await closeSession();else await transport('close',{id:current.id});
+     requireReviewed();
+    }
     const token=Array.from(crypto.getRandomValues(new Uint8Array(32)),n=>n.toString(16).padStart(2,'0')).join('');
-    current={id:crypto.randomUUID(),token,date:date(),chantier_id:context.id,state:'opening',count:0};save();
     window.BriefingPresence.clearRemote();
+    current={id:crypto.randomUUID(),token,date:date(),chantier_id:context.id,state:'opening',count:0};save();
    }
    received(await transport('open',{id:current.id,token:current.token,date:current.date,title:context.name+' · '+current.date}));show();
   }catch(error){notice(error.message);}finally{busy=false;byId('attendanceOpen').disabled=false;}
  }
  async function closeSession(){if(inflight)await inflight;if(!current||!matches()||current.finalized)return;received(await transport('close',{id:current.id}));}
  async function beforeExport(){
+  requireReviewed();
   if(!current||current.finalized)return;
   if(!matches()){
    await transport('close',{id:current.id});current.finalized=true;save();window.BriefingPresence.clearRemote();render();return;
   }
-  exporting=true;try{await closeSession();}finally{exporting=false;}
+  exporting=true;try{await closeSession();requireReviewed();}finally{exporting=false;}
  }
  function init(e){
   if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',()=>init(e),{once:true});return;}
   context=e.detail;storageKey='journal-briefing-qr-v158:'+context.userId+':'+context.id;
   try{current=JSON.parse(localStorage.getItem(storageKey)||'null');}catch(_){}
+  if(current&&!current.finalized&&window.BriefingPresence.pending().length&&!matches()){
+   byId('date').value=current.date;window.presenceSave?.();
+  }
   window.BriefingPresence.retainSession(matches()&&!current.finalized?current.id:null);
   box=document.createElement('section');box.className='briefing-attendance no-print';box.innerHTML='<div><small>SIGNATURES SUR TÉLÉPHONE</small><h3>Faire signer les participants</h3><p id="attendanceStatus" role="status"></p><p>La génération du PDF termine l’émargement de cette séance.</p></div><button type="button" id="attendanceOpen">Créer le QR code de cette séance</button>';
   byId('signatureSheet')?.before(box);byId('attendanceOpen').onclick=open;render();
   if(matches()&&!current.finalized)void poll().catch(e=>notice(e.message));
  }
  document.addEventListener('journal-briefing-context',init,{once:true});
- document.addEventListener('change',e=>{if(e.target.id==='date'&&current&&!matches()){window.BriefingPresence.clearRemote();panel?.close();render();}});
+ document.addEventListener('change',e=>{
+  if(e.target.id!=='date'||!current||matches())return;
+  if(window.BriefingPresence.pending().length){
+   e.target.value=current.date;window.presenceSave?.();panel?.close();window.BriefingPresenceReview.open();
+   notice('Vérifiez les signatures reçues avant de changer la date.');return;
+  }
+  window.BriefingPresence.clearRemote();panel?.close();render();
+ });
  document.addEventListener('DOMContentLoaded',()=>{
   const purge=window.confirmPdfSavedAndPurgeV67;
   if(purge)window.confirmPdfSavedAndPurgeV67=function(){if(current){current.finalized=true;save();render();}return purge.apply(this,arguments);};
