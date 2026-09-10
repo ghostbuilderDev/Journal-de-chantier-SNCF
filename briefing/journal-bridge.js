@@ -11,6 +11,7 @@
   if (event.source !== parent || event.origin !== origin || event.data?.token !== token) return;
   const data = event.data;
   if (data.type === 'journal-context') {
+   if(context?.id===data.chantier?.id)return;
    context = data.chantier;
    const saveButton = document.querySelector('[onclick="saveBriefingPdf()"]');
    if (saveButton) {
@@ -26,13 +27,25 @@
    banner.textContent = 'Journal de ' + context.name + ' · Fil d’actualité et Sécurité / Briefings';
    banner.style.cssText = 'padding:12px;background:#e8f4ef;color:#163f32;font:15px sans-serif';
    document.body.prepend(banner);
+   document.dispatchEvent(new CustomEvent('journal-briefing-context',{detail:{...context,userId:data.userId}}));
   }
-  if (data.type === 'journal-saved' && pending.has(data.id)) {
+  if (['journal-saved','journal-attendance-result'].includes(data.type) && pending.has(data.id)) {
    const p = pending.get(data.id); clearTimeout(p.timer); pending.delete(data.id);
    data.ok ? p.resolve(data) : p.reject(new Error(data.error || 'Enregistrement journal impossible.'));
   }
  });
  parent.postMessage({type:'briefing-ready',token}, origin);
+ window.JournalBriefingAttendanceTransport={
+  request(action,payload={}){
+   if(!context)return Promise.reject(new Error('Rouvrez le briefing depuis le Journal de chantier.'));
+   const id=crypto.randomUUID();
+   return new Promise((resolve,reject)=>{
+    const timer=setTimeout(()=>{pending.delete(id);reject(new Error('Réponse non reçue. Réessayez ; les signatures restent sur le serveur.'));},20000);
+    pending.set(id,{resolve:result=>resolve(result.data),reject,timer});
+    parent.postMessage({type:'briefing-attendance',token,id,action,payload},origin);
+   });
+  }
+ };
  window.JournalBriefingArchive = {
   save(pdf, id) {
    if (!context) return Promise.reject(new Error('Liaison avec le journal indisponible. Rouvrez le briefing depuis le chantier.'));

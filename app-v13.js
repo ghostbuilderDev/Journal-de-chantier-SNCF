@@ -4266,7 +4266,7 @@
   async function initialize() {
     wireEvents();
     const callbackError = takeAuthCallbackError();
-    if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("./service-worker-v13.js?v=15.7.1").catch(error => console.warn("Service worker", error));
+    if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("./service-worker-v13.js?v=15.8").catch(error => console.warn("Service worker", error));
     syncFromLocal();
     if (cloudConfigured()) {
       try { await initializeCloud(); }

@@ -2728,6 +2728,7 @@ toggleTravauxType();
 (function(){
   const KEY = "briefing_presence_clean_v9";
   let participants = [];
+  let ignoredRemote = new Set();
   let editIndex = null;
   let drawing = false;
   let timer = null;
@@ -2750,13 +2751,30 @@ toggleTravauxType();
     if(!body) return;
     body.innerHTML = "";
     participants.forEach((p,i)=>{
-      const sig = p.signature ? '<img src="' + p.signature + '">' : "";
+      const sig = /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(p.signature||"") ?  '<img src="' + p.signature + '">' : "";
       const tr = document.createElement("tr");
       tr.innerHTML =
-        '<td style="text-align:center;font-weight:bold;">'+(i+1)+'</td><td>'+(p.nom||"")+'</td><td>'+(p.prenom||"")+'</td><td>'+(p.entreprise||"")+'</td><td class="presence-fonction-cell">'+(p.fonction||"")+'</td><td><div class="presence-signature">'+sig+'</div></td><td class="presence-action-col no-print"><div class="presence-row-actions"><button class="btn-blue" type="button" onclick="presenceEdit('+i+')">Modifier</button><button class="btn-red" type="button" onclick="presenceRemove('+i+')">Retirer</button></div></td>';
+        '<td style="text-align:center;font-weight:bold;">'+(i+1)+'</td><td>'+presenceEscape(p.nom)+'</td><td>'+presenceEscape(p.prenom)+'</td><td>'+presenceEscape(p.entreprise)+'</td><td class="presence-fonction-cell">'+presenceEscape(p.fonction)+'</td><td><div class="presence-signature">'+sig+'</div></td><td class="presence-action-col no-print"><div class="presence-row-actions"><button class="btn-blue" type="button" onclick="presenceEdit('+i+')">Modifier</button><button class="btn-red" type="button" onclick="presenceRemove('+i+')">Retirer</button></div></td>';
       body.appendChild(tr);
     });
   }
+  const presenceEscape=value=>String(value||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  window.BriefingPresence={
+    merge(sessionId,rows){
+      let changed=false;
+      for(const p of rows){
+        if(p.session_id!==sessionId||!/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(p.signature||''))continue;
+        if(ignoredRemote.has(p.id)||participants.some(x=>x.remote_id===p.id))continue;
+        const match=participants.filter(x=>!x.signature&&['nom','prenom','entreprise','fonction'].every(k=>String(x[k]||'').trim().toLocaleLowerCase('fr')===String(p[k]||'').trim().toLocaleLowerCase('fr')));
+        const record={nom:p.nom,prenom:p.prenom,entreprise:p.entreprise,fonction:p.fonction,signature:p.signature,remote_id:p.id,remote_session:sessionId,signed_at:p.created_at};
+        if(match.length===1)Object.assign(match[0],record);else participants.push(record);changed=true;
+      }
+      if(changed){render();save();}return participants.length;
+    },
+    clearRemote(){ignoredRemote.clear();participants=participants.map(p=>p.remote_session?{...p,signature:'',remote_session:null,remote_id:null,signed_at:null}:p);render();save();},
+    retainSession(sessionId){participants=participants.map(p=>p.remote_session&&p.remote_session!==sessionId?{...p,signature:'',remote_session:null,remote_id:null,signed_at:null}:p);render();save();},
+    list(){return participants.map(p=>({...p}));}
+  };
   function collectFields(){
     const fields = {};
     document.querySelectorAll("input, textarea, select").forEach(el=>{
@@ -2774,7 +2792,7 @@ toggleTravauxType();
   }
   function save(){
     try{
-      localStorage.setItem(KEY, JSON.stringify({participants:participants, fields:collectFields()}));
+      localStorage.setItem(KEY, JSON.stringify({participants:participants, ignoredRemote:[...ignoredRemote], fields:collectFields(), lamData:window.lamData||{}, enginsAutresRR:window.enginsAutresRR||{}}));
       const st=id("presenceStatus"); if(st) st.textContent="Sauvegardé : "+new Date().toLocaleTimeString();
       return true;
     }catch(e){ JournalDialogs.alert("Erreur pendant la sauvegarde : "+e.message); return false; }
@@ -2785,6 +2803,7 @@ toggleTravauxType();
       if(raw){
         const state=JSON.parse(raw);
         participants=Array.isArray(state.participants)?state.participants:[];
+        ignoredRemote=new Set(Array.isArray(state.ignoredRemote)?state.ignoredRemote:[]);
         applyFields(state.fields);
       }
     }catch(e){}
@@ -2812,10 +2831,10 @@ toggleTravauxType();
   window.presenceClearSignature = function(){ const c=canvas(); if(c) c.getContext("2d").clearRect(0,0,c.width,c.height); };
   window.presenceValidate = function(){
     const data={nom:id("presenceNom").value||"", prenom:id("presencePrenom").value||"", entreprise:id("presenceEntreprise").value||"", fonction:(id("presenceFonction")?.value||""), signature:canvas().toDataURL("image/png")};
-    if(editIndex===null) participants.push(data); else participants[editIndex]=data;
+    if(editIndex===null) participants.push(data); else participants[editIndex]={...participants[editIndex],...data};
     render(); save(); presenceClose();
   };
-  window.presenceRemove = function(i){ participants.splice(i,1); render(); save(); };
+  window.presenceRemove = function(i){ if(participants[i]?.remote_id)ignoredRemote.add(participants[i].remote_id);participants.splice(i,1); render(); save(); };
   window.presenceSave = function(){ updateTrace(); return save(); };
   window.presencePrint = function(){ updateTrace(); render(); save(); setTimeout(()=>window.print(),250); };
   window.presenceReset = async function(){ if(await JournalDialogs.confirm("Réinitialiser toute la saisie et les signatures enregistrées sur ce téléphone ?")){ localStorage.removeItem(KEY); location.reload(); } };
@@ -8771,6 +8790,8 @@ window.updateLamBriefing=function(){let target=document.getElementById("oMiseVoi
   }
 
   async function createPdf(){
+    await window.BriefingAttendance?.beforeExport();
+    window.BriefingPreparation?.save();
     if(exportInProgress) throw new Error("Un export est déjà en cours.");
     if(!window.html2canvas || !window.jspdf || !window.jspdf.jsPDF){
       throw new Error("Le module PDF local n’est pas disponible.");
@@ -10247,6 +10268,10 @@ window.updateLamBriefing=function(){let target=document.getElementById("oMiseVoi
 })();
 </script>
 
-<script src="journal-bridge.js"></script>
+<link rel="stylesheet" href="briefing-v158.css?v=15.8">
+<script src="vendor/qrcodegen.js?v=15.8"></script>
+<script src="briefing-preparation.js?v=15.8"></script>
+<script src="briefing-attendance.js?v=15.8"></script>
+<script src="journal-bridge.js?v=15.8"></script>
 </body>
 </html>

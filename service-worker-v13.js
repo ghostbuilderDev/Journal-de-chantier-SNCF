@@ -1,18 +1,18 @@
-const CACHE_NAME = 'journal-chantier-connecte-v15.7.1';
+const CACHE_NAME = 'journal-chantier-connecte-v15.8';
 const APP_SHELL = [
   './journal-composer.js?v=15.7.1', './journal-emoji.js?v=15.6', './data/emojis.json', './journal-v156.css?v=15.7.1',
-  './journal-pdf.js?v=15.5', './journal-v155.css?v=15.5',
+  './journal-pdf.js?v=15.8', './journal-v155.css?v=15.5',
   './vendor/pdfjs/standard_fonts/LiberationSans-Regular.ttf', './vendor/pdfjs/standard_fonts/LiberationSans-Bold.ttf',
   './vendor/pdfjs/pdf.min.mjs', './vendor/pdfjs/pdf.worker.min.mjs',
   './journal-v154.css?v=15.4', './journal-dialogs.js?v=15.4', './journal-feed.js?v=15.4', './journal-production.js?v=15.4', './journal-export.js?v=15.5', './supabase/functions/_shared/cr-email.mjs?v=15.4',
   './journal-v153.css?v=15.3',
-  './cr-fields.js?v=15.7', './journal-v157.css?v=15.7', './cr-off.js?v=15.7', './cr-ai.js?v=15.6', './cr-off.css?v=15.3',
-  './briefing-integration.js?v=15.4', './briefing/index.html', './briefing/journal-bridge.js',
+  './cr-fields.js?v=15.8', './journal-v157.css?v=15.7', './cr-off.js?v=15.8', './cr-ai.js?v=15.6', './cr-off.css?v=15.3',
+  './briefing-integration.js?v=15.8', './briefing/index.html', './briefing/journal-bridge.js?v=15.8', './briefing/signer.html', './briefing/signer.js?v=15.8', './briefing/briefing-v158.css?v=15.8', './briefing/briefing-preparation.js?v=15.8', './briefing/briefing-attendance.js?v=15.8', './briefing/vendor/qrcodegen.js?v=15.8',
   './briefing/vendor/html2canvas.min.js', './briefing/vendor/jspdf.umd.min.js',
   './feedback.js?v=15.4', './feedback.css?v=15.3',
   './', './index.html', './styles-v13.css?v=14.7-pdf',
   './styles-v14.3.css?v=14.3-design', './mode-chantier.css?v=14.4-mode-chantier',
-  './mode-chantier.js?v=15.0', './app-v13.js?v=15.7.1',
+  './mode-chantier.js?v=15.0', './app-v13.js?v=15.8',
   './supabase.js?v=14.2-collaborateurs', './config.js?v=14.2-collaborateurs',
   './manifest.webmanifest', './journal-chantier-logo-v14.png'
 ];
@@ -86,7 +86,13 @@ self.addEventListener('fetch', event => {
   const navigation = request.mode === 'navigate';
   const shell = new Set(APP_SHELL.map(path => new URL(path,self.registration.scope).href));
   if (!navigation && !shell.has(request.url)) return;
-  const cacheKey = navigation ? new URL('./index.html',self.registration.scope).href : request;
+  const pageUrl = new URL(request.url);
+  pageUrl.search = ''; pageUrl.hash = '';
+  if (pageUrl.pathname.endsWith('/')) pageUrl.pathname += 'index.html';
+  // Each static page has its own navigation fallback. A QR form must never
+  // replace the journal home page in the offline cache.
+  if (navigation && !shell.has(pageUrl.href)) return;
+  const cacheKey = navigation ? pageUrl.href : request;
   event.respondWith(fetch(request).then(response => {
     if (response?.ok) {
       const clone = response.clone();

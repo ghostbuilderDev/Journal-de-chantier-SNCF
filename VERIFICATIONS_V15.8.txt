@@ -1,0 +1,39 @@
+Journal de chantier V15.8 — vérifications sur environnement jetable
+
+Base de la livraison : V15.7.1 (commit 3069910).
+
+Contrôles SQL : reprise explicite d’une nuit sans modification du CR source,
+nouvelles identités de lignes, décalage des dates du prévu, horaires réels vides,
+aucune ancienne demande ou validation copiée, rejet d’un écrasement de CR,
+ARF limité au réel, droits administrateur/contributeur/lecteur.
+
+Signatures QR : séances distinctes, API anonyme limitée au contexte de la séance
+et à la confirmation de sa propre signature, aucune lecture publique des
+signatures, révocation à la fermeture, expiration, validation des champs et PNG,
+réessai sans doublon, migration réexécutable sans perte de données.
+
+Navigateur : reprise du CR et sauvegarde de l’ARF depuis une vue mobile ;
+quatre voies, états, PK et engins conservés après réouverture ; deux téléphones
+de test indépendants signent le même briefing ; réception des signatures dans
+le formulaire puis génération du PDF signé ; purge des signatures après
+archivage sans réapparition dans la préparation ; configurations par chantier.
+Le PDF de trois pages a été rendu et contrôlé visuellement : les deux lignes
+de présence contiennent bien leurs noms et leurs signatures dessinées.
+Une réponse perdue après réception serveur a aussi été simulée : rechargement
+du formulaire, reprise de la validation et absence de doublon confirmés.
+
+Messagerie V15.7.1 : envoi par deux contributeurs, un administrateur chantier
+et le propriétaire ; lecture par un autre utilisateur ; brouillon conservé,
+retour à la ligne sans envoi, photos et réessais, accès lecture seule ou retiré
+bloqué. Ces parcours passent avec l’interface livrée.
+
+Déploiement : enveloppe SQL réelle et registre des migrations, contrôle de
+toutes les requêtes de vérification de l’installateur dans PostgreSQL embarqué,
+tests de reprise après interruption et protection des fichiers modifiés.
+Un contrôle supplémentaire sur PostgreSQL 17 jetable est prévu dans le workflow
+GitHub avant toute application au serveur.
+
+Ces contrôles n’envoient aucun message, email ou document réel aux utilisateurs.
+La mise en production et sa validation GitHub seront effectuées par la commande
+d’installation lancée dans Termux. Aucun déploiement de production effectué
+depuis cet environnement de développement.

@@ -37,11 +37,11 @@
   return `<section class="cr-timing-card cr-timing-v157" data-timing-row data-id="${esc(item.id||'')}" data-version="${item.version||0}" data-night="${esc(night)}">
    ${key==='arf'?'':`<div class="cr-ref-head">${key==='catenaire'?`<label>Type<select name="ref_type"><option ${ref.type!=='Secteur'?'selected':''}>SEL</option><option ${ref.type==='Secteur'?'selected':''}>Secteur</option></select></label>`:'<b>ZEP</b>'}<button type="button" data-cr="remove-row" class="cr-button" aria-label="Retirer cette ligne">×</button></div>${reference(ref,key,id)}${key==='itc'?`<label class="cr-track">Voie<input name="track" value="${esc(item.track)}" placeholder="Ex. V1" maxlength="100"></label>`:''}`}
    <div class="cr-timing-toolbar"><span>Horaires</span><button type="button" data-cr-field="dates" aria-expanded="false">Date <span aria-hidden="true">⌄</span></button></div>
-   <table class="cr-hours"><thead><tr><th><span class="cr-sr-only">Horaires</span></th><th>Début</th><th>Fin</th></tr></thead><tbody><tr><th scope="row">Prévu</th><td>${clock('planned_start','Début prévu',item.planned_start,night)}</td><td>${clock('planned_end','Fin prévue',item.planned_end,night)}</td></tr><tr class="cr-hours-actual"><th scope="row">Réel</th><td>${clock('start','Début réel',item.start,night)}</td><td>${clock('end','Fin réelle',item.end,night)}</td></tr></tbody></table>
+   <table class="cr-hours"><thead><tr><th><span class="cr-sr-only">Horaires</span></th><th>Début</th><th>Fin</th></tr></thead><tbody>${key==='arf'?'':`<tr><th scope="row">Prévu</th><td>${clock('planned_start','Début prévu',item.planned_start,night)}</td><td>${clock('planned_end','Fin prévue',item.planned_end,night)}</td></tr>`}<tr class="cr-hours-actual"><th scope="row">Réel</th><td>${clock('start','Début réel',item.start,night)}</td><td>${clock('end','Fin réelle',item.end,night)}</td></tr></tbody></table>
    <div class="cr-row-comment"><label class="cr-check"><input name="non_concerne" type="checkbox" ${item.non_concerne?'checked':''}> ${key==='arf'?'Non concernée':'Non pris'}</label><label>Commentaire / retard<input name="comment" value="${esc(item.comment)}" maxlength="1000" placeholder=""></label></div></section>`;
  }
  function readClock(row,name){
-  const input=row.querySelector(`[name=${name}]`),value=input.value;
+  const input=row.querySelector(`[name=${name}]`),value=input?.value;
   if(!value)return null;
   const day=row.querySelector(`[name=${name}_date]`).value;
   if(!day)throw new Error('Ouvrir « Date » et préciser la date de '+(name.endsWith('end')?'fin':'début')+'.');
@@ -55,6 +55,7 @@
   for(const prefix of ['planned_','']){
    const start=row.querySelector(`[name=${prefix}start]`),end=row.querySelector(`[name=${prefix}end]`);
    const startDay=row.querySelector(`[name=${prefix}start_date]`),endDay=row.querySelector(`[name=${prefix}end_date]`);
+   if(!start||!end||!startDay||!endDay)continue;
    if(start.value&&startDay.dataset.fixed!=='true')startDay.value=start.value<'12:00'?plusDay(night):night;
    if(end.value&&endDay.dataset.fixed!=='true')endDay.value=start.value?(end.value<start.value?plusDay(startDay.value):startDay.value):(end.value<'12:00'?plusDay(night):night);
   }

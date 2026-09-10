@@ -19,7 +19,7 @@ window.JournalBriefing = {
   target.searchParams.set('journal_session', token); target.searchParams.set('journal_origin', location.origin);
   frame.src = target.href;
   overlay.append(bar,frame);
-  let busy = false, initialized = false;
+  let busy = false;
   const results = new Map(), uploads = new Set();
   function valid() { const c = adapter.context(); return c.ready && c.userId === owner && c.db === db; }
   function reply(id, result) { frame.contentWindow?.postMessage({type:'journal-saved',token,id,...result},target.origin); }
@@ -28,7 +28,19 @@ window.JournalBriefing = {
    const data = event.data;
    if (data.type === 'briefing-ready') {
     if (!valid()) return;
-    if (!initialized) { initialized = true; frame.contentWindow.postMessage({type:'journal-context',token,chantier:{id:site.id,name:site.name}},target.origin); }
+    frame.contentWindow.postMessage({type:'journal-context',token,userId:owner,chantier:{id:site.id,name:site.name}},target.origin);
+    return;
+   }
+   if(data.type==='briefing-attendance'){
+    const respond=result=>frame.contentWindow?.postMessage({type:'journal-attendance-result',token,id:data.id,...result},target.origin);
+    if(!valid())return respond({ok:false,error:'Session du journal expirée. Reconnectez-vous.'});
+    if(!['open','poll','close'].includes(data.action)||JSON.stringify(data.payload||{}).length>8000)return respond({ok:false,error:'Demande invalide.'});
+    try{
+     const response=await db.rpc('journal_briefing_manage',{p_action:data.action,p_payload:{...data.payload,chantier_id:site.id}});
+     if(response.error)throw response.error;
+     if(!valid())throw new Error('Le compte du journal a changé.');
+     respond({ok:true,data:response.data});
+    }catch(error){respond({ok:false,error:/journal_briefing_manage|schema cache/.test(error.message||'')?'Installer la mise à jour V15.8 du serveur pour activer les signatures QR.':error.message||'Émargement indisponible.'});}
     return;
    }
    if (data.type !== 'briefing-save') return;
