@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Cumulative V15.10.3 / V15.10.4 -> V15.10.5, backend checked before the interface."""
+"""Cumulative V15.10.5 recovery, backend checked before the interface."""
 import hashlib,json,subprocess,sys
 from pathlib import Path
 sys.dont_write_bytecode=True
 ROOT=Path(__file__).resolve().parents[1]
-BACKEND=['supabase/migrations/20260910000500_v15_10_4_report_numbers.sql', 'supabase/tests/report-numbering-fixture.sql', 'supabase/tests/report-numbering-v15104-backend.cjs', 'supabase/tests/report-numbering-v15104-deployment.cjs', 'supabase/tests/report-numbering-v15104-postgres.sql', 'scripts/deploy-v15104-release.py', '.github/workflows/deploy-v15104.yml', 'scripts/prepare-v15104-update.py', 'scripts/update-v15104-termux.sh', 'scripts/wait-v15104-workflow.py', 'scripts/v15104-base-sha256.json', 'tests/v15104-installation.test.py', 'scripts/prepare-v15105-update.py', 'scripts/update-v15105-termux.sh', 'scripts/v15105-base-sha256.json', 'tests/v15105-installation.test.py']
+BACKEND=['supabase/migrations/20260910000500_v15_10_4_report_numbers.sql', 'supabase/tests/report-numbering-fixture.sql', 'supabase/tests/report-numbering-v15104-backend.cjs', 'supabase/tests/report-numbering-v15104-deployment.cjs', 'supabase/tests/report-numbering-v15104-postgres.sql', 'scripts/deploy-v15104-release.py', '.github/workflows/deploy-v15104.yml', 'scripts/prepare-v15104-update.py', 'scripts/update-v15104-termux.sh', 'scripts/wait-v15104-workflow.py', 'scripts/v15104-base-sha256.json', 'tests/v15104-installation.test.py', 'scripts/prepare-v15105-update.py', 'scripts/update-v15105-termux.sh', 'scripts/v15105-base-sha256.json', 'tests/v15105-installation.test.py', 'supabase/migrations/20260910000600_v15_10_5_report_archive_acl.sql', 'supabase/tests/report-numbering-v15105-recovery.cjs']
 FRONTEND=['rapport/app.js', 'rapport/collaboration.js', 'rapport/index.html', 'rapport/journal-archive.js', 'rapport/service-worker.js', 'tests/collaboration-v15101-browser.cjs', 'tests/report-numbering-v15104-browser.cjs', 'tests/pwa-v15104-browser.cjs', 'VERSION_V15.10.4.md', 'VERIFICATIONS_V15.10.4.txt', 'rapport/collaboration.css', 'rapport/report-actions.js', 'tests/report-actions-helpers.cjs', 'tests/report-actions-v15105.cjs', 'VERSION_V15.10.5.md', 'VERIFICATIONS_V15.10.5.txt']
-MESSAGES={'backend':'Journal Chantier V15.10.5 - preparation des actions du rapport','frontend':'Journal Chantier V15.10.5 - menu flottant des actions du rapport'}
+MESSAGES={'backend':'Journal Chantier V15.10.5 - correction des droits d archivage','frontend':'Journal Chantier V15.10.5 - menu flottant des actions du rapport'}
 
 def target(repo,name):
     p=repo/name
@@ -22,7 +22,7 @@ def digest(data):return hashlib.sha256(data).hexdigest() if data is not None els
 def validate_change(name,current,proposed,expected,previous=()):
     if proposed is None:raise ValueError('Archive incomplète : '+name)
     if current!=proposed and digest(current)!=expected and digest(current) not in previous:
-        raise ValueError(name+' ne correspond pas à une V15.10.3 ou V15.10.4 vérifiée. Les fichiers sont conservés ; ce correctif doit être adapté à votre version.')
+        raise ValueError(name+' ne correspond pas à une V15.10.3, V15.10.4 ou V15.10.5 vérifiée. Les fichiers sont conservés ; ce correctif doit être adapté à votre version.')
 
 def prepare(repo):
     manifest=json.loads((ROOT/'scripts/v15105-base-sha256.json').read_text());changes={}

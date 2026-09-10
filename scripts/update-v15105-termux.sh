@@ -72,7 +72,7 @@ prepare backend
 git add -- "${backend_files[@]}"
 wait_options=()
 if ! git diff --cached --quiet; then
-  git commit -m 'Journal Chantier V15.10.5 - preparation des actions du rapport'
+  git commit -m 'Journal Chantier V15.10.5 - correction des droits d archivage'
   git_remote push origin main
   backend_sha="$(git rev-parse HEAD)"
 else
@@ -80,7 +80,7 @@ else
   wait_options=(--resume)
 fi
 PHASE='verification de la numerotation avant publication de l interface'
-echo 'Attente : tests des droits et numeros partages et archives V15.10.4...'
+echo 'Attente : controle de la numerotation et correction des droits d archivage V15.10.5...'
 python -u "$RELEASE_ROOT/scripts/wait-v15104-workflow.py" "$backend_sha" "${wait_options[@]}"
 PHASE='publication de l interface'
 git_remote fetch origin main

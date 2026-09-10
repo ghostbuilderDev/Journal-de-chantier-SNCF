@@ -23,17 +23,19 @@ class Tests(unittest.TestCase):
   shell=(ROOT/'scripts/update-v15104-termux.sh').read_text();self.assertLess(shell.index('wait-v15104-workflow.py'),shell.index('prepare frontend'))
   for message in m.MESSAGES.values():self.assertIn(message,shell)
  def test_deployment_uses_ledger_without_replaying_previous_versions(self):
-  deploy=module('deploy_test','scripts/deploy-v15104-release.py');commands=[];applied=False
+  deploy=module('deploy_test','scripts/deploy-v15104-release.py');commands=[];applied=set()
   def query(sql,*args):
    nonlocal applied
    commands.append(sql)
-   if sql==deploy.migration_transaction():applied=True;return []
-   if "where migration_name='" in sql:return [{'ready':applied}]
+   for name,transaction in [(deploy.NAME,deploy.migration_transaction()),(deploy.REPAIR_NAME,deploy.repair_transaction())]:
+    if sql==transaction:applied.add(name);return []
+   if "where migration_name='" in sql:return [{'ready':any(name in sql for name in applied)}]
    return [{'ready':True}]
   deploy.briefing.transport.postgres_query=query;deploy.briefing.transport.postgres_environment=lambda *args:None
   from unittest.mock import patch
   with patch.dict(os.environ,{'SUPABASE_PROJECT_ID':'eqfwdcttvnnrakyaacjm','SUPABASE_DB_URL':'fixture','SUPABASE_ACCESS_TOKEN':'fixture'}):deploy.main();deploy.main()
   self.assertEqual(commands.count(deploy.migration_transaction()),1)
+  self.assertEqual(commands.count(deploy.repair_transaction()),1)
   self.assertFalse(any('20260910000400' in q or '20260910000300' in q for q in commands))
  def test_invalid_migration_stops_before_any_connection(self):
   deploy=module('invalid_deploy','scripts/deploy-v15104-release.py')

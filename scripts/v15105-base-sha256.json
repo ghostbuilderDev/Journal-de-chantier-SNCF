@@ -33,7 +33,9 @@
     "tests/report-actions-helpers.cjs": null,
     "tests/report-actions-v15105.cjs": null,
     "VERSION_V15.10.5.md": null,
-    "VERIFICATIONS_V15.10.5.txt": null
+    "VERIFICATIONS_V15.10.5.txt": null,
+    "supabase/migrations/20260910000600_v15_10_5_report_archive_acl.sql": null,
+    "supabase/tests/report-numbering-v15105-recovery.cjs": null
   },
   "previous_files": {
     "supabase/migrations/20260910000500_v15_10_4_report_numbers.sql": [
@@ -55,7 +57,8 @@
       "6b65e9f2abbe5dc056392cf6f622a8f9ece950ee6c8f3b192e5d76cf247423c9"
     ],
     ".github/workflows/deploy-v15104.yml": [
-      "ae17fda42f2e3653ad645e71c034f117935cf3f69ff8d6b23b243a33c154a654"
+      "ae17fda42f2e3653ad645e71c034f117935cf3f69ff8d6b23b243a33c154a654",
+      "d08f7e0f6f1be5d97a2b4d6913bb3bb67212fc2eed79b28aaa72c0cbaa7bfe23"
     ],
     "scripts/prepare-v15104-update.py": [
       "3c9319c22be2418662219abe9ded68d3e35f307a5a966ace81d7917ea2d202b7"
@@ -73,27 +76,34 @@
       "58b5e16de69af0b35c2296d0c838d3c5b00d2baba7ce59f96bac0f1a3a97a6ca"
     ],
     "rapport/app.js": [
-      "9e3d309957df7f95f684edefb701262fb0f9e2bc3fafff3c6bc2ade7689b1f04"
+      "9e3d309957df7f95f684edefb701262fb0f9e2bc3fafff3c6bc2ade7689b1f04",
+      "c1e56827513653a3d0e7e33d1fdc79e8899dda58d134283d46379a3f905ebd6b"
     ],
     "rapport/collaboration.js": [
+      "1bbcced008cc8dcdb8538b1c4fd50fc45ea4098172b7a1dcd1416a1c74564f6f",
       "e18ad890cc47c0b040a08754ab88c5cba2035aa62e69298170363fa9ea0832ed"
     ],
     "rapport/index.html": [
-      "3d3213ab0f003ec171b84761348ce7de971ecb8a3aa72659f8d1fd59f078920a"
+      "3d3213ab0f003ec171b84761348ce7de971ecb8a3aa72659f8d1fd59f078920a",
+      "53bb941b726669876ca17069c37430345a9fc814e32671902ac6ddb099ea6a6d"
     ],
     "rapport/journal-archive.js": [
       "8feac5aaf386b9d5435a753009869287cb0c53f0b61d991f0815c0efd4b9332c"
     ],
     "rapport/service-worker.js": [
+      "489e6f204f03d9b009f8f247aca97b9d597930270ecd6125d7dd0818ff54dd58",
       "e40433e56277e3470d4f71004338ca7f099e5ea080ce7a340b33f03ad76664bb"
     ],
     "tests/collaboration-v15101-browser.cjs": [
+      "03b6ff4b0cbe4b5a838364932af094316d1686c81b1460517c6321b78652872a",
       "93650850af250f7af0d8ce309e647709f61bb86184d951a7f7a0361160a9ede6"
     ],
     "tests/report-numbering-v15104-browser.cjs": [
-      "0bfb5d03d5f8938174f95fba5573e903653295097ecbb0c8aaaf0ebb55d05133"
+      "0bfb5d03d5f8938174f95fba5573e903653295097ecbb0c8aaaf0ebb55d05133",
+      "c57ed71a4f8b5b1a08b853834ef24110d0812797821f568594e413fc4563e889"
     ],
     "tests/pwa-v15104-browser.cjs": [
+      "1529222c6637a2d354bdddb60c52893aca7abf00db3839891c915c0344f7b497",
       "b99fbfe86edfb5b8f8f7d02b78e5b9dd524a25b75be23ebe8c801e8ce838a7fa"
     ],
     "VERSION_V15.10.4.md": [
@@ -101,6 +111,36 @@
     ],
     "VERIFICATIONS_V15.10.4.txt": [
       "6f20e14a5f7aa453fea972d59778b87701a46b66104b671d73414c463e2566b5"
+    ],
+    "scripts/prepare-v15105-update.py": [
+      "ac2b07869c3c5f1bbe653eb3049a207b36e45ef8e51bfba8e33933a0694803db"
+    ],
+    "scripts/update-v15105-termux.sh": [
+      "e37505490396dbdd610c124683875f33f2ce3592fde9b815bf45f8c07fdfbb42"
+    ],
+    "scripts/v15105-base-sha256.json": [
+      "a863bd1b38a2144aa219683c2e28d3f58fba366c060aeb7914b2bfb1c34b6751"
+    ],
+    "tests/v15105-installation.test.py": [
+      "3dac1dc7e4530419f2888b7b297fbabc0ce6b3e414a90181cb71460197903d3e"
+    ],
+    "rapport/collaboration.css": [
+      "40344df0f9bfe1a0692fa9c7e7ac75b3b8d2e9ff59ac32531bc967b4e6eb49cb"
+    ],
+    "rapport/report-actions.js": [
+      "e49173dc8472c9ffb970916e3cb9a353e2fcfbc58694a108007ea6ea05e2d449"
+    ],
+    "tests/report-actions-helpers.cjs": [
+      "0cc4a72f8821ba746179b8d6730bb8807a62669fa781c1befa8cb1ea2b97313e"
+    ],
+    "tests/report-actions-v15105.cjs": [
+      "99c1513adacedeb32ff113f4c5c735a3f71fcc551b21025a88c5a50b35abf9fd"
+    ],
+    "VERSION_V15.10.5.md": [
+      "9634aa997f143c503ca33211b2ad882956badcd8d48eeefe4e16bb528fb9de05"
+    ],
+    "VERIFICATIONS_V15.10.5.txt": [
+      "b6878dd0e708846ed0f921ccc17816b2452b4007ba8fd396920eb07a7d01b3c2"
     ]
   },
   "dependencies": {
@@ -152,5 +192,6 @@
     "supabase/tests/cr-v159-backend.cjs": "51cf356ca989fc189b149d5d68153be87363af17d8bc2610727850cc6b162aec",
     "supabase/tests/report-backend.cjs": "5b4f5ba910c4698f8981c7eaca76f3bc559d2242f887b5021303f9bb76a73c09",
     "supabase/tests/reports-v1510-backend.cjs": "dec96ec1d9862d769c37ce0bc147ff2bc98384b3008a57c2296f4a7b924e2b1c"
-  }
+  },
+  "recovery_base": "cb5b034be4a7232d6cfc73a4166689a910d72764"
 }

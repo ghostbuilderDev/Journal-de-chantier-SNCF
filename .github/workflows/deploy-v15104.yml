@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - 'supabase/migrations/20260910000500_v15_10_4_report_numbers.sql'
+      - 'supabase/migrations/20260910000600_v15_10_5_report_archive_acl.sql'
       - 'supabase/tests/report-numbering-*'
       - 'scripts/deploy-v15104-release.py'
       - 'tests/v15104-installation.test.py'
@@ -53,8 +54,10 @@ jobs:
           docker exec -i "$test_container" psql -U postgres -d journal_v15104_test -v ON_ERROR_STOP=1 -c "CREATE TABLE IF NOT EXISTS public.journal_sql_migrations (migration_name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now());"
           python3 scripts/deploy-v15101-release.py --print-sql | docker exec -i "$test_container" psql -U postgres -d journal_v15104_test -v ON_ERROR_STOP=1
           docker exec -i "$test_container" psql -U postgres -d journal_v15104_test -v ON_ERROR_STOP=1 < supabase/tests/report-numbering-fixture.sql
+          docker exec -i "$test_container" psql -U postgres -d journal_v15104_test -v ON_ERROR_STOP=1 -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO anon, authenticated, service_role;"
           docker exec -i "$test_container" psql -U postgres -d journal_v15104_test -v ON_ERROR_STOP=1 < supabase/migrations/20260907000700_archive_rapports_journaliers.sql
           python3 scripts/deploy-v15104-release.py --print-sql | docker exec -i "$test_container" psql -U postgres -d journal_v15104_test -v ON_ERROR_STOP=1
+          python3 scripts/deploy-v15104-release.py --print-repair-sql | docker exec -i "$test_container" psql -U postgres -d journal_v15104_test -v ON_ERROR_STOP=1
           docker exec -i "$test_container" psql -U postgres -d journal_v15104_test -v ON_ERROR_STOP=1 < supabase/tests/report-numbering-v15104-postgres.sql
           docker exec -i "$test_container" psql -U postgres -d journal_v15104_test -v ON_ERROR_STOP=1 < supabase/tests/reports-v1510-postgres.sql
           docker exec -i "$test_container" psql -U postgres -d journal_v15104_test -v ON_ERROR_STOP=1 < supabase/tests/collaboration-v15101-postgres.sql
@@ -76,13 +79,14 @@ jobs:
           npm install --prefix /tmp/journal-v15104-tests @electric-sql/pglite@0.5.8 --ignore-scripts --no-audit --no-fund
           PGLITE_MODULE=/tmp/journal-v15104-tests/node_modules/@electric-sql/pglite node supabase/tests/report-numbering-v15104-backend.cjs
           PGLITE_MODULE=/tmp/journal-v15104-tests/node_modules/@electric-sql/pglite node supabase/tests/report-numbering-v15104-deployment.cjs
+          PGLITE_MODULE=/tmp/journal-v15104-tests/node_modules/@electric-sql/pglite node supabase/tests/report-numbering-v15105-recovery.cjs
       - name: Installer le client PostgreSQL
         run: |
           if ! command -v psql >/dev/null; then
             sudo apt-get update -qq
             sudo apt-get install -y postgresql-client
           fi
-      - name: Installer uniquement la numérotation V15.10.4
+      - name: Reprendre la numérotation et corriger les droits des archives V15.10.5
         env:
           SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}

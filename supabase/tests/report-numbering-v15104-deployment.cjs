@@ -3,8 +3,8 @@ const {setup15101}=require('./collaboration-v15101-backend.cjs'),{archiveFixture
 const cwd=path.resolve(__dirname,'../..');
 (async()=>{const {PGlite}=require(process.env.PGLITE_MODULE||'@electric-sql/pglite'),db=new PGlite();try{
  await setup15101(db);await archiveFixture(db);await db.exec('create table if not exists public.journal_sql_migrations(migration_name text primary key,applied_at timestamptz default now())');
- const sql=execFileSync('python3',['scripts/deploy-v15104-release.py','--print-sql'],{cwd,encoding:'utf8'});await db.exec(sql);
- assert.equal((await db.query('select count(*)::int n from public.journal_sql_migrations')).rows[0].n,1);
+ const sql=execFileSync('python3',['scripts/deploy-v15104-release.py','--print-sql'],{cwd,encoding:'utf8'});await db.exec(sql);await db.exec(execFileSync('python3',['scripts/deploy-v15104-release.py','--print-repair-sql'],{cwd,encoding:'utf8'}));
+ assert.equal((await db.query('select count(*)::int n from public.journal_sql_migrations')).rows[0].n,2);
  await db.exec(fs.readFileSync(path.join(__dirname,'report-numbering-v15104-postgres.sql'),'utf8'));
  const source=`import importlib.util,json,os,contextlib,io
 spec=importlib.util.spec_from_file_location('release','scripts/deploy-v15104-release.py');m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
