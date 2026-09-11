@@ -18,6 +18,7 @@
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const nowIso = () => new Date().toISOString();
   const makeId = () => crypto.randomUUID ? crypto.randomUUID() : `id-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const mediaCache = window.JournalMediaCache || null;
 
   function runtimeConfig() {
     try {
@@ -696,7 +697,8 @@
     // Limit simultaneous signed URL requests on mobile connections.
     for (let start = 0; start < data.length; start += 12) {
       rows.push(...await Promise.all(data.slice(start, start + 12).map(async attachment => {
-        const originalUrl = await signedCloudAttachmentUrl(attachment.storage_path);
+        const cachedUrl = fileIsImage(attachment) ? await mediaCache?.mediaUrl?.(attachment.storage_path) : "";
+        const originalUrl = cachedUrl || await signedCloudAttachmentUrl(attachment.storage_path);
         return { ...attachment, signed_url: originalUrl, full_signed_url: originalUrl };
       })));
     }
@@ -731,6 +733,14 @@
     const hydratedMessages = await hydrateCloudAttachments(messageResponse.data || []);
     if (sequence !== app.cloudRefreshSequence || chantierId !== app.currentId || userId !== app.user?.id || !isCloudReady()) return;
     app.messages = hydratedMessages;
+    void mediaCache?.writeFeed?.(userId, chantierId, hydratedMessages);
+    // Conserve progressivement les médias récents déjà affichables. Le fil suivant
+    // pourra les montrer immédiatement, sans nouvelle requête Storage.
+    const recentPhotos = hydratedMessages.flatMap(message => message.attachments || []).filter(fileIsImage).slice(-24);
+    setTimeout(() => recentPhotos.forEach((attachment, index) => setTimeout(() => {
+      const url = fullAttachmentUrl(attachment);
+      if (url) void mediaCache?.remember?.(attachment.storage_path, url);
+    }, index * 180)), 350);
     app.actions = actionResponse.data || [];
     // Les tables V13 sont optionnelles tant que la migration n'est pas installée :
     // le fil, les plans et les actions restent pleinement utilisables.
@@ -755,6 +765,22 @@
     if (documentError) console.info("Bibliothèque documentaire en attente de la migration V13.3.");
     markChantierRead().catch(error => console.warn("Lecture non enregistrée", error));
     renderAll({ keepPosition: true });
+  }
+  async function restoreCachedMessages(chantierId) {
+    const cached = await mediaCache?.readFeed?.(ownId(), chantierId);
+    if (!cached?.messages?.length || String(app.currentId) !== String(chantierId)) return false;
+    const messages = await Promise.all(cached.messages.map(async message => ({
+      ...message,
+      attachments: await Promise.all((message.attachments || []).map(async attachment => {
+        if (!fileIsImage(attachment) || !attachment.storage_path) return attachment;
+        const url = await mediaCache.mediaUrl(attachment.storage_path);
+        return url ? { ...attachment, signed_url: url, full_signed_url: url } : attachment;
+      }))
+    })));
+    if (String(app.currentId) !== String(chantierId)) return false;
+    app.messages = messages;
+    renderAll({ keepPosition: true });
+    return true;
   }
   async function markChantierRead() {
     if (!isCloudReady() || !app.currentId || app.readReceiptInFlight) return;
@@ -824,6 +850,7 @@
     if (!isCloudReady() || userId !== app.user?.id) return;
     app.chantiers = chantiers;
     if (!app.currentId || !app.chantiers.some(item => String(item.id) === String(app.currentId))) { composer.close(); app.currentId = app.chantiers[0]?.id || null; restoreComposerDraft(); }
+    await restoreCachedMessages(app.currentId);
     await refreshCloudCurrent();
     await refreshCloudPortalApps();
     renderApps();
@@ -2117,7 +2144,10 @@
     els.messageSearch.value = ""; els.typeFilter.value = "";
     els.importantFilterBtn.setAttribute("aria-pressed", "false");
     app.documentViewFolderId = null;
-    if (isCloudReady()) { await refreshCloudCurrent(); subscribeCurrentChantier(); }
+    if (isCloudReady()) {
+      await restoreCachedMessages(id);
+      await refreshCloudCurrent(); subscribeCurrentChantier();
+    }
     else { saveLocalData(); renderAll(); }
     els.appShell.classList.remove("sidebar-open");
     setActiveTab("chat");
@@ -2329,6 +2359,19 @@
     }
     return data;
   }
+  async function uploadMessageFiles(files, message, attachmentMetadata = {}) {
+    const source = [...files], attachments = new Array(source.length), failedFiles = [];
+    let cursor = 0;
+    const worker = async () => {
+      while (cursor < source.length) {
+        const index = cursor++, item = source[index];
+        try { attachments[index] = await uploadCloudAttachment(item.file || item, message, attachmentMetadata); }
+        catch (error) { failedFiles.push({ index, item }); toast(`Fichier non envoyé : ${item.file?.name || item.name} (${error.message})`, "error"); }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(2, source.length) }, worker));
+    return { attachments: attachments.filter(Boolean), failedFiles: failedFiles.sort((a, b) => a.index - b.index).map(entry => entry.item) };
+  }
   async function addMessage(payload, files = [], attachmentMetadata = {}, resumeMessage = null) {
     const chantier = currentChantier();
     if (!chantier) throw new Error("Crée ou sélectionne un chantier avant d’écrire.");
@@ -2348,11 +2391,7 @@
       if (resumeMessage && (resumeMessage.chantier_id !== chantier.id || resumeMessage.author_id !== ownId())) throw new Error("Cet envoi appartient à un autre chantier ou compte.");
       const { data: message, error } = resumeMessage ? { data: resumeMessage, error: null } : await app.db.from("chantier_messages").insert(base).select().single();
       if (error) throw error;
-      const attachments = [], failedFiles = [];
-      for (const item of files) {
-        try { attachments.push(await uploadCloudAttachment(item.file || item, message, attachmentMetadata)); }
-        catch (error) { failedFiles.push(item); toast(`Fichier non envoyé : ${item.file?.name || item.name} (${error.message})`, "error"); }
-      }
+      const { attachments, failedFiles } = await uploadMessageFiles(files, message, attachmentMetadata);
       // A refresh failure cannot turn an already persisted send into a new send.
       try { await refreshCloudCurrent(); }
       catch (error) { toast("L’envoi est enregistré, mais le fil n’a pas pu être actualisé. Actualise la discussion.", "warning"); }
@@ -4382,7 +4421,7 @@
   async function initialize() {
     wireEvents();
     const callbackError = takeAuthCallbackError();
-    if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("./service-worker-v13.js?v=15.10.6").catch(error => console.warn("Service worker", error));
+    if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("./service-worker-v13.js?v=16.0").catch(error => console.warn("Service worker", error));
     syncFromLocal();
     if (cloudConfigured()) {
       try { await initializeCloud(); }
