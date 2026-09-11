@@ -1,0 +1,68 @@
+/* V15.10.6 — one album per message; originals stay in the message data. */
+@media screen {
+  .message-bubble.has-photo-album { width: 440px; }
+  .attachment-grid.photo-album { gap: 4px; overflow: hidden; border-radius: 12px; }
+  .attachment-grid.photo-album:not(.one) {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: repeat(2, minmax(0, 1fr)); aspect-ratio: 1;
+    width: 100%; background: #fff;
+  }
+  .attachment-grid.photo-album.album-2 { grid-template-rows: minmax(0, 1fr); aspect-ratio: 2; }
+  .photo-album.album-3 > :first-child { grid-row: span 2; }
+  .photo-album:not(.one) > .image-attachment {
+    display: block; width: 100%; height: 100%; min-width: 0; min-height: 0;
+    border-radius: 4px; padding: 0; cursor: pointer;
+  }
+  .photo-album:not(.one) .attachment-image {
+    width: 100%; height: 100%; min-height: 0; max-height: none; object-fit: cover;
+  }
+  .photo-album .image-attachment:focus-visible { outline: 3px solid #b5122b; outline-offset: -3px; }
+  .photo-album:not(.one) .image-attachment.is-unavailable::after {
+    inset: 0; display: grid; place-items: center; background: #e8eef0;
+    padding: 10px; font-size: 12px;
+  }
+  .album-more {
+    position: absolute; z-index: 4; inset: 0; display: grid; place-items: center;
+    background: rgba(6, 17, 23, .58); color: #fff; font-size: clamp(26px, 7vw, 42px);
+    font-weight: 700; line-height: 1; pointer-events: none;
+  }
+  .photo-viewer-nav:not([hidden]) {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 10px max(12px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+    background: #12191d; border-top: 1px solid rgba(255, 255, 255, .15); flex: 0 0 auto;
+  }
+  .photo-viewer-nav button {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    min-width: 48px; min-height: 48px; padding: 8px 14px; border-radius: 12px;
+    border: 1px solid #74858e; background: #26353d; color: #fff; font: inherit;
+    font-weight: 600; font-size: 24px;
+  }
+  .photo-viewer .photo-viewer-nav span { display: inline; }
+  .photo-viewer-nav button span { font-size: 14px; }
+  .photo-viewer-nav button:disabled { opacity: .35; cursor: default; }
+  .photo-viewer-nav button:focus-visible, .photo-viewer-head :focus-visible { outline: 3px solid #8fe5f3; outline-offset: 2px; }
+  #photoViewerPosition { white-space: nowrap; font-size: 15px; font-variant-numeric: tabular-nums; }
+  .photo-viewer .photo-viewer-stage { overflow: hidden; touch-action: pan-y pinch-zoom; }
+  .photo-viewer .photo-viewer-stage img { min-height: 0; min-width: 0; user-select: none; -webkit-user-drag: none; }
+  #attachmentPreview { flex-direction: column; align-items: stretch; overflow: visible; gap: 8px; }
+  .journal-composer-dialog #attachmentPreview { max-height: none; overflow: visible; }
+  .pending-album-heading { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; }
+  .pending-album-heading b { color: #2e414a; font-size: 15px; }
+  .pending-album-heading span { color: #5b6b74; font-size: 12px; }
+  .pending-files { display: flex; gap: 8px; overflow-x: auto; padding: 2px 0 6px; overscroll-behavior-x: contain; }
+  .pending-files .pending-file { width: 126px; height: 112px; border-radius: 12px; }
+  .pending-files .pending-file button { width: 42px; height: 42px; font-size: 24px; top: 4px; right: 4px; border: 1px solid rgba(255,255,255,.65); }
+  .pending-files .pending-file .annotate-pending { right: auto; left: 4px; top: auto; bottom: 4px; font-size: 22px; }
+  .pending-album-tools { display: flex; flex-wrap: wrap; gap: 8px; }
+  .pending-album-tools button {
+    min-height: 44px; border: 1px solid #cbd7dd; border-radius: 10px; padding: 9px 12px;
+    background: #fff; color: #2e414a; font: inherit; font-size: 13px; font-weight: 600;
+  }
+  .pending-album-tools button:disabled, .pending-file button:disabled { opacity: .45; }
+  .album-tool-icon { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; stroke-linecap: round; vertical-align: -3px; flex: 0 0 auto; }
+  @media (max-width: 480px) {
+    .photo-viewer-nav button { padding: 8px 10px; }
+    .photo-viewer-nav button span { font-size: 13px; }
+    .journal-composer-dialog .writing-toolbar button { min-height: 44px; }
+  }
+}

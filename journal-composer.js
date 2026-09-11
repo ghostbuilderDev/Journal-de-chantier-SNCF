@@ -1,4 +1,4 @@
-/* V15.7.1: one live editor for every role; safe fallback without losing drafts. */
+/* V15.10.6: one live editor for every role; safe fallback without losing drafts. */
 (function(root){
  'use strict';
  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -10,7 +10,7 @@
  function create(a){
   const shell=a.shell,input=a.input,anchor=document.createComment('composer position');shell.before(anchor);
   const dialog=document.createElement('dialog');dialog.id='journalComposer';dialog.className='journal-composer-dialog';dialog.setAttribute('aria-labelledby','writingTitle');
-  dialog.innerHTML=`<header><div><small id="writingSite"></small><h2 id="writingTitle">Rédiger un message</h2></div><button type="button" class="secondary-button" id="writingClose">Mettre de côté ×</button></header><div class="writing-toolbar"><button type="button" data-writing="cameraBtn">▣ Photo</button><button type="button" data-writing="attachBtn">⌁ Pièce jointe</button><button type="button" data-writing="emojiBtn">☺ Emoji</button><button type="button" data-writing="polishBtn">✦ Améliorer le message</button></div><main></main><p class="writing-status" role="status">Entrée ajoute une ligne. Seul « Envoyer » publie le message.</p>`;
+  dialog.innerHTML=`<header><div><small id="writingSite"></small><h2 id="writingTitle">Rédiger un message</h2></div><button type="button" class="secondary-button" id="writingClose">Mettre de côté ×</button></header><div class="writing-toolbar"><button type="button" data-writing="cameraBtn"><svg class="album-tool-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h4l2-3h4l2 3h4v15H4z"/><circle cx="12" cy="13" r="4"/></svg> Prendre une photo</button><button type="button" data-writing="galleryBtn"><svg class="album-tool-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8" cy="9" r="1.5"/><path d="m3 17 5-5 4 4 4-6 5 7"/></svg> Photos</button><button type="button" data-writing="attachBtn">⌁ Pièce jointe</button><button type="button" data-writing="emojiBtn">☺ Emoji</button><button type="button" data-writing="polishBtn">✦ Améliorer le message</button></div><main></main><p class="writing-status" role="status">Entrée ajoute une ligne. Seul « Envoyer » publie le message.</p>`;
   document.body.append(dialog);let suspended=false,wasOpen=false;
   let opening=false;
   function recover(error){if(dialog.open)dialog.close();anchor.after(shell);shell.hidden=false;input.rows=1;wasOpen=false;suspended=false;a.refresh?.();a.onError?.(error);}
@@ -26,7 +26,7 @@
   function suspend(){if(dialog.open){a.save();dialog.close();suspended=true;}}
   function resume(){if(suspended&&wasOpen&&a.allowed()){try{suspended=false;dialog.showModal();resize();}catch(error){recover(error);}}}
   function resize(){if(dialog.open){const v=window.visualViewport;dialog.style.setProperty('--writing-height',Math.round(v?.height||innerHeight)+'px');}}
-  dialog.querySelector('#writingClose').onclick=()=>close();dialog.addEventListener('cancel',e=>{e.preventDefault();close();});
+  dialog.querySelector('#writingClose').onclick=()=>close();dialog.addEventListener('cancel',e=>{if(e.target!==dialog)return;e.preventDefault();close();});
   dialog.addEventListener('click',e=>{const button=e.target.closest('[data-writing]');if(button)document.getElementById(button.dataset.writing)?.click();});
   dialog.addEventListener('submit',e=>e.preventDefault());window.visualViewport?.addEventListener('resize',resize);window.addEventListener('resize',resize);
   window.addEventListener('pagehide',()=>a.save());window.addEventListener('popstate',()=>{if(dialog.open)close();});

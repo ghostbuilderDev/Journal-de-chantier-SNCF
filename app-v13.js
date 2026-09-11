@@ -71,7 +71,7 @@
     jumpBottomBtn: $("jumpBottomBtn"), composerShell: $("composerShell"), composerMeta: $("composerMeta"),
     composerMetaBtn: $("composerMetaBtn"), composerToolsBtn: $("composerToolsBtn"), composerToolTray: $("composerToolTray"), messageType: $("messageType"), messageZone: $("messageZone"),
     messageImportant: $("messageImportant"), replyPreview: $("replyPreview"), attachmentPreview: $("attachmentPreview"),
-    fileInput: $("fileInput"), cameraInput: $("cameraInput"), messageInput: $("messageInput"), pinnedMessages: $("pinnedMessages"),
+    fileInput: $("fileInput"), cameraInput: $("cameraInput"), galleryInput: $("galleryInput"), messageInput: $("messageInput"), pinnedMessages: $("pinnedMessages"),
     documentHeaderActions: $("documentHeaderActions"), documentSecurityNote: $("documentSecurityNote"), documentBreadcrumb: $("documentBreadcrumb"), bulkImportBtn: $("bulkImportBtn"), addRootFolderBtn: $("addRootFolderBtn"),
     documentFolderGrid: $("documentFolderGrid"), documentFileGrid: $("documentFileGrid"),
     actionSummary: $("actionSummary"), actionBoard: $("actionBoard"), printCover: $("printCover"),
@@ -433,6 +433,9 @@
     setTimeout(() => els.modal.querySelector("input, textarea, select, button")?.focus(), 20);
   }
   function closeModal(force = false) {
+    // A click listener passes a MouseEvent, not a request to force-close.
+    // Resume the same composer after cancelling an annotation/file dialog.
+    force = force === true;
     if (app.modalLocked && !force) return;
     app.modalLocked = false;
     els.modalBackdrop.hidden = true;
@@ -1124,14 +1127,25 @@
       return [...(message._history || []).map(m => m.body), message.body, message.author_name, message.zone, message.message_type, ...(message.attachments || []).flatMap(file => [file.file_name, file.name, file.revision, file.plan_status])].join(" ").toLowerCase().includes(query);
     });
   }
-  function renderAttachment(attachment) {
+  function renderAttachment(attachment, album = null) {
     const url = attachmentUrl(attachment), name = attachment.file_name || attachment.name || "Pièce jointe";
     // `eager` est volontaire : le fil n'est pas virtualisé et une photo qui
     // apparaît puis est remontée par le navigateur donne l'impression qu'elle
     // disparaît. On privilégie donc le rendu stable au chargement différé.
-    if (fileIsImage(attachment) && url) return `<button type="button" class="image-attachment" data-action="open-image" data-attachment-id="${attachment.id}" title="Agrandir la photo" aria-label="Agrandir ${escapeHtml(name)}"><img class="attachment-image" loading="eager" decoding="async" src="${escapeHtml(url)}" alt="${escapeHtml(name)}"></button>`;
+    if (fileIsImage(attachment)) {
+      const label = album ? `Photo ${album.index + 1} sur ${album.total} : ${name}${album.more ? `, ${album.more} autres photos dans l’album` : ''}` : `Agrandir ${name}`;
+      return `<button type="button" class="image-attachment ${url ? '' : 'is-unavailable'}" data-action="open-image" data-attachment-id="${escapeHtml(attachment.id)}" title="Agrandir la photo" aria-label="${escapeHtml(label)}">${url ? `<img class="attachment-image" loading="eager" decoding="async" src="${escapeHtml(url)}" alt="${escapeHtml(name)}">` : ''}${album?.more ? `<span class="album-more" aria-hidden="true">+${album.more}</span>` : ''}</button>`;
+    }
     const detail = [attachment.revision && `Indice ${attachment.revision}`, attachment.plan_status, formatBytes(attachment.bytes || attachment.size)].filter(Boolean).join(" · ") || "Ouvrir / télécharger";
     return `<button class="file-attachment" data-action="open-attachment" data-attachment-id="${attachment.id}"><span class="file-icon">${escapeHtml(fileIcon(attachment))}</span><span class="file-info"><b>${escapeHtml(name)}</b><small>${escapeHtml(detail)}</small></span></button>`;
+  }
+  function renderPhotoAlbum(images) {
+    const total = images.length;
+    if (!total) return '';
+    // Only four images enter the feed DOM. All originals remain attached to
+    // the message, available to the viewer, history and data-driven PDF export.
+    const visible = images.slice(0, 4);
+    return `<div class="attachment-grid photo-album album-${Math.min(total, 4)} ${total === 1 ? 'one' : ''}" role="group" aria-label="${total} photo${total > 1 ? 's' : ''}" data-album-count="${total}">${visible.map((file, index) => renderAttachment(file, { index, total, more: index === 3 ? total - 4 : 0 })).join('')}</div>`;
   }
   async function recoverFeedImage(image) {
     if (!(image instanceof HTMLImageElement) || !image.classList.contains("attachment-image")) return;
@@ -1201,7 +1215,7 @@
     const attachments = deleted ? [] : (message.attachments || []);
     const images = attachments.filter(fileIsImage), documents = attachments.filter(item => !fileIsImage(item));
     if (message.message_type === "Système") return `<article class="message-row system"><div class="message-bubble">${escapeHtml(message.body || "")}</div></article>`;
-    const bubble = `<div class="message-bubble ${deleted ? "deleted" : ""}"><button class="message-menu" data-action="message-menu" data-message-id="${message.id}" aria-label="Options">⋮</button><div class="message-head"><span class="author-name">${escapeHtml(message.author_name || "Intervenant")}</span>${message.message_type ? `<span class="message-tag ${typeClass(message.message_type)}">${escapeHtml(message.message_type)}</span>` : ""}${message.zone ? `<span class="zone-tag">${escapeHtml(message.zone)}</span>` : ""}${message.is_important ? `<span class="important-star">★</span>` : ""}</div>${parent ? `<button class="reply-quote" data-action="jump-message" data-message-id="${parent.id}"><b>${escapeHtml(parent.author_name || "Intervenant")}</b>${escapeHtml(truncate(parent.body || "Pièce jointe", 90))}</button>` : ""}${deleted ? `<div class="message-text">Message supprimé.</div>` : ""}${!deleted && images.length ? `<div class="attachment-grid ${images.length === 1 ? "one" : ""}">${images.map(renderAttachment).join("")}</div>` : ""}${!deleted ? documents.map(renderAttachment).join("") : ""}${!deleted && message.body ? `<div class="message-text">${renderRichText(message.body)}</div>` : ""}${!deleted && message.briefing_document_id ? `<button class="secondary-button" data-action="open-document" data-document-id="${escapeHtml(message.briefing_document_id)}">Consulter le briefing signé</button>` : ""}${!deleted && message.production_id ? `<button class="secondary-button" data-action="production" data-production-id="${escapeHtml(message.production_id)}" data-message-id="${escapeHtml(message.id)}">Renseigner l’avancement ›</button>` : ""}${!deleted ? renderMessageActionLinks(message) : ""}${!deleted ? renderReactionBar(message) : ""}<div class="message-footer"><span>${formatTime(message.created_at)}</span>${mine ? `<span class="message-status" title="${messageReadBySomeoneElse(message) ? "Lu par un interlocuteur" : "Envoyé"}">${messageReadBySomeoneElse(message) ? "✓✓" : "✓"}</span>` : ""}</div>${!deleted ? `<div class="message-actions"><button data-action="reply" data-message-id="${message.id}">↩ Répondre</button><button data-action="open-reactions" data-message-id="${message.id}">☺ Réagir</button><button data-action="make-action" data-message-id="${message.id}">✓ Action</button>${mine ? `<button data-action="toggle-important" data-message-id="${message.id}">${message.is_important ? "★ Désépingler" : "☆ Épingler"}</button>` : ""}</div>` : ""}</div>`;
+    const bubble = `<div class="message-bubble ${deleted ? "deleted" : ""} ${images.length > 1 ? "has-photo-album" : ""}"><button class="message-menu" data-action="message-menu" data-message-id="${message.id}" aria-label="Options">⋮</button><div class="message-head"><span class="author-name">${escapeHtml(message.author_name || "Intervenant")}</span>${message.message_type ? `<span class="message-tag ${typeClass(message.message_type)}">${escapeHtml(message.message_type)}</span>` : ""}${message.zone ? `<span class="zone-tag">${escapeHtml(message.zone)}</span>` : ""}${message.is_important ? `<span class="important-star">★</span>` : ""}</div>${parent ? `<button class="reply-quote" data-action="jump-message" data-message-id="${parent.id}"><b>${escapeHtml(parent.author_name || "Intervenant")}</b>${escapeHtml(truncate(parent.body || "Pièce jointe", 90))}</button>` : ""}${deleted ? `<div class="message-text">Message supprimé.</div>` : ""}${!deleted ? renderPhotoAlbum(images) : ""}${!deleted ? documents.map(file => renderAttachment(file)).join("") : ""}${!deleted && message.body ? `<div class="message-text">${renderRichText(message.body)}</div>` : ""}${!deleted && message.briefing_document_id ? `<button class="secondary-button" data-action="open-document" data-document-id="${escapeHtml(message.briefing_document_id)}">Consulter le briefing signé</button>` : ""}${!deleted && message.production_id ? `<button class="secondary-button" data-action="production" data-production-id="${escapeHtml(message.production_id)}" data-message-id="${escapeHtml(message.id)}">Renseigner l’avancement ›</button>` : ""}${!deleted ? renderMessageActionLinks(message) : ""}${!deleted ? renderReactionBar(message) : ""}<div class="message-footer"><span>${formatTime(message.created_at)}</span>${mine ? `<span class="message-status" title="${messageReadBySomeoneElse(message) ? "Lu par un interlocuteur" : "Envoyé"}">${messageReadBySomeoneElse(message) ? "✓✓" : "✓"}</span>` : ""}</div>${!deleted ? `<div class="message-actions"><button data-action="reply" data-message-id="${message.id}">↩ Répondre</button><button data-action="open-reactions" data-message-id="${message.id}">☺ Réagir</button><button data-action="make-action" data-message-id="${message.id}">✓ Action</button>${mine ? `<button data-action="toggle-important" data-message-id="${message.id}">${message.is_important ? "★ Désépingler" : "☆ Épingler"}</button>` : ""}</div>` : ""}</div>`;
     const summary = completed ? `<details class="completed-feed-details"><summary class="completed-feed-action"><b>✓ Action terminée</b><strong>${escapeHtml(linkedActions.map(action => action.title).join(" · "))}</strong><span>${escapeHtml(message.author_name || "Intervenant")} · ${formatTime(message.created_at)} · Voir l’historique et la preuve <i aria-hidden="true">⌄</i></span></summary>${bubble}</details>` : `<span class="message-avatar">${escapeHtml(initial(message.author_name))}</span>${bubble}`;
     return `<article class="message-row ${mine ? "mine" : ""} ${completed ? "action-completed" : ""}" data-message-row="${message.id}">${summary}</article>`;
   }
@@ -2093,6 +2107,7 @@
   async function selectChantier(id) {
     if (String(id) === String(app.currentId)) { els.appShell.classList.remove("sidebar-open"); return; }
     if (app.sendingMessage) return toast("L’envoi est en cours. Attends sa fin avant de changer de chantier.", "warning");
+    if (!els.photoViewer.hidden) closePhotoViewer();
     composer.close();
     rememberComposerDraft();
     app.currentId = id;
@@ -2377,6 +2392,7 @@
     button.textContent = busy ? "Envoi…" : denied ? "Lecture seule" : retry ? "Réessayer" : "Envoyer";
     els.messageInput.readOnly = busy || retry || denied;
     [els.messageType, els.messageZone, els.messageImportant].forEach(field => { field.disabled = busy || retry || denied; });
+    els.attachmentPreview.querySelectorAll('button').forEach(button => { button.disabled = busy || retry || denied; });
   }
   async function sendComposerMessage() {
     if (app.sendingMessage) return;
@@ -2461,7 +2477,10 @@
   function renderPendingFiles() {
     if (!app.pendingFiles.length) { els.attachmentPreview.hidden = true; els.attachmentPreview.innerHTML = ""; return; }
     els.attachmentPreview.hidden = false;
-    els.attachmentPreview.innerHTML = app.pendingFiles.map((item, index) => `<div class="pending-file">${fileIsImage(item.file) ? `<img src="${escapeHtml(item.preview_url)}" alt=""><button class="annotate-pending" data-action="annotate-pending" data-index="${index}" title="Annoter la photo" aria-label="Annoter la photo">✎</button>` : `<div class="pending-doc">${escapeHtml(fileIcon(item.file))}<br>${escapeHtml(truncate(item.file.name, 14))}</div>`}<button data-action="remove-pending" data-index="${index}" aria-label="Retirer">×</button></div>`).join("");
+    const photos = app.pendingFiles.filter(item => fileIsImage(item.file)).length;
+    const disabled = app.sendingMessage || app.composerRetry ? 'disabled' : '';
+    const title = photos > 1 ? `Album de ${photos} photos` : photos === 1 ? '1 photo' : `${app.pendingFiles.length} pièce(s) jointe(s)`;
+    els.attachmentPreview.innerHTML = `<div class="pending-album-heading"><b>${title}</b><span>${photos > 1 ? 'Regroupées dans un seul message' : 'À envoyer avec ce message'}</span></div><div class="pending-files" aria-label="Pièces jointes du brouillon">${app.pendingFiles.map((item, index) => `<div class="pending-file">${fileIsImage(item.file) ? `<img src="${escapeHtml(item.preview_url)}" alt="${escapeHtml(item.file.name)}"><button type="button" class="annotate-pending" data-action="annotate-pending" data-index="${index}" title="Annoter la photo" aria-label="Annoter la photo ${index + 1}" ${disabled}>✎</button>` : `<div class="pending-doc">${escapeHtml(fileIcon(item.file))}<br>${escapeHtml(truncate(item.file.name, 14))}</div>`}<button type="button" data-action="remove-pending" data-index="${index}" aria-label="Retirer ${escapeHtml(item.file.name)}" ${disabled}>×</button></div>`).join('')}</div>${photos ? `<div class="pending-album-tools"><button type="button" data-action="take-another-photo" ${disabled}><svg class="album-tool-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h4l2-3h4l2 3h4v15H4z"/><circle cx="12" cy="13" r="4"/></svg> Prendre une autre photo</button><button type="button" data-action="add-album-photos" ${disabled}>＋ Ajouter des photos</button></div>` : ''}`;
   }
   function queueFiles(files) {
     if (app.sendingMessage || app.composerRetry) return toast("Termine l’envoi en cours avant d’ajouter d’autres fichiers.", "warning");
@@ -3968,17 +3987,30 @@
     els.photoViewer.classList.toggle("is-loading", state === "loading");
     els.photoViewer.classList.toggle("is-error", state === "error");
   }
-  function openPhotoViewer(attachment) {
+  function messagePhotoIds(attachment) {
+    const message = currentMessages().find(m => !m.deleted_at && (m.attachments || []).some(file => String(file.id) === String(attachment.id)));
+    return (message ? message.attachments.filter(fileIsImage) : [attachment]).map(file => String(file.id));
+  }
+  let photoViewerReturnFocus = null;
+  function openPhotoViewer(attachment, albumIds = null) {
     const url = fullAttachmentUrl(attachment) || attachmentUrl(attachment);
     const name = attachment.file_name || attachment.name || "Photo jointe au journal";
-    if (!url) { toast("Cette photo n’est plus disponible.", "error"); return; }
     // Ouverture immédiate, sans attendre Supabase : le clic garde son
     // comportement natif sur Android et la fenêtre ne peut pas se fermer à
     // cause d'une réponse réseau tardive.
-    app.photoViewer = { attachmentId: String(attachment.id), retryCount: 0, retrying: false };
+    const wasHidden = els.photoViewer.hidden;
+    if (wasHidden) photoViewerReturnFocus = document.activeElement;
+    const ids = albumIds || messagePhotoIds(attachment), index = ids.indexOf(String(attachment.id));
+    const viewerState = { attachmentId: String(attachment.id), albumIds: ids, index, retryCount: 0, retrying: false };
+    app.photoViewer = viewerState;
     els.photoViewerTitle.textContent = name;
-    els.photoViewerSubtitle.textContent = "Photo jointe au journal";
-    els.photoViewerOpen.href = url;
+    els.photoViewerSubtitle.textContent = ids.length > 1 ? `Album · ${ids.length} photos` : "Photo jointe au journal";
+    $('photoViewerNav').hidden = ids.length < 2;
+    $('photoViewerPosition').textContent = `${index + 1} / ${ids.length}`;
+    $('photoViewerPrevious').disabled = index <= 0;
+    $('photoViewerNext').disabled = index >= ids.length - 1;
+    if (url) els.photoViewerOpen.href = url;
+    else els.photoViewerOpen.removeAttribute('href');
     els.photoViewerImage.alt = name;
     els.photoViewerImage.removeAttribute("src");
     setPhotoViewerStatus("Chargement de la photo…", "loading");
@@ -3988,20 +4020,35 @@
     document.body.classList.add("photo-viewer-open");
     // Affecter la source après l'affichage permet de montrer une ouverture
     // certaine, même sur une image haute définition.
-    const openedAttachmentId = String(attachment.id);
+    if (wasHidden) els.photoViewerClose.focus({ preventScroll: true });
     requestAnimationFrame(() => {
-      if (!els.photoViewer.hidden && String(app.photoViewer.attachmentId) === openedAttachmentId) els.photoViewerImage.src = url;
+      if (els.photoViewer.hidden || app.photoViewer !== viewerState) return;
+      if (url) els.photoViewerImage.src = url;
+      else void retryPhotoViewerImage();
     });
+  }
+  function navigatePhotoAlbum(direction) {
+    if (els.photoViewer.hidden) return;
+    const state = app.photoViewer, ids = state.albumIds || [], next = state.index + direction;
+    if (next < 0 || next >= ids.length) return;
+    const attachment = findAttachment(ids[next]);
+    // Only resolve from the currently authorized chantier, never from an old
+    // copied attachment object after a session/chantier change.
+    if (!attachment) { closePhotoViewer(); return; }
+    openPhotoViewer(attachment, ids);
   }
   function closePhotoViewer() {
     app.photoViewer = { attachmentId: "", retryCount: 0, retrying: false };
     els.photoViewerImage.removeAttribute("src");
     els.photoViewerOpen.removeAttribute("href");
+    $('photoViewerNav').hidden = true;
     els.photoViewer.hidden = true;
     els.photoViewer.classList.add("is-hidden");
     els.photoViewer.classList.remove("is-loading", "is-error");
     els.photoViewer.setAttribute("aria-hidden", "true");
     document.body.classList.remove("photo-viewer-open");
+    if (photoViewerReturnFocus?.isConnected) photoViewerReturnFocus.focus({ preventScroll: true });
+    photoViewerReturnFocus = null;
   }
   async function retryPhotoViewerImage() {
     const viewerState = app.photoViewer;
@@ -4015,13 +4062,13 @@
     setPhotoViewerStatus("Renouvellement sécurisé du lien photo…", "loading");
     try {
       const freshUrl = await refreshAttachmentUrl(attachment, false);
-      if (els.photoViewer.hidden || String(app.photoViewer.attachmentId) !== String(attachment.id)) return;
+      if (els.photoViewer.hidden || app.photoViewer !== viewerState) return;
       els.photoViewerOpen.href = freshUrl;
       els.photoViewerImage.src = freshUrl;
     } catch (error) {
-      if (!els.photoViewer.hidden) setPhotoViewerStatus("Photo indisponible. Utilise « Ouvrir » pour la télécharger.", "error");
+      if (!els.photoViewer.hidden && app.photoViewer === viewerState) setPhotoViewerStatus("Photo indisponible. Utilise « Ouvrir » pour la télécharger.", "error");
     } finally {
-      if (String(app.photoViewer.attachmentId) === String(viewerState.attachmentId)) app.photoViewer.retrying = false;
+      if (app.photoViewer === viewerState) app.photoViewer.retrying = false;
     }
   }
   async function openAttachment(attachment) {
@@ -4070,7 +4117,9 @@
     const element = event.target.closest("[data-action]");
     if (!element) return;
     const action = element.dataset.action;
-    if (action === "remove-pending") {
+    if (action === "take-another-photo" || action === "add-album-photos") {
+      $(action === 'take-another-photo' ? 'cameraBtn' : 'galleryBtn')?.click();
+    } else if (action === "remove-pending") {
       if (app.sendingMessage || app.composerRetry) return toast("Réessaie l’envoi pour conserver les fichiers sur ce message.", "warning");
       const [removed] = app.pendingFiles.splice(Number(element.dataset.index), 1);
       if (removed?.preview_url) URL.revokeObjectURL(removed.preview_url);
@@ -4209,10 +4258,25 @@
     $("mentionBtn").addEventListener("click", () => { setComposerToolTray(false); return app.mode === "cloud-guest" ? openProfileDialog() : openMentionPicker(); });
     $("dictationBtn").addEventListener("click", () => { setComposerToolTray(false); return app.mode === "cloud-guest" ? openProfileDialog() : toggleDictation(); });
     $("polishBtn").addEventListener("click", polishComposerText);
-    $("attachBtn").addEventListener("click", () => { setComposerToolTray(false); return app.mode === "cloud-guest" ? openProfileDialog() : els.fileInput.click(); });
-    $("cameraBtn").addEventListener("click", () => { setComposerToolTray(false); return app.mode === "cloud-guest" ? openProfileDialog() : els.cameraInput.click(); });
-    els.fileInput.addEventListener("change", () => { queueFiles([...els.fileInput.files]); els.fileInput.value = ""; });
-    els.cameraInput.addEventListener("change", () => { queueFiles([...els.cameraInput.files]); els.cameraInput.value = ""; });
+    const pickerContexts = new Map();
+    for (const [button, input] of [[$('attachBtn'), els.fileInput], [$('cameraBtn'), els.cameraInput], [$('galleryBtn'), els.galleryInput]]) {
+      button.addEventListener('click', () => {
+        setComposerToolTray(false);
+        if (app.mode === 'cloud-guest') return openProfileDialog();
+        if (app.sendingMessage || app.composerRetry) return toast('Termine l’envoi en cours avant d’ajouter des photos.', 'warning');
+        pickerContexts.set(input, messagePermissionKey());
+        void rememberComposerDraft();
+        // Keep the native camera/file picker in the user's click gesture.
+        input.click();
+      });
+      input.addEventListener('change', () => {
+        const files = [...input.files], context = pickerContexts.get(input);
+        input.value = ''; pickerContexts.delete(input);
+        if (context && context !== messagePermissionKey()) return toast('Le chantier ou le compte a changé. Sélectionne de nouveau tes photos.', 'warning');
+        if (files.length) queueFiles(files);
+      });
+      input.addEventListener('cancel', () => pickerContexts.delete(input));
+    }
     $("sendBtn").addEventListener("click", sendComposerMessage);
     els.messageInput.addEventListener("input", () => {
       els.messageInput.style.height = "auto";
@@ -4245,6 +4309,21 @@
     // ferme pas au clic sur son fond (ni après un chargement d'image) : seul
     // son bouton Fermer ferme l'aperçu.
     els.photoViewerClose.addEventListener("click", closePhotoViewer);
+    $('photoViewerPrevious').addEventListener('click', () => navigatePhotoAlbum(-1));
+    $('photoViewerNext').addEventListener('click', () => navigatePhotoAlbum(1));
+    const photoStage = els.photoViewer.querySelector('.photo-viewer-stage');
+    const photoPointers = new Set(); let swipeStart = null;
+    photoStage.addEventListener('pointerdown', event => {
+      photoPointers.add(event.pointerId);
+      swipeStart = photoPointers.size === 1 && event.isPrimary ? { x: event.clientX, y: event.clientY, id: event.pointerId } : null;
+    });
+    photoStage.addEventListener('pointerup', event => {
+      const start = swipeStart; photoPointers.delete(event.pointerId); swipeStart = null;
+      if (!start || start.id !== event.pointerId || (window.visualViewport?.scale || 1) > 1.05) return;
+      const dx = event.clientX - start.x, dy = event.clientY - start.y;
+      if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.5) navigatePhotoAlbum(dx < 0 ? 1 : -1);
+    });
+    photoStage.addEventListener('pointercancel', event => { photoPointers.delete(event.pointerId); swipeStart = null; });
     els.photoViewerImage.addEventListener("load", () => {
       if (!els.photoViewer.hidden) setPhotoViewerStatus();
     });
@@ -4252,6 +4331,17 @@
     els.modalCloseBtn.addEventListener("click", closeModal);
     els.modalBackdrop.addEventListener("click", event => { if (event.target === els.modalBackdrop) closeModal(); });
     document.addEventListener("keydown", event => {
+      if (!els.photoViewer.hidden && !event.altKey && !event.ctrlKey && !event.metaKey && ['ArrowLeft', 'ArrowRight'].includes(event.key)) {
+        event.preventDefault(); navigatePhotoAlbum(event.key === 'ArrowRight' ? 1 : -1); return;
+      }
+      if (!els.photoViewer.hidden && event.key === 'Tab') {
+        const buttons = [...els.photoViewer.querySelectorAll('button:not(:disabled), a[href]')].filter(node => node.getClientRects().length);
+        const index = buttons.indexOf(document.activeElement);
+        if (index < 0 || event.shiftKey && index === 0 || !event.shiftKey && index === buttons.length - 1) {
+          event.preventDefault(); buttons[event.shiftKey ? buttons.length - 1 : 0]?.focus();
+        }
+        return;
+      }
       if (!els.photoViewer.hidden && event.key === "Escape") {
         event.preventDefault();
         closePhotoViewer();
@@ -4292,7 +4382,7 @@
   async function initialize() {
     wireEvents();
     const callbackError = takeAuthCallbackError();
-    if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("./service-worker-v13.js?v=15.10.1").catch(error => console.warn("Service worker", error));
+    if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("./service-worker-v13.js?v=15.10.6").catch(error => console.warn("Service worker", error));
     syncFromLocal();
     if (cloudConfigured()) {
       try { await initializeCloud(); }

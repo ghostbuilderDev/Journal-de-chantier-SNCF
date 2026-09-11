@@ -1,0 +1,30 @@
+{
+  "base": "5c435c586e76d37c1cdff163ed003669b8848000",
+  "files": {
+    "app-v13.js": "1d94a2e4902436d2ba001d732a02bdaafa6cd9f113a5c7a9bb9d9fe1c7d3a9e9",
+    "index.html": "82befa89e3e7c787df981f821a082b2097e3e1b1a8e1dbc53e1bb403d8209fe8",
+    "journal-composer.js": "0a5dba2a507e332331e9aa45c2080f1a8fe50fecf3a26c944f5e143624608efe",
+    "journal-albums.css": null,
+    "service-worker-v13.js": "028c4ba18e2cfa770e11992eb684280d6eea905fcba29a2a693a9f8f89bf3693",
+    "tests/messages-v1571-browser.cjs": "5c80ed89e1b4e58408cee74e12f984746313cc78f19b35bd679e1f3fa5c71a34",
+    "tests/photo-albums-v15106.cjs": null,
+    "tests/v15106-installation.test.py": null,
+    "scripts/prepare-v15106-update.py": null,
+    "scripts/update-v15106-termux.sh": null,
+    "scripts/v15106-base-sha256.json": null,
+    "VERSION_V15.10.6.md": null,
+    "VERIFICATIONS_V15.10.6.txt": null
+  },
+  "dependencies": {
+    "journal-export.js": "bebb9dde5b5d95f983ec50c2865953e05e2c8a21a67c34cbb43992ccf88c1ceb",
+    "journal-pdf.js": "625dae976b1e321603e8078a3e71ad316c380502f8ed60bc1cf7d61908a2638d",
+    "journal-feed.js": "602c249e624f2318182a43df76beb3b5d6ec3920f62eb280573f519ed22d771f",
+    "journal-v156.css": "d6fed4a607d26ca94d37f534c721e3b66dac6c9359169134fab62bf09c1ef5a6",
+    "rapport/app.js": "c1e56827513653a3d0e7e33d1fdc79e8899dda58d134283d46379a3f905ebd6b",
+    "rapport/report-actions.js": "e49173dc8472c9ffb970916e3cb9a353e2fcfbc58694a108007ea6ea05e2d449",
+    "rapport/journal-archive.js": "8feac5aaf386b9d5435a753009869287cb0c53f0b61d991f0815c0efd4b9332c",
+    "briefing/presence-matching.js": "2c48b61ba7128a6f1314f127918df9438ae9ea6ad317b0cad71e7998435347e9",
+    "cr-off.js": "3a0f7531d97064ea0d2e366bdad9fc652b2d1cab742c179abd86a6fe8852a5e6",
+    "supabase/migrations/20260910000600_v15_10_5_report_archive_acl.sql": "e13868e2e0209824135cdcb019017dd4a02f19f03c1aa66b49c08733ffd1a875"
+  }
+}

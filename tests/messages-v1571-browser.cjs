@@ -8,7 +8,7 @@ const root=path.resolve(__dirname,'..'),site='aaaaaaaa-0000-4000-8000-0000000000
 const uid=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
 const exposed='window.TEST={app,composer,wireEvents,renderMessages,refreshCloudCurrent,refreshMessagePermission,sendComposerMessage,queueFiles,rememberComposerDraft,restoreComposerDraft,clearComposer};';
 (async()=>{
- const db=new PGlite();let server,browser,lane=Promise.resolve(),failInsert=false,failUpload=false,permissionFailure=false,insertDelay=0;
+ const db=new PGlite();let server,browser,lane=Promise.resolve(),failInsert=false,failUpload=false,permissionFailure=false,insertDelay=0,failFileName="";
  const inserted=[],uploads=[],errors=[];
  try{
   await setup157(db);
@@ -61,9 +61,9 @@ const exposed='window.TEST={app,composer,wireEvents,renderMessages,refreshCloudC
      }catch(e){return{data:null,error:{message:e.message,code:e.code}};}
     });lane=job.catch(()=>{});return job;
    });
-   await page.exposeBinding('uploadFile',(_,a)=>{if(failUpload){failUpload=false;return{error:{message:'Photo interrompue'}};}uploads.push(a);return{data:{path:a.path},error:null};});
+   await page.exposeBinding('uploadFile',(_,a)=>{if(failUpload||a.name===failFileName){failUpload=false;failFileName='';return{error:{message:'Photo interrompue'}};}uploads.push(a);return{data:{path:a.path},error:null};});
    await page.goto(host);
-   await page.evaluate(({user,site})=>{
+   page.rebind=()=>page.evaluate(({user,site})=>{
     const id='00000000-0000-4000-8000-'+String(user).padStart(12,'0');
     function from(table){
      const a={kind:'table',user,table,operation:'select',filters:[],orders:[]};
@@ -73,14 +73,14 @@ const exposed='window.TEST={app,composer,wireEvents,renderMessages,refreshCloudC
     Object.assign(TEST.app,{mode:'cloud',currentId:site,user:{id,email:'user'+user+'@test.invalid'},profile:{id,full_name:'Agent '+user,email:'user'+user+'@test.invalid'},access:{platformRole:user===1?'proprietaire':null},members:[],chantiers:[{id:site,name:'Chantier test'}],db:{from,storage,rpc:(name,payload={})=>database({kind:'rpc',user,name,payload})}});
     TEST.wireEvents();TEST.renderMessages();
    },{user,site});
-   return page;
+   await page.rebind();return page;
   }
   // Regression proof: same authorized contributor, no locally loaded member list.
   const old=await newPage(2,{baseline:true});await old.click('#messageInput');assert.equal(await old.locator('#journalComposer').getAttribute('open'),null);assert.equal(await old.locator('#sendBtn').isVisible(),false);await old.close();
   console.log('Reproduced V15.7: contributor cannot open editor; Send is hidden.');
   async function open(page){await page.click('#messageInput');await page.waitForSelector('#journalComposer[open]');await page.waitForFunction(()=>document.querySelector('#sendBtn').textContent==='Envoyer');}
   async function send(page,text){await open(page);await page.fill('#messageInput',text);await page.click('#sendBtn');await page.waitForFunction(()=>!TEST.app.sendingMessage);assert.equal(await page.inputValue('#messageInput'),'');}
-  const p=await newPage(2);await open(p);await p.fill('#messageInput','SEL 1 + 3 : 23:55');await p.press('#messageInput','Enter');await p.locator('#messageInput').pressSequentially('Fin à confirmer.');assert.equal(inserted.length,0);assert.match(await p.inputValue('#messageInput'),/\nFin/);
+  const p=await newPage(2);if(process.env.ALBUM_ONLY){await require('./photo-albums-v15106.cjs')({p,newPage,open,inserted,uploads,failFile:name=>{failFileName=name;},db,waitDatabase:()=>lane});return;}await open(p);await p.fill('#messageInput','SEL 1 + 3 : 23:55');await p.press('#messageInput','Enter');await p.locator('#messageInput').pressSequentially('Fin à confirmer.');assert.equal(inserted.length,0);assert.match(await p.inputValue('#messageInput'),/\nFin/);
   await p.click('#writingClose');await open(p);assert.match(await p.inputValue('#messageInput'),/Fin à confirmer/);
   insertDelay=150;await p.evaluate(()=>{document.querySelector('#sendBtn').click();document.querySelector('#sendBtn').click();});await p.waitForFunction(()=>!TEST.app.sendingMessage);insertDelay=0;assert.equal(inserted.length,1);assert.equal(inserted[0].author_id,uid(2));assert.equal(inserted[0].chantier_id,site);assert.equal(await p.inputValue('#messageInput'),'');
   const peer=await newPage(3);await peer.evaluate(()=>TEST.refreshCloudCurrent());assert.ok(await peer.evaluate(()=>TEST.app.messages.some(m=>m.body.includes('Fin à confirmer'))));await send(peer,'Réponse du deuxième contributeur');await peer.close();
@@ -92,6 +92,7 @@ const exposed='window.TEST={app,composer,wireEvents,renderMessages,refreshCloudC
   // Photo-only send, failed file retry reuses the persisted message and the same File.
   await p.evaluate(()=>TEST.queueFiles([new File([Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aXKsAAAAASUVORK5CYII='),c=>c.charCodeAt(0))],'photo.png',{type:'image/png'})]));
   failUpload=true;const beforePhoto=inserted.length;await p.click('#sendBtn');await p.waitForFunction(()=>!TEST.app.sendingMessage);assert.equal(inserted.length,beforePhoto+1);assert.equal(await p.evaluate(()=>TEST.app.pendingFiles[0].file.name),'photo.png');await p.click('#sendBtn');await p.waitForFunction(()=>!TEST.app.sendingMessage);assert.equal(inserted.length,beforePhoto+1);assert.equal(uploads.at(-1).name,'photo.png');assert.equal(await p.evaluate(()=>TEST.app.pendingFiles.length),0);
+  if(process.env.JOURNAL_ALBUM_TEST)await require('./photo-albums-v15106.cjs')({p,newPage,open,inserted,uploads,failFile:name=>{failFileName=name;},db,waitDatabase:()=>lane});
   await open(p);await p.fill('#messageInput','Droits retirés pendant la rédaction');await lane;await db.exec(`reset role;insert into journal_user_access_blocks(user_id) values('${uid(2)}');`);const beforeRevoke=inserted.length;await p.click('#sendBtn');await p.waitForFunction(()=>!TEST.app.sendingMessage);assert.equal(inserted.length,beforeRevoke);assert.match(await p.inputValue('#messageInput'),/Droits retirés/);await p.close();
   for(const option of [{missing:true},{nativeFailure:true}]){const page=await newPage(3,option);await page.click('#messageInput');assert.equal(await page.locator('#sendBtn').isVisible(),true);const bounds=await page.locator('#sendBtn').boundingBox();assert.ok(bounds.x>=0&&bounds.x+bounds.width<=390,'Fallback Send fits mobile viewport');await page.fill('#messageInput','Rédaction de secours '+JSON.stringify(option));await page.click('#sendBtn');await page.waitForFunction(()=>!TEST.app.sendingMessage);assert.equal(await page.inputValue('#messageInput'),'');await page.close();}
   assert.deepEqual(errors,[]);

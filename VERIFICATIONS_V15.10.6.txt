@@ -1,0 +1,56 @@
+Journal de chantier V15.10.6 — albums photos
+
+Base : 5c435c586e76d37c1cdff163ed003669b8848000 (V15.10.5 publiée).
+Portée : interface, tests et installation. Aucun changement de schéma ou de droits.
+
+Vérifications réalisées le 11 septembre 2026 — RÉUSSIES
+
+1. Albums et envoi
+   Commande : node tests/photo-albums-v15106.cjs
+   Galerie multiple, prises de vue successives, retrait d’une photo, retour de
+   l’annotation, annulation du sélecteur, texte multiligne et brouillon conservé
+   après fermeture puis rechargement réel de la page.
+   Échec simulé au milieu d’un envoi, puis reprise : un seul message en base,
+   six photos et un document joints sans doublon. Lecture par un autre contributeur.
+
+2. Affichage et consultation
+   Albums de 1, 2, 3, 4, 6 et 10 photos ; quatre vignettes maximum dans le fil.
+   Compteur +N, consultation des originaux, précédente/suivante, flèches clavier,
+   glissement tactile et distinction du geste de zoom à deux doigts.
+   Formats vérifiés : 320 × 700, 390 × 844, 844 × 390, 820 × 1180 et 1280 × 900.
+   Contrôle visuel des captures du fil, de la rédaction et de la visionneuse.
+
+3. Export réel
+   Génération d’un PDF depuis le scénario de six photos et un document.
+   Contrôle du PDF obtenu : six images intégrées, six légendes et référence du
+   document présentes, y compris les photos non visibles dans les quatre vignettes.
+
+4. Régressions de messagerie
+   Commande : node tests/messages-v1571-browser.cjs
+   Envois et lectures SQL pour propriétaire, administrateur de chantier et deux
+   contributeurs. Lecture seule et accès révoqué refusés. Brouillons, erreurs
+   visibles, reprise d’envoi et solution de repli de la rédaction vérifiés.
+   Ces contrôles sont aussi inclus dans la suite complète des albums.
+
+5. PWA
+   Commande : node tests/pwa-v15104-browser.cjs
+   Installation des caches Journal, Briefing et Rapport ; ressources privées
+   non mises en cache ; brouillons, liens QR et pages hors ligne conservés.
+   Le nom historique de ce test ne correspond pas au numéro de cette livraison.
+
+6. Installation
+   Commande : python3 -B tests/v15106-installation.test.py
+   Sept tests réussis : installation répétable, conservation de la configuration,
+   refus des fichiers/prérequis modifiés et des liens symboliques, reprise d’une
+   copie partielle, d’un commit en attente ou d’une copie locale reconnue.
+   Vérification de syntaxe JavaScript et Bash, et git diff --check réussis.
+
+Conditions et limites
+   Essais dans Chromium avec formats mobiles et ordinateur ; SQL exécuté dans
+   PGlite avec données de test. La sélection de fichiers et les prises de vue sont
+   simulées : aucun essai matériel de l’appareil photo Android n’est revendiqué.
+   Aucun message réel publié, aucun changement effectué dans Supabase en production.
+   Les originaux restent stockés selon le fonctionnement existant ; cette version
+   réduit les images affichées dans le fil sans refondre tout le chargement initial.
+   La réussite des tests locaux ne constitue pas un déploiement : installer le ZIP
+   puis attendre la réussite de GitHub Pages pour mettre à jour les utilisateurs.
