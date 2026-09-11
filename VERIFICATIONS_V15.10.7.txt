@@ -1,0 +1,21 @@
+Journal de chantier V15.10.7 — photos rapides sans perte de qualité
+
+Base : f7ef331db3f0cadc8b19869c140d96402c26266c (V15.10.6 albums photos).
+Portée : interface, cache PWA, installation et tests. Aucune migration SQL, aucun changement des droits.
+
+Vérifications réalisées le 11 septembre 2026 — RÉUSSIES
+
+1. Syntaxe : node --check app-v13.js et service-worker-v13.js.
+2. Chargement différé : les vignettes du fil portent data-deferred-image ; une
+   IntersectionObserver les résout seulement à l'approche du viewport.
+3. Qualité : le visualiseur utilise fullAttachmentUrl et le PDF crée son URL à
+   partir de storage_path ; les originaux restent donc la source de référence.
+4. Envoi : uploadMessageFiles limite le transfert parallèle à trois fichiers.
+5. PWA : index.html et service-worker-v13.js utilisent la version 15.10.7,
+   ce qui force le renouvellement propre du cache après publication.
+6. Test automatisé : python3 -B tests/v15107-photo-performance.test.py — PASS.
+7. Contrôle git diff --check — PASS.
+
+Limite : les photos anciennes sans aperçu restent des originaux ; elles ne sont
+plus chargées toutes ensemble au démarrage, mais au moment où elles deviennent visibles.
+Ainsi, leur qualité et leur consultation restent identiques.

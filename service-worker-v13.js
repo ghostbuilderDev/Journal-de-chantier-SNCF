@@ -1,11 +1,11 @@
-const CACHE_NAME = 'journal-chantier-connecte-v15.10.6';
+const CACHE_NAME = 'journal-chantier-connecte-v15.10.7';
 const APP_SHELL = [
-  './journal-albums.css?v=15.10.6',
+  './journal-albums.css?v=15.10.7',
   './journal-collaboration.js?v=15.10.1', './journal-v1510.css?v=15.10.1',
   './journal-completion.js?v=15.9', './journal-v159.css?v=15.9',
   './briefing/presence-matching.js?v=15.10.3',
   './briefing/afficher-qr.html', './briefing/afficher-qr.js?v=15.9', './briefing/briefing-qr-share.js?v=15.9', './briefing/briefing-v159.css?v=15.9',
-  './journal-composer.js?v=15.10.6', './journal-emoji.js?v=15.6', './data/emojis.json', './journal-v156.css?v=15.7.1',
+  './journal-composer.js?v=15.10.7', './journal-emoji.js?v=15.6', './data/emojis.json', './journal-v156.css?v=15.7.1',
   './journal-pdf.js?v=15.8', './journal-v155.css?v=15.5',
   './vendor/pdfjs/standard_fonts/LiberationSans-Regular.ttf', './vendor/pdfjs/standard_fonts/LiberationSans-Bold.ttf',
   './vendor/pdfjs/pdf.min.mjs', './vendor/pdfjs/pdf.worker.min.mjs',
@@ -17,7 +17,7 @@ const APP_SHELL = [
   './feedback.js?v=15.4', './feedback.css?v=15.3',
   './', './index.html', './styles-v13.css?v=14.7-pdf',
   './styles-v14.3.css?v=14.3-design', './mode-chantier.css?v=14.4-mode-chantier',
-  './mode-chantier.js?v=15.0', './app-v13.js?v=15.10.6',
+  './mode-chantier.js?v=15.0', './app-v13.js?v=15.10.7',
   './supabase.js?v=14.2-collaborateurs', './config.js?v=14.2-collaborateurs',
   './manifest.webmanifest', './journal-chantier-logo-v14.png'
 ];

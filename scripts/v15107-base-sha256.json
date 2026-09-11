@@ -1,0 +1,18 @@
+{
+  "base": "f7ef331db3f0cadc8b19869c140d96402c26266c",
+  "files": {
+    "app-v13.js": "de68a5f0bb02e429512f804c5939bfe39e8accfe5ad85a45ee75b1832eefa82f",
+    "index.html": "d4826df7cc9a3c601584246b6fb6ccb12d3d065a37fd0c87f2ec8a1874749d28",
+    "service-worker-v13.js": "be092de76cbb0f19539e189c10b8357353e94c66be80a03617ab8c71619f4746",
+    "MISE_A_JOUR_V15_10_7.md": null,
+    "VERSION_V15.10.7.md": null,
+    "VERIFICATIONS_V15.10.7.txt": null,
+    "tests/v15107-photo-performance.test.py": null,
+    "scripts/update-v15107-termux.sh": null,
+    "scripts/v15107-base-sha256.json": null
+  },
+  "dependencies": {
+    "journal-composer.js": "f14689f1ee54788d4d08a995d3abf1dfd48311633344321de68b98fc4929d105",
+    "journal-albums.css": "e2d249a75d55a9598cbcb19b0e731bfdf5f8efc75001f4167d332486c3b7e5a0"
+  }
+}
