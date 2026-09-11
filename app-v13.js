@@ -692,17 +692,12 @@
         data.push(...response.data); offset += response.data.length;
       }
     }
-    // Ne pas créer une URL signée pour chaque photo dès l'ouverture du fil.
-    // Sur un chantier ancien, cela pouvait déclencher des centaines de requêtes
-    // et télécharger plusieurs originaux avant même que l'utilisateur ne les voie.
-    // Les documents, eux, restent immédiatement disponibles. Les photos sont
-    // résolues par la file de chargement au moment où elles entrent dans l'écran.
     const rows = [];
+    // Limit simultaneous signed URL requests on mobile connections.
     for (let start = 0; start < data.length; start += 12) {
       rows.push(...await Promise.all(data.slice(start, start + 12).map(async attachment => {
-        if (fileIsImage(attachment)) return { ...attachment };
-        const signedUrl = await signedCloudAttachmentUrl(attachment.storage_path);
-        return { ...attachment, signed_url: signedUrl, full_signed_url: signedUrl };
+        const originalUrl = await signedCloudAttachmentUrl(attachment.storage_path);
+        return { ...attachment, signed_url: originalUrl, full_signed_url: originalUrl };
       })));
     }
     const byMessage = new Map();
@@ -1047,11 +1042,12 @@
   }
 
   function attachmentUrl(attachment) {
-    // Une vignette fiable sert au fil : elle est très légère mais la photo
-    // complète reste intacte dans le stockage, le visualiseur et le PDF.
-    // Pour les photos historiques sans aperçu, l'original reste utilisé, mais
-    // seulement lorsqu'il entre réellement dans la zone visible du fil.
-    if (fileIsImage(attachment)) return attachment.preview_signed_url || attachment.signed_url || attachment.data_url || attachment.url || "";
+    // Fiabilité avant optimisation : certaines miniatures générées sur mobile
+    // peuvent être absentes ou non décodables alors que l'original privé est
+    // parfaitement lisible. Le fil utilise donc d'abord l'original signé.
+    // Les aperçus restent éventuellement stockés, mais ne sont jamais utilisés
+    // dans la discussion : on évite ainsi toute régression Android.
+    if (fileIsImage(attachment)) return attachment.full_signed_url || attachment.signed_url || attachment.data_url || attachment.url || "";
     return attachment.signed_url || attachment.data_url || attachment.url || "";
   }
   function fullAttachmentUrl(attachment) { return attachment.full_signed_url || attachment.signed_url || attachment.data_url || attachment.url || ""; }
@@ -1133,9 +1129,12 @@
   }
   function renderAttachment(attachment, album = null) {
     const url = attachmentUrl(attachment), name = attachment.file_name || attachment.name || "Pièce jointe";
+    // `eager` est volontaire : le fil n'est pas virtualisé et une photo qui
+    // apparaît puis est remontée par le navigateur donne l'impression qu'elle
+    // disparaît. On privilégie donc le rendu stable au chargement différé.
     if (fileIsImage(attachment)) {
       const label = album ? `Photo ${album.index + 1} sur ${album.total} : ${name}${album.more ? `, ${album.more} autres photos dans l’album` : ''}` : `Agrandir ${name}`;
-      return `<button type="button" class="image-attachment is-loading" data-action="open-image" data-attachment-id="${escapeHtml(attachment.id)}" title="Agrandir la photo" aria-label="${escapeHtml(label)}"><img class="attachment-image" loading="lazy" decoding="async" data-deferred-image="1" data-attachment-id="${escapeHtml(attachment.id)}" alt="${escapeHtml(name)}"><span class="image-loading" aria-hidden="true"><i class="image-spinner"></i><span>Préparation de l’aperçu…</span></span>${album?.more ? `<span class="album-more" aria-hidden="true">+${album.more}</span>` : ''}</button>`;
+      return `<button type="button" class="image-attachment ${url ? '' : 'is-unavailable'}" data-action="open-image" data-attachment-id="${escapeHtml(attachment.id)}" title="Agrandir la photo" aria-label="${escapeHtml(label)}">${url ? `<img class="attachment-image" loading="eager" decoding="async" src="${escapeHtml(url)}" alt="${escapeHtml(name)}">` : ''}${album?.more ? `<span class="album-more" aria-hidden="true">+${album.more}</span>` : ''}</button>`;
     }
     const detail = [attachment.revision && `Indice ${attachment.revision}`, attachment.plan_status, formatBytes(attachment.bytes || attachment.size)].filter(Boolean).join(" · ") || "Ouvrir / télécharger";
     return `<button class="file-attachment" data-action="open-attachment" data-attachment-id="${attachment.id}"><span class="file-icon">${escapeHtml(fileIcon(attachment))}</span><span class="file-info"><b>${escapeHtml(name)}</b><small>${escapeHtml(detail)}</small></span></button>`;
@@ -1164,7 +1163,7 @@
     image.dataset.recovering = "1";
     holder?.classList.add("is-retrying");
     try {
-      const freshUrl = await refreshAttachmentUrl(attachment, Boolean(attachment.preview_storage_path));
+      const freshUrl = await refreshAttachmentUrl(attachment, false);
       if (image.isConnected) image.src = freshUrl;
     } catch (error) {
       holder?.classList.add("is-unavailable");
@@ -1173,49 +1172,6 @@
       if (image.isConnected) image.dataset.recovering = "";
       holder?.classList.remove("is-retrying");
     }
-  }
-  let feedImageObserver = null;
-  const feedImageLoads = new Map();
-  async function loadFeedImage(image) {
-    if (!(image instanceof HTMLImageElement) || image.dataset.loading === "1" || image.getAttribute("src")) return;
-    const attachment = findAttachment(image.dataset.attachmentId);
-    const holder = image.closest("[data-action='open-image']");
-    if (!attachment) { holder?.classList.add("is-unavailable"); return; }
-    const path = attachment.preview_storage_path || attachment.storage_path;
-    if (!path) { holder?.classList.add("is-unavailable"); return; }
-    image.dataset.loading = "1";
-    const existing = feedImageLoads.get(String(attachment.id));
-    const alreadyResolved = attachmentUrl(attachment);
-    const loading = existing || Promise.resolve(alreadyResolved || signedCloudAttachmentUrl(path)).then(url => {
-      if (!url) throw new Error("Lien photo indisponible");
-      rememberAttachmentUrl(attachment.id, url, Boolean(attachment.preview_storage_path));
-      return url;
-    });
-    feedImageLoads.set(String(attachment.id), loading);
-    try {
-      const url = await loading;
-      if (image.isConnected) image.src = url;
-    } catch (error) {
-      console.info("Chargement différé de la photo impossible", error);
-      holder?.classList.add("is-unavailable");
-    } finally {
-      feedImageLoads.delete(String(attachment.id));
-      if (image.isConnected) image.dataset.loading = "";
-    }
-  }
-  function scheduleFeedImageLoading() {
-    feedImageObserver?.disconnect();
-    const images = [...(els.messageFeed?.querySelectorAll?.("img[data-deferred-image='1']") || [])];
-    if (!images.length) return;
-    if (!("IntersectionObserver" in window)) { images.slice(0, 12).forEach(image => void loadFeedImage(image)); return; }
-    feedImageObserver = new IntersectionObserver(entries => {
-      entries.forEach(entry => {
-        if (!entry.isIntersecting) return;
-        feedImageObserver?.unobserve(entry.target);
-        void loadFeedImage(entry.target);
-      });
-    }, { root: els.messageFeed, rootMargin: "600px 0px", threshold: .01 });
-    images.forEach(image => feedImageObserver.observe(image));
   }
   function reactionsForMessage(messageId) {
     return (app.reactions || []).filter(item => String(item.message_id) === String(messageId));
@@ -1298,9 +1254,6 @@
     });
     els.messageFeed.innerHTML = html;
     els.messageFeed.querySelectorAll?.('.completed-feed-details').forEach(node => { node.open = expandedActions.has(node.closest('[data-message-row]').dataset.messageRow); });
-    // Les photos ne sont demandées qu'à l'approche du viewport : l'ouverture
-    // du chantier reste immédiate même après plusieurs semaines de messages.
-    requestAnimationFrame(scheduleFeedImageLoading);
     app.feedAtBottom = followBottom;
     if (!followBottom) els.messageFeed.scrollTop = oldPosition;
     else requestAnimationFrame(scrollMessagesToBottom);
@@ -2376,27 +2329,6 @@
     }
     return data;
   }
-  async function uploadMessageFiles(files, message, attachmentMetadata = {}) {
-    // Trois transferts suffisent à utiliser correctement le Wi-Fi/4G sans
-    // saturer le téléphone. L'ancien parcours envoyait tout l'album une photo
-    // après l'autre, ce qui allongeait inutilement l'attente.
-    const source = [...files];
-    const attachments = new Array(source.length), failedFiles = [];
-    let nextIndex = 0;
-    const worker = async () => {
-      while (nextIndex < source.length) {
-        const index = nextIndex++;
-        const item = source[index];
-        try { attachments[index] = await uploadCloudAttachment(item.file || item, message, attachmentMetadata); }
-        catch (error) {
-          failedFiles.push({ index, item, error });
-          toast(`Fichier non envoyé : ${item.file?.name || item.name} (${error.message})`, "error");
-        }
-      }
-    };
-    await Promise.all(Array.from({ length: Math.min(3, source.length) }, worker));
-    return { attachments: attachments.filter(Boolean), failedFiles: failedFiles.sort((a, b) => a.index - b.index).map(entry => entry.item) };
-  }
   async function addMessage(payload, files = [], attachmentMetadata = {}, resumeMessage = null) {
     const chantier = currentChantier();
     if (!chantier) throw new Error("Crée ou sélectionne un chantier avant d’écrire.");
@@ -2416,7 +2348,11 @@
       if (resumeMessage && (resumeMessage.chantier_id !== chantier.id || resumeMessage.author_id !== ownId())) throw new Error("Cet envoi appartient à un autre chantier ou compte.");
       const { data: message, error } = resumeMessage ? { data: resumeMessage, error: null } : await app.db.from("chantier_messages").insert(base).select().single();
       if (error) throw error;
-      const { attachments, failedFiles } = await uploadMessageFiles(files, message, attachmentMetadata);
+      const attachments = [], failedFiles = [];
+      for (const item of files) {
+        try { attachments.push(await uploadCloudAttachment(item.file || item, message, attachmentMetadata)); }
+        catch (error) { failedFiles.push(item); toast(`Fichier non envoyé : ${item.file?.name || item.name} (${error.message})`, "error"); }
+      }
       // A refresh failure cannot turn an already persisted send into a new send.
       try { await refreshCloudCurrent(); }
       catch (error) { toast("L’envoi est enregistré, mais le fil n’a pas pu être actualisé. Actualise la discussion.", "warning"); }
@@ -4057,10 +3993,7 @@
   }
   let photoViewerReturnFocus = null;
   function openPhotoViewer(attachment, albumIds = null) {
-    // Le fil peut afficher une vignette légère ; le visualiseur ne doit jamais
-    // la prendre pour l'original. S'il n'est pas encore signé, il le résout
-    // juste après l'ouverture de la fenêtre.
-    const url = fullAttachmentUrl(attachment);
+    const url = fullAttachmentUrl(attachment) || attachmentUrl(attachment);
     const name = attachment.file_name || attachment.name || "Photo jointe au journal";
     // Ouverture immédiate, sans attendre Supabase : le clic garde son
     // comportement natif sur Android et la fenêtre ne peut pas se fermer à
